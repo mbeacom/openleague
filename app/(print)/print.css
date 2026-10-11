@@ -30,6 +30,14 @@
   vertical-align: top;
 }
 
+/* Header cells in the team's palette (BenchSheet sets the variables from teamPalette). */
+.bench-timeline thead th {
+  background: var(--bench-tint, transparent);
+  color: var(--bench-ink, inherit);
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+
 .bench-timeline ul {
   margin: 2px 0 0;
   padding-left: 1.1em;
@@ -83,7 +91,8 @@
     display: none !important;
   }
 
-  /* Drills start on page 2. */
+  /* Drills start on page 2, unless BenchSheet found room for the first ones on
+     page 1 (the bench sheet model's firstPageDrills) and left this class off. */
   .bench-page-break {
     break-before: page;
     page-break-before: always;

@@ -49,7 +49,7 @@ describe.each(REPOS)("team profile (%s)", (_name, open) => {
         expect(data(await store.getTeamProfile())).toEqual(saved);
         const view = data(await store.getSessionView(sessionId));
         expect(view.teamName).toBe("Ice Hawks");
-        expect(view.teamMark).toEqual({ id: LOCAL_TEAM_ID, name: "Ice Hawks", logoUrl: PNG, color: "#9B1B30", logoImage: LOGO });
+        expect(view.teamMark).toEqual({ id: LOCAL_TEAM_ID, name: "Ice Hawks", logoUrl: PNG, color: "#9B1B30", secondaryColor: null, logoImage: LOGO });
     });
 
     it.each([

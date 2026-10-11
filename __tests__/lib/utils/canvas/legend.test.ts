@@ -24,4 +24,18 @@ describe("buildLegend", () => {
             "Skate", "Puck carry", "Pass", "Stop", "Opponent", "Defense", "Cone",
         ]);
     });
+
+    it("gives a role's swatch its team color when one is passed, and leaves the rest at their defaults", () => {
+        const data = {
+            ...createEmptyPlayData(),
+            players: [
+                { id: "p1", role: "O" as const, label: "", color: "#D32F2F", position: { x: 1, y: 1 } },
+                { id: "p2", role: "D" as const, label: "", color: "#0D47A1", position: { x: 1, y: 1 } },
+            ],
+        };
+        const entries = buildLegend(data, { D: "#1B5E20", X: "#7A0019" });
+        expect(entries.find((e) => e.key === "role-D")).toMatchObject({ color: "#1B5E20" });
+        expect(entries.find((e) => e.key === "role-O")).not.toHaveProperty("color");
+        expect(buildLegend(data).find((e) => e.key === "role-D")).not.toHaveProperty("color");
+    });
 });

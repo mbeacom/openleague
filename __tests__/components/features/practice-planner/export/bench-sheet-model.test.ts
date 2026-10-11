@@ -1,7 +1,13 @@
 /** buildBenchSheetModel: the bench sheet as plain strings and images, shared by the HTML and Word exports. */
 import { describe, expect, it, vi } from "vitest";
 import {
+    benchSheetPages,
     buildBenchSheetModel,
+    drillLines,
+    firstPageDrillCount,
+    firstPageLines,
+    type BenchSheetDrillItem,
+    type BenchSheetLayoutInput,
     type BenchSheetRenderers,
     type ExportSession,
     type ExportSessionPlay,
@@ -9,7 +15,7 @@ import {
 import { DIAGRAM_UNAVAILABLE_TEXT, NO_DRILLS_TEXT } from "@/components/features/practice-planner/export/labels";
 import { NO_DRILLS_MESSAGE } from "@/components/features/practice-planner/print/BenchSheet";
 import { DIAGRAM_UNAVAILABLE } from "@/components/features/practice-planner/print/PrintDiagram";
-import { buildLegend } from "@/lib/utils/canvas/legend";
+import { buildLegend, type LegendEntry } from "@/lib/utils/canvas/legend";
 import { formatClockTime, formatLongDate } from "@/lib/utils/date";
 import { createEmptyPlayData } from "@/lib/utils/play-data";
 import type { BlockKind, PlayData } from "@/types/practice-planner";
@@ -414,5 +420,111 @@ describe("buildBenchSheetModel: equipment (practice equipment spec R4, R5)", () 
         const model = buildBenchSheetModel(UNBOOKED, renderers());
         expect(model.equipment).toEqual([]);
         expect(model.drills.map((drill) => drill.equipment)).toEqual([null, null, null]);
+    });
+});
+
+describe("buildBenchSheetModel: team colors", () => {
+    const MARK = { id: "t1", name: "Ice Hawks", logoUrl: null, color: "#7A0019", secondaryColor: "#1B5E20" };
+    const skaters = (): PlayData => ({
+        ...createEmptyPlayData(),
+        players: [
+            { id: "x", role: "X", label: "", color: "#1976D2", position: { x: 10, y: 10 } },
+            { id: "d", role: "D", label: "", color: "#0D47A1", position: { x: 20, y: 10 } },
+            { id: "o", role: "O", label: "", color: "#D32F2F", position: { x: 30, y: 10 } },
+        ],
+    });
+    const SESSION: ExportSession = { ...BOOKED, teamMark: MARK, plays: [play("Breakout", 0, 10, false, { playData: skaters() })] };
+
+    it("paints the header from the team's palette, else League Blue", () => {
+        expect(buildBenchSheetModel(SESSION, renderers()).palette).toMatchObject({ fromTeam: true, band: "#7A0019", accent: "#1B5E20" });
+        expect(buildBenchSheetModel(BOOKED, renderers()).palette).toMatchObject({ fromTeam: false, band: "#0D47A1" });
+        // No team name, no mark: no team colors either (spec R4).
+        expect(buildBenchSheetModel({ ...SESSION, teamName: "" }, renderers()).palette.fromTeam).toBe(false);
+    });
+
+    it("keeps the diagrams' default colors unless the option is on", () => {
+        const diagram = vi.fn((_data: PlayData, ratio: number) => `data:image/png;base64,DIA${ratio}`);
+        buildBenchSheetModel(SESSION, renderers({ diagram }));
+        expect(diagram.mock.calls[0][0].players.map((p) => p.color)).toEqual(["#1976D2", "#0D47A1", "#D32F2F"]);
+    });
+
+    it("draws team markers and their legend swatches in team colors when the option is on, never the opponent", () => {
+        const diagram = vi.fn((_data: PlayData, ratio: number) => `data:image/png;base64,DIA${ratio}`);
+        const swatch = vi.fn((_entry: LegendEntry) => "data:image/png;base64,SWAT");
+        buildBenchSheetModel(SESSION, renderers({ diagram, swatch }), { teamColors: true });
+        expect(diagram.mock.calls[0][0].players.map((p) => p.color)).toEqual(["#7A0019", "#1B5E20", "#D32F2F"]);
+        const roles = swatch.mock.calls.map(([entry]) => entry as LegendEntry & { color?: string });
+        expect(roles.find((entry) => entry.key === "role-X")?.color).toBe("#7A0019");
+        expect(roles.find((entry) => entry.key === "role-D")?.color).toBe("#1B5E20");
+        expect(roles.find((entry) => entry.key === "role-O")?.color).toBeUndefined();
+        // The stored session is untouched.
+        expect((SESSION.plays[0] as ExportSessionPlay).play.playData?.players[0].color).toBe("#1976D2");
+    });
+});
+
+describe("bench sheet pagination: drills on page 1", () => {
+    const drillItem = (number: number, extra: Partial<BenchSheetDrillItem> = {}): BenchSheetDrillItem => ({
+        number, name: `Drill ${number}`, start: "6:00 PM", minutes: 10, station: null, diagram: null, text: null, equipment: null, ...extra,
+    });
+    const SHORT: BenchSheetLayoutInput = {
+        teamName: "Hawks U12", place: null, staff: null, roster: null, rosterPlayers: [], gap: null,
+        timeline: [{ start: "6:00 PM", minutes: 10, label: "Breakout", stations: null }],
+        equipment: [],
+        legend: [{ label: "Pass", image: null }],
+        drills: [drillItem(1), drillItem(2), drillItem(3)],
+    };
+    const rows = (count: number): BenchSheetLayoutInput["timeline"] =>
+        Array.from({ length: count }, (_, i) => ({ start: "6:00 PM", minutes: 5, label: `Drill ${i + 1}`, stations: null }));
+
+    it("counts the header, timeline, equipment and legend lines page 1 holds", () => {
+        const base = firstPageLines(SHORT);
+        expect(firstPageLines({ ...SHORT, timeline: rows(5) })).toBe(base + 4);
+        expect(firstPageLines({ ...SHORT, staff: "Staff: Lee", roster: "Roster: 7 skaters", rosterPlayers: ["Goalie: #30 Pat"] })).toBe(base + 3);
+        expect(firstPageLines({ ...SHORT, equipment: ["Cones ×6", "Pucks ×30", "Net ×2", "Tires ×4"] })).toBe(base + 2 + 2);
+        // A station block lists each station; a rotation adds its grid.
+        expect(firstPageLines({ ...SHORT, timeline: [{ start: "6:00 PM", minutes: 10, label: "Stations · 2", stations: ["A", "B"] }] })).toBe(base + 2);
+    });
+
+    it("pulls the first drill onto a short page 1, and keeps a long page 1 drill-free", () => {
+        expect(firstPageDrillCount(SHORT)).toBe(1);
+        expect(firstPageDrillCount({ ...SHORT, timeline: rows(25) })).toBe(0);
+        expect(firstPageDrillCount({ ...SHORT, rosterPlayers: Array.from({ length: 20 }, (_, i) => `Skater #${i}`) })).toBe(0);
+    });
+
+    it("pulls a second drill only when both fit, which a pair (nearly a page on its own) never does under a header", () => {
+        const bare: BenchSheetLayoutInput = { ...SHORT, teamName: null, timeline: [], legend: [] };
+        expect(firstPageDrillCount(bare)).toBe(1);
+        expect(firstPageLines(bare) + 2 * drillLines(drillItem(1))).toBeGreaterThan(40);
+    });
+
+    it("counts a drill's text and equipment against the room left", () => {
+        expect(drillLines(drillItem(1, { equipment: "Equipment: Cones ×6", text: "Line one\nLine two" }))).toBe(drillLines(drillItem(1)) + 3);
+        expect(firstPageDrillCount({ ...SHORT, drills: [drillItem(1, { text: "x".repeat(2000) })] })).toBe(0);
+    });
+
+    it("never pulls a drill that isn't there", () => {
+        expect(firstPageDrillCount({ ...SHORT, drills: [] })).toBe(0);
+    });
+
+    it("pages the drills: page 1's first, then two to a page", () => {
+        const items = ["a", "b", "c", "d", "e"];
+        expect(benchSheetPages(items, 0).map((page) => [page.items, page.first, page.onFirstPage])).toEqual([
+            [["a", "b"], 0, false],
+            [["c", "d"], 2, false],
+            [["e"], 4, false],
+        ]);
+        expect(benchSheetPages(items, 1).map((page) => [page.items, page.first, page.onFirstPage])).toEqual([
+            [["a"], 0, true],
+            [["b", "c"], 1, false],
+            [["d", "e"], 3, false],
+        ]);
+        expect(benchSheetPages(["a"], 2).map((page) => page.items)).toEqual([["a"]]);
+        expect(benchSheetPages([], 1)).toEqual([]);
+    });
+
+    it("is the model's call, so the print and both downloads agree", () => {
+        const model = buildBenchSheetModel(BOOKED, renderers());
+        expect(model.firstPageDrills).toBe(firstPageDrillCount(model));
+        expect(model.firstPageDrills).toBe(1);
     });
 });

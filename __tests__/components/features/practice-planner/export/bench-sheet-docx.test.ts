@@ -8,6 +8,7 @@ import {
     renderBenchSheetDocxBytes,
 } from "@/components/features/practice-planner/export/bench-sheet-docx";
 import type { BenchSheetModel } from "@/components/features/practice-planner/export/bench-sheet-model";
+import { DEFAULT_TEAM_PALETTE, teamPalette } from "@/lib/utils/team-palette";
 import { unzipEntry, zipEntryNames } from "@/__tests__/helpers/zip";
 
 const PNG = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
@@ -36,6 +37,8 @@ const MODEL: BenchSheetModel = {
         drill(2, { diagram: null }),
         drill(3),
     ],
+    palette: DEFAULT_TEAM_PALETTE,
+    firstPageDrills: 0,
 };
 
 async function documentXml(model: BenchSheetModel): Promise<string> {
@@ -76,6 +79,26 @@ describe("renderBenchSheetDocx", () => {
     it("starts every pair of drills on a new page", async () => {
         const xml = await documentXml(MODEL);
         expect(xml.match(/<w:pageBreakBefore\/>/g)).toHaveLength(2); // drills 1 and 3
+    });
+
+    it("lets the drills that fit follow the legend on page 1, then starts each later pair on a new page", async () => {
+        const xml = await documentXml({ ...MODEL, firstPageDrills: 1 });
+        expect(xml.match(/<w:pageBreakBefore\/>/g)).toHaveLength(1); // drill 2 only
+        const two = await documentXml({ ...MODEL, drills: [...MODEL.drills, drill(4)], firstPageDrills: 2 });
+        expect(two.match(/<w:pageBreakBefore\/>/g)).toHaveLength(1); // drill 3 only
+    });
+
+    it("colors headings, table headers and the header rule from the palette", async () => {
+        const defaults = await documentXml(MODEL);
+        expect(defaults).toContain('w:color w:val="0D47A1"');
+        expect(defaults).toContain('w:fill="E3F2FD"');
+        expect(defaults).toMatch(/<w:bottom [^>]*w:color="1976D2"/);
+        const team = teamPalette({ color: "#7A0019", secondaryColor: "#1B5E20" });
+        const xml = await documentXml({ ...MODEL, palette: team });
+        expect(xml).toContain(`w:color w:val="${team.ink.slice(1)}"`);
+        expect(xml).toContain(`w:fill="${team.tint.slice(1)}"`);
+        expect(xml).toMatch(/<w:bottom [^>]*w:color="1B5E20"/);
+        expect(xml).not.toContain('w:val="0D47A1"');
     });
 
     it("embeds one picture per readable diagram and swatch, and says when a diagram is missing", async () => {
@@ -131,6 +154,11 @@ describe("renderBenchSheetDocx", () => {
         const modelImports = source.match(/^import\b[^;]*from\s+"\.\/bench-sheet-model";/gm) ?? [];
         expect(modelImports.length).toBeGreaterThan(0);
         for (const statement of modelImports) expect(statement).toMatch(/^import type\b/);
+        // Team colors arrive as data: the palette module loads MUI, so only its types come in.
+        for (const statement of source.match(/^import\b[^;]*from\s+"@\/lib\/utils\/team-palette";/gm) ?? []) expect(statement).toMatch(/^import type\b/);
+        // The shared pagination it does load imports nothing but types.
+        const layout = readFileSync(path.join(process.cwd(), "components/features/practice-planner/export/bench-sheet-layout.ts"), "utf8");
+        for (const statement of layout.match(/^import\b[^;]*;/gm) ?? []) expect(statement).toMatch(/^import type\b/);
     });
 });
 

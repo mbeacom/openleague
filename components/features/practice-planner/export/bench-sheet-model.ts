@@ -4,6 +4,8 @@
  * order, the session's zone rule (venue zone with its short name when booked,
  * else the viewer's), printPixelRatio for diagrams, one combined legend.
  * Images come from injected renderers, so this module never touches a canvas.
+ * It also makes the page-layout call all three sheets share: how many drills
+ * start on page 1 (bench-sheet-layout.ts).
  */
 import type { BlockKind, EquipmentCountItem, LogoImage, PlayData, PlayFocus, PlayGoalies, SessionStaffMember, TeamMark } from "@/types/practice-planner";
 import type { AgeGroup } from "@/lib/utils/age-groups";
@@ -31,6 +33,10 @@ import { runBySuffix, runByText, staffHeaderLabel, staffNames } from "@/lib/util
 import { drillEquipment, drillEquipmentText, equipmentLabel } from "@/lib/utils/equipment-needs";
 import { rollupEquipment } from "@/lib/utils/practice-equipment";
 import { rosterSheetLines, type PracticeRoster } from "@/lib/utils/practice-roster";
+import { sessionWithTeamColors, teamPalette, teamRoleColors, type TeamPalette } from "@/lib/utils/team-palette";
+import { firstPageDrillCount } from "./bench-sheet-layout";
+
+export { benchSheetPages, drillLines, DRILLS_PER_PAGE, firstPageDrillCount, firstPageLines, type BenchSheetLayoutInput, type BenchSheetPage } from "./bench-sheet-layout";
 
 export interface ExportSessionPlay {
     kind?: "drill";
@@ -173,6 +179,10 @@ export interface BenchSheetModel {
     overTime: boolean;
     legend: Array<{ label: string; image: string | null }>;
     drills: BenchSheetDrillItem[];
+    /** Header and table colors: the team's (teamPalette), else League Blue and Action Blue */
+    palette: TeamPalette;
+    /** How many drills follow the legend on page 1 (0–2); the rest go two to a page (benchSheetPages) */
+    firstPageDrills: number;
 }
 
 export interface BenchSheetRenderers {
@@ -189,12 +199,16 @@ const MS_PER_MINUTE = 60_000;
 export function buildBenchSheetModel(
     stored: ExportSession,
     renderers: BenchSheetRenderers,
-    options: { logo?: LogoImage | null; includeRosterNames?: boolean } = {},
+    /** teamColors: the "Team colors" display option, remapping the diagrams' team markers; off by default. */
+    options: { logo?: LogoImage | null; includeRosterNames?: boolean; teamColors?: boolean } = {},
 ): BenchSheetModel {
     // Counts always; names and numbers only when the coach asked (roster spec R10).
     const rosterLines = rosterSheetLines(stored.roster, options.includeRosterNames === true);
-    // Goalie markers hidden at render time only (spec R7). The plan JSON export never calls this.
-    const session = sessionForDisplay(stored);
+    // Without a team name there is no mark (spec R4), and no team colors either.
+    const teamMark = stored.teamName?.trim() ? stored.teamMark ?? null : null;
+    const roleColors = options.teamColors ? teamRoleColors(teamMark) : {};
+    // Goalie markers hidden and team colors applied at render time only (spec R7). The plan JSON export never calls this.
+    const session = sessionWithTeamColors(sessionForDisplay(stored), roleColors);
     const start = sessionStart(session);
     const end = new Date(start.getTime() + session.duration * MS_PER_MINUTE);
     const { timeZone, showZone } = sessionTimeZone(session);
@@ -221,7 +235,7 @@ export function buildBenchSheetModel(
         return text ? { runBy: text } : {};
     };
 
-    return {
+    const sheet: Omit<BenchSheetModel, "palette" | "firstPageDrills"> = {
         title: session.title,
         teamName: team || null,
         mark: benchSheetMark(session, team, options.logo ?? null, renderers),
@@ -260,7 +274,7 @@ export function buildBenchSheetModel(
         equipment: benchSheetEquipment(session),
         planned: plannedLabel(planned, session.duration),
         overTime: planned > session.duration,
-        legend: legendData ? buildLegend(legendData).map((entry) => ({ label: entry.label, image: renderers.swatch(entry) })) : [],
+        legend: legendData ? buildLegend(legendData, roleColors).map((entry) => ({ label: entry.label, image: renderers.swatch(entry) })) : [],
         drills: ordered.map(({ sp, startsAt, station }, index) => ({
             number: index + 1,
             name: sp.play.name,
@@ -272,6 +286,7 @@ export function buildBenchSheetModel(
             equipment: drillEquipmentText(drillEquipment(sp.play.playData)),
         })),
     };
+    return { ...sheet, palette: teamPalette(teamMark), firstPageDrills: firstPageDrillCount(sheet) };
 }
 
 /** The practice's equipment as the bench sheet lists it (practice equipment spec R4, R5). */

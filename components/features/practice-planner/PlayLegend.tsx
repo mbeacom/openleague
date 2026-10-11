@@ -4,7 +4,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { Accordion, AccordionDetails, AccordionSummary, Box, Chip, Stack, Typography } from "@mui/material";
 import { ExpandMore as ExpandMoreIcon } from "@mui/icons-material";
-import type { PlayData } from "@/types/practice-planner";
+import type { PlayData, PlayerRole } from "@/types/practice-planner";
 import { buildLegend, type LegendEntry } from "@/lib/utils/canvas/legend";
 import { LEGEND_SWATCH_SIZE, paintLegendSwatch } from "@/lib/utils/canvas/legend-swatch";
 import { backingPixelRatio, sizeBackingStore, watchPixelRatio } from "@/lib/utils/canvas/backing-store";
@@ -41,9 +41,18 @@ export function LegendSwatch({ entry }: { entry: LegendEntry }) {
     );
 }
 
-export function PlayLegend({ playData, defaultExpanded = false }: { playData: PlayData | null; defaultExpanded?: boolean }) {
+export function PlayLegend({
+    playData,
+    defaultExpanded = false,
+    roleColors,
+}: {
+    playData: PlayData | null;
+    defaultExpanded?: boolean;
+    /** Team colors the diagram's markers were remapped to (lib/utils/team-palette.ts); absent: defaults */
+    roleColors?: Partial<Record<PlayerRole, string>>;
+}) {
     if (!playData) return null;
-    const entries = buildLegend(playData);
+    const entries = buildLegend(playData, roleColors);
     const showArea = !isFullIce(playData.area);
     if (entries.length === 0 && !showArea) return null;
     return (

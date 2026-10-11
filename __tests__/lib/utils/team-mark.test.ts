@@ -111,11 +111,12 @@ describe("toTeamProfile and readTeamProfile", () => {
 
 describe("toTeamMark, teamLogoAlt and exportMarkSize", () => {
     it("turns a profile into the mark the shared components draw", () => {
-        expect(toTeamMark({ name: "Ice Hawks", logo: LOGO, primaryColor: "#9B1B30", secondaryColor: null }, "local")).toEqual({
+        expect(toTeamMark({ name: "Ice Hawks", logo: LOGO, primaryColor: "#9B1B30", secondaryColor: "#F2C14E" }, "local")).toEqual({
             id: "local",
             name: "Ice Hawks",
             logoUrl: PNG,
             color: "#9B1B30",
+            secondaryColor: "#F2C14E",
             logoImage: LOGO,
         });
         expect(toTeamMark({ name: "Ice Hawks", logo: null, primaryColor: null, secondaryColor: null }, "local").logoUrl).toBeNull();

@@ -34,6 +34,7 @@ import {
 } from "@/lib/plan-document";
 import { rosterHasNames } from "@/lib/utils/practice-roster";
 import { RosterNamesToggle } from "./RosterNamesToggle";
+import { useTeamColors } from "./useTeamColors";
 import { usePlannerPlatform, usePlannerStore, type PlannerPlanLink } from "@/lib/planner-store";
 import { drillRows, isBlockRow } from "@/lib/utils/session-rows";
 import { staffNames } from "@/lib/utils/session-staff";
@@ -176,6 +177,7 @@ export function ExportPlanMenu({ session, size = "medium" }: ExportPlanMenuProps
     const [includeNames, setIncludeNames] = useState(false);
     const offerNames = rosterHasNames(session.roster);
     const namesOption = { includeRosterNames: offerNames && includeNames };
+    const [teamColors] = useTeamColors();
     const unreadable = unreadableDiagramNotice(drillRows(session.plays).filter((sp) => sp.play.playData === null).length);
 
     const download = (format: DocumentFormat = "json") => {
@@ -211,7 +213,8 @@ export function ExportPlanMenu({ session, size = "medium" }: ExportPlanMenuProps
         try {
             // The team's logo, else its Crest (practice logo spec R5); never fails the export.
             const logo = await resolveExportLogo(session, store.getPracticeLogoImage);
-            await exportBenchSheet(session, format, { logo, ...namesOption });
+            // Diagrams follow the device's "Team colors" option, as the bench sheet does; plan files never do.
+            await exportBenchSheet(session, format, { logo, teamColors, ...namesOption });
             // Clear only our own notice: another action may have replaced it meanwhile.
             setNotice((current) => (current === preparing ? null : current));
         } catch (error) {

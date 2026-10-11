@@ -33,15 +33,27 @@ export function contrastTextFor(
   color: string | null | undefined,
   fallback = 'primary.contrastText'
 ): string {
-  if (!color || !HEX.test(color.trim())) return fallback;
-  const background = color.trim();
   // Both candidates must be OPAQUE. MUI's getLuminance reads only the RGB
   // channels, so a semi-transparent ink like text.primary (rgba(0,0,0,0.87))
   // scores as pure black while rendering as a lighter composite — on #7a7a7a
   // that is a measured 4.90:1 against a real 4.45:1, i.e. the measurement would
   // certify a background that actually fails.
-  const light = theme.palette.common.white;
-  const dark = theme.palette.common.black;
+  return contrastInk(color, theme.palette.common.white, theme.palette.common.black) ?? fallback;
+}
+
+/**
+ * contrastTextFor without a theme, for code that runs outside React (the
+ * practice planner's team palette and its document exports): `light` when it
+ * clears 4.5:1 and beats `dark`, else `dark` when it does, else the better of
+ * the two. Both inks must be opaque. Null when `color` is not a hex colour.
+ */
+export function contrastInk(
+  color: string | null | undefined,
+  light = '#FFFFFF',
+  dark = '#000000'
+): string | null {
+  if (!color || !HEX.test(color.trim())) return null;
+  const background = color.trim();
   try {
     const lightRatio = getContrastRatio(background, light);
     const darkRatio = getContrastRatio(background, dark);
@@ -49,6 +61,6 @@ export function contrastTextFor(
     if (darkRatio >= AA_NORMAL) return dark;
     return lightRatio >= darkRatio ? light : dark;
   } catch {
-    return fallback;
+    return null;
   }
 }

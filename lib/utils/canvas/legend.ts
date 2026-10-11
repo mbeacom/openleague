@@ -4,12 +4,15 @@ import { ACTION_LABELS, END_LABELS, EQUIPMENT_LABELS, ROLE_LABELS } from "./nota
 export type LegendEntry = { key: string; label: string } & (
     | { type: "action"; action: StrokeAction }
     | { type: "end"; end: "stop" }
-    | { type: "role"; role: PlayerRole }
+    | { type: "role"; role: PlayerRole; /** The swatch's fill when not the role's default (team colors) */ color?: string }
     | { type: "equipment"; kind: EquipmentKind }
 );
 
-/** Symbols a drill actually uses, in a fixed order. `line` and the arrow end need no explanation. */
-export function buildLegend(data: PlayData): LegendEntry[] {
+/**
+ * Symbols a drill actually uses, in a fixed order. `line` and the arrow end need no explanation.
+ * `roleColors` (team colors) gives a role's swatch the color its markers were remapped to.
+ */
+export function buildLegend(data: PlayData, roleColors: Partial<Record<PlayerRole, string>> = {}): LegendEntry[] {
     const actions = new Set(data.drawings.map((d) => d.action));
     const roles = new Set(data.players.map((p) => p.role));
     const kinds = new Set(data.equipment.map((e) => e.kind));
@@ -19,7 +22,9 @@ export function buildLegend(data: PlayData): LegendEntry[] {
     }
     if (data.drawings.some((d) => d.end === "stop")) entries.push({ key: "end-stop", label: END_LABELS.stop, type: "end", end: "stop" });
     for (const role of PLAYER_ROLES) {
-        if (roles.has(role)) entries.push({ key: `role-${role}`, label: ROLE_LABELS[role], type: "role", role });
+        if (!roles.has(role)) continue;
+        const color = roleColors[role];
+        entries.push({ key: `role-${role}`, label: ROLE_LABELS[role], type: "role", role, ...(color ? { color } : {}) });
     }
     for (const kind of EQUIPMENT_KINDS) {
         if (kinds.has(kind)) entries.push({ key: `equipment-${kind}`, label: EQUIPMENT_LABELS[kind], type: "equipment", kind });
