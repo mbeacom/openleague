@@ -102,19 +102,33 @@ export const GOOGLE_CSP: CspAdditions = {
 
 /**
  * OneDrive (spec R6, Security and privacy), keyed on
- * OPENLEAGUE_MICROSOFT_CLIENT_ID. MSAL is bundled (no script host). Silent
- * renewal loads the authority in a hidden iframe that ends on the planner's
- * own auth/redirect.html, so frame-src needs the authority and 'self' (added
- * by plannerCsp whenever frame-src is set). The OneDrive connector owns this
- * list: whether personal sign-in passes through https://login.live.com inside
- * that iframe, and where Graph's content downloads redirect, are phase 4a's
- * checks.
+ * OPENLEAGUE_MICROSOFT_CLIENT_ID. MSAL is bundled (no script host). Phase 4a's
+ * findings:
+ * - connect-src: the sign-in authority (token and discovery requests), Graph,
+ *   and the hosts Graph's pre-authenticated download URLs point to. A browser
+ *   can't read a file through Graph's /content (a 302 after a CORS preflight is
+ *   refused; Microsoft documents this), so the connector fetches the item's
+ *   `@microsoft.graph.downloadUrl`: `*.files.1drv.com` or
+ *   `my.microsoftpersonalcontent.com` for personal accounts, the tenant's
+ *   `*.sharepoint.com` host for work or school accounts.
+ * - frame-src: required. Once the 24-hour SPA refresh token expires, MSAL
+ *   renews in a hidden iframe that loads the authority and ends on the
+ *   planner's own auth/redirect.html ('self', added by plannerCsp whenever
+ *   frame-src is set). A personal account's sign-in through /common hands off
+ *   to login.live.com, so that hop is listed too; Microsoft publishes no CSP
+ *   host list, so the manual checklist confirms it.
  */
 export function microsoftCsp(settings: MicrosoftCloudSettings | null): CspAdditions {
     if (!settings) return {};
     return {
-        "connect-src": ["https://login.microsoftonline.com", "https://graph.microsoft.com"],
-        "frame-src": ["https://login.microsoftonline.com"],
+        "connect-src": [
+            "https://login.microsoftonline.com",
+            "https://graph.microsoft.com",
+            "https://*.files.1drv.com",
+            "https://my.microsoftpersonalcontent.com",
+            "https://*.sharepoint.com",
+        ],
+        "frame-src": ["https://login.microsoftonline.com", "https://login.live.com"],
     };
 }
 

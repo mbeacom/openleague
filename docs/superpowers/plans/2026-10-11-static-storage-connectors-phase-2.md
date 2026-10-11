@@ -200,3 +200,55 @@ Where the spec leaves a choice open, this plan decides it:
 7. **Expiry.** Leave a tab open for more than an hour, then Save: the bar asks for permission; Allow access reopens Google's popup and the save completes.
 8. **Disconnect.** Saved files → Disconnect Google Drive. The note links to the Google Account's third-party connections page; the app is still listed there until removed. Saving again asks to connect. Remove the app's access on that page and confirm the next connect shows consent again.
 9. **A fork-style build.** `bun run planner:build` with no variables shows no Google Drive item anywhere and the CSP has no Google host.
+
+---
+
+## Phase 4a: OneDrive (app folder)
+
+Spec R6, R8, R9, "Security and privacy" (CSP), "Sync and conflicts", Phasing row 4a, and the Microsoft Entra prerequisites. The owner's Entra registration is done: any organizational directory and personal accounts, publisher domain verified, SPA redirect URIs `https://openleague.dev/planner/auth/redirect.html` and `http://localhost:5173/planner/auth/redirect.html`, delegated `Files.ReadWrite.AppFolder` and `User.Read`, no secret. The client id is the build variable `OPENLEAGUE_MICROSOFT_CLIENT_ID`.
+
+### Rulings made in 4a
+
+35. **MSAL is `@azure/msal-browser` 5.23.0, pinned exactly.** The newest release at least two weeks old when 4a was written; 5.24.0 and 5.25.0 were younger. It is the only new runtime dependency and loads only through `import()`.
+36. **The entry chunk holds a stand-in, not the connector.** `storage/onedrive-loader.ts` implements `StorageConnector` and loads `storage/onedrive.ts` (MSAL and Graph) on first use. Its status is "disconnected" until MSAL has read its cache. Its `prepare()` (phase 3's optional method, Ruling 31) loads the chunk and lets MSAL read its cache, so by the time the coach taps "OneDrive…" in a menu that called `prepareConnectors`, the sign-in popup opens inside that tap. The service creates it only when `ONEDRIVE_SETTINGS` is set (Ruling 23), written against the build constant so an unset build drops the connector's chunk.
+37. **Sign-in.** Authority `https://login.microsoftonline.com/common` (both account types), cache in `sessionStorage`, `redirectUri` and `postLogoutRedirectUri` both the redirect page, computed from the page's own address (`new URL("auth/redirect.html", location.href)`), so forks on a subpath need no code change. A menu item for a connector that isn't connected signs in first through phase 3's `connectIfNeeded` (a popup). Every Graph call gets its token from `acquireTokenSilent`; when that needs interaction, a popup opens only if the browser reports user activation (a check on focus never opens one) and the call otherwise reports `auth-required`, which the storage bar turns into "Allow access".
+38. **Graph calls.** The app folder is `/me/drive/special/approot`. Create: `PUT approot:/{name}:/content?@microsoft.graph.conflictBehavior=fail`; a 409 tries "name (2).kind.ext" up to (9), because OneDrive's own `rename` ("fall.rankings 1.json") breaks the document extension. Overwrite: `PUT /me/drive/items/{id}/content` with `If-Match: <cTag>`; 412 is a conflict carrying the current item. The revision is the cTag (content only; a rename moves the eTag). A 401 renews the token once (`forceRefresh`) and retries. Paged listing follows `@odata.nextLink` only when it is a Graph URL.
+39. **Reads use `@microsoft.graph.downloadUrl`.** Graph's `/content` answers with a 302 that a browser refuses after a CORS preflight (Microsoft's documented limitation), so `open` reads the item's metadata with the download URL, fetches that pre-authenticated URL without a token, cookies or referrer, then reads the metadata again; if the cTag moved in between it reads again (at most three times), so a link's base revision always matches the text it holds. The URL is a bearer link and is never stored or logged.
+40. **Error codes.** 401 after renewal → `auth-required`; 403 → `forbidden`; 404/410 → `not-found`; 413 → `too-large`; 507 → `quota`; 429/503/509 → `unavailable` with `retryAfterSeconds` from `Retry-After` (seconds or an HTTP date); a network failure → `offline`; anything else → `provider` with the status. MSAL's `user_cancelled` → `cancelled`.
+41. **Work or school accounts get their own error.** A new `ConnectorError` code, `app-folder-unavailable`, is returned when an app-folder call (connect, list, create) fails with 400, 403, 404 or 501 for an organizational account. "Connect" opens the app folder right after sign-in so the coach hears it at once. The message says the organization may not allow it and offers a local file or a personal account. The same refusal for a personal account stays `forbidden`.
+42. **Open from… lists the folder.** OneDrive has `list` and no picker in 4a, so "Open from… → OneDrive…" signs in if needed and shows the app folder's files of that kind (newest first) in a dialog; choosing one continues exactly as a picked file does (id match → "Replace my copy" / "Keep both").
+43. **Disconnect** is phase 3's Saved files row (`CloudConnections`), with OneDrive's account type in its status. It clears MSAL's cache for the account (`clearCache`; no logout popup, no Microsoft session sign-out), keeps the links, and links to where access is removed: `https://account.live.com/consent/Manage` for a personal account, `https://myapps.microsoft.com/` for work or school (both when the account type is unknown). `CONNECTOR_ACCOUNT_PAGES.onedrive` is the personal page; `ONEDRIVE_WORK_ACCOUNT_PAGE` the other. The row also notes that sharing is download-and-open in 4a (spec R8), and reads MSAL's cache on mount, because a OneDrive session survives a reload.
+44. **CSP.** Only when the client id is set, through phase 3's `microsoftCsp()` in `cloud-config.ts` (Ruling 24), which 4a extends: `connect-src` gains `https://login.microsoftonline.com https://graph.microsoft.com https://*.files.1drv.com https://my.microsoftpersonalcontent.com https://*.sharepoint.com` (the last three are where download URLs point: personal OneDrive's content hosts and a tenant's SharePoint host); `frame-src 'self' https://login.microsoftonline.com https://login.live.com` is added. `login.live.com` is listed because a personal account's sign-in through `/common` hands off to it, and the silent-renewal iframe's navigation would otherwise be blocked; Microsoft documents no CSP host list, so the manual checklist confirms it. Unset, the policy is byte-for-byte the one before connectors.
+45. **The redirect page** is `apps/planner/auth/redirect.html`, a second Vite input, loading only `src/auth/redirect.ts`, which calls MSAL's `broadcastResponseToMainFrame()` from `@azure/msal-browser/redirect-bridge`. It carries the same CSP meta, a static title, and nothing of the app. It is built whether or not the client id is set (it does nothing without a sign-in response). The dev server now serves the planner at `/planner/` so the dev redirect URI matches its registration.
+
+### Task 13: The connector
+
+- [x] `storage/onedrive.ts`: `createMsalAuth`, `createOneDriveConnector`, `createOneDriveFromConfig` (Rulings 37–41).
+- [x] `storage/onedrive-loader.ts` (Ruling 36); `service.ts` adds OneDrive next to Google Drive, only when `ONEDRIVE_SETTINGS` is set.
+- [x] The contract suite over a fake Graph (`fake-graph.ts`: eTag/cTag, `If-Match`/412, 409 on create, paged children, pre-authenticated downloads, 401, throttling) with a fake MSAL client; plus `If-Match` on every overwrite, the cTag as revision, the re-read on a mid-open change, the token never leaving Graph, the work-account error, and the popup only from a tap.
+
+### Task 14: Screens
+
+- [x] "Save to…" and "Open from…" sign in from the tap; "Open from…" lists the app folder (Ruling 42); Saved files has Connect and Disconnect (Ruling 43). Phone width, 44px targets.
+
+### Task 15: Build
+
+- [x] Microsoft's hosts in `microsoftCsp()` (Ruling 44); the redirect entry (Ruling 45).
+- [x] `planner:check`: with the client id set, connect-src and frame-src must be exactly the connector's; without it, no OneDrive host and no frame-src. MSAL (by one of its error codes) must never be in index.html's entry chunk, and must be in the bundle when the connector is built. `auth/redirect.html` is required when the connector is built and checked whenever present: a CSP, the bridge, and none of index.html's own script or app code.
+- [x] Gates with no variables, with Google and Microsoft values, and with Microsoft only. The Pages workflow already passes `OPENLEAGUE_MICROSOFT_CLIENT_ID` (phase 3, Ruling 34).
+
+### Task 16: Manual checklist (owner, real accounts)
+
+CI makes no calls to Microsoft. Before 4a is announced, on the deployed site, on desktop Chrome, desktop Safari and a phone:
+
+Personal Microsoft account:
+- [ ] Saved files → Connect OneDrive: the consent screen lists only "access the app folder" and sign-in; the page says "connected (personal Microsoft account)"; `Apps/<app name>/` appears in OneDrive.
+- [ ] Save to… → OneDrive… on a practice and on rankings: the files appear in the app folder; edit and Save writes back.
+- [ ] Second browser: Open from… → OneDrive… lists both files; opening one links it.
+- [ ] Edit on both browsers, save on one, then on the other: the conflict dialog appears; each of Keep mine, Use theirs and Keep both does what it says.
+- [ ] DevTools: no CSP violations for sign-in, Graph, or the download URL; note the download host actually used (expected `*.files.1drv.com` or `my.microsoftpersonalcontent.com`).
+- [ ] Silent renewal: leave a signed-in tab open past 24 hours (the SPA refresh token's fixed lifetime), then Save. In Chrome with third-party cookies allowed, no popup appears; confirm in the network log whether the hidden iframe passes through `login.live.com` (if it never does, that host can leave frame-src). In Safari, a popup or "Allow access" is expected.
+- [ ] Disconnect OneDrive: the page says not connected; Save on a linked document asks to sign in again; the link opens the account's app permissions page, where the planner can be removed.
+
+Work or school account:
+- [ ] Connect OneDrive. Either the app folder opens (then repeat save, open and conflict above) or the planner shows the "couldn't open the planner's folder for this work or school account" message. Record which, and whether the tenant asked for admin approval. Until this passes on at least one tenant, the UI makes no promise for work or school accounts.

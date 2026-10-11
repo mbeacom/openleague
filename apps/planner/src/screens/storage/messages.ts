@@ -87,6 +87,11 @@ export function statusText(state: SyncState | "unlinked" | "needs-permission" | 
     }
 }
 
+/** OneDrive with a work or school account whose app folder can't be reached (spec R6). */
+export const ONEDRIVE_APP_FOLDER_UNAVAILABLE =
+    "OneDrive couldn't open the planner's folder for this work or school account. Your organization may not allow it. " +
+    "Save to a file on this computer, or connect OneDrive with a personal Microsoft account.";
+
 export const STORE_FAILED_MESSAGE = "Couldn't update this document. Please try again.";
 
 /** A failed step in words; null when there's nothing to say (a cancelled picker). */
@@ -113,6 +118,8 @@ export function syncErrorText(error: SyncError, name: string): string | null {
             return "Saving failed. Try again.";
         case "unwritable":
             return error.message;
+        case "app-folder-unavailable":
+            return ONEDRIVE_APP_FOLDER_UNAVAILABLE;
         case "not-linked":
             return "This document isn't saved to a file.";
         case "missing-local":

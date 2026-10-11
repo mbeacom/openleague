@@ -2,8 +2,8 @@ import { mkdtemp, mkdir, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { FORMAT_LIBRARY_MARKERS, GOOGLE_DRIVE_MARKERS, SAVED_FILES_MARKER, checkPlannerBuild, unguardedProcessEnvCount } from "@/scripts/check-planner-build";
-import { resolveAiOrigins } from "@/apps/planner/ai-origins";
+import { FORMAT_LIBRARY_MARKERS, GOOGLE_DRIVE_MARKERS, MSAL_MARKER, REDIRECT_BRIDGE_MARKER, SAVED_FILES_MARKER, checkPlannerBuild, unguardedProcessEnvCount } from "@/scripts/check-planner-build";
+import { aiConnectSrc, resolveAiOrigins } from "@/apps/planner/ai-origins";
 import { plannerCsp } from "@/apps/planner/build-config";
 import { resolveCloudSettings } from "@/apps/planner/cloud-config";
 
@@ -220,6 +220,84 @@ describe("checkPlannerBuild", () => {
     it("fails when no chunk carries the Word export", async () => {
         const problems = await checkPlannerBuild(await fixture({ "index.html": GOOD_HTML, "assets/index-abc.js": GOOD_JS }));
         expect(problems.join("\n")).toMatch(/word\/document\.xml/);
+    });
+});
+
+describe("checkPlannerBuild with the OneDrive connector (storage connectors spec R6, Testing)", () => {
+    const CLIENT_ID = "00000000-0000-4000-8000-000000000001";
+    const ONEDRIVE = resolveCloudSettings({ OPENLEAGUE_MICROSOFT_CLIENT_ID: CLIENT_ID });
+    const ONEDRIVE_CSP = plannerCsp(resolveAiOrigins(undefined), { cloud: ONEDRIVE });
+    /** The lazily loaded OneDrive connector with MSAL. */
+    const ONEDRIVE_JS = `const E = ${JSON.stringify(MSAL_MARKER)}; export {};`;
+    const BRIDGE_JS = `document.title = ${JSON.stringify(REDIRECT_BRIDGE_MARKER)}; export {};`;
+    const redirectHtml = (csp: string, scripts: string[] = ["../assets/auth-redirect-abc.js"], preloads: string[] = ["../assets/msal-common-abc.js"]) =>
+        `<html><head><meta http-equiv="Content-Security-Policy" content="${csp}">` +
+        scripts.map((src) => `<script type="module" crossorigin src="${src}"></script>`).join("") +
+        preloads.map((href) => `<link rel="modulepreload" crossorigin href="${href}">`).join("") +
+        "<title>Signing in</title></head><body></body></html>";
+    const base = (csp = ONEDRIVE_CSP) => ({
+        "index.html": cspHtml(csp),
+        "assets/index-abc.js": GOOD_JS,
+        "assets/docx-abc.js": LAZY_JS,
+        "assets/ai-abc.js": AI_JS,
+        "assets/onedrive-abc.js": ONEDRIVE_JS,
+        "assets/auth-redirect-abc.js": BRIDGE_JS,
+        "assets/msal-common-abc.js": ONEDRIVE_JS,
+        "auth/redirect.html": redirectHtml(csp),
+    });
+    const check = async (files: Record<string, string>, configured = true) =>
+        (await checkPlannerBuild(await fixture(files), { cloud: configured ? ONEDRIVE : resolveCloudSettings({}) })).join("\n");
+
+    it("passes a build with the connector's exact CSP, a lazy MSAL chunk and a bridge-only redirect page", async () => {
+        expect(await check(base())).toBe("");
+    });
+
+    it("fails when the CSP lacks the OneDrive hosts or frame-src", async () => {
+        expect(await check(base(PUBLIC_CSP))).toMatch(/connect-src is ".*", but the AI origin allowlist and cloud connectors resolve to ".*https:\/\/graph\.microsoft\.com/);
+        expect(await check(base(PUBLIC_CSP))).toMatch(/frame-src is "", but the configured connectors need "frame-src 'self' https:\/\/login\.microsoftonline\.com https:\/\/login\.live\.com"/);
+        const noSelf = ONEDRIVE_CSP.replace("frame-src 'self' ", "frame-src ");
+        expect(await check(base(noSelf))).toMatch(/frame-src is "frame-src https:\/\/login/);
+    });
+
+    it("fails when an unconfigured build carries the OneDrive hosts or a frame-src", async () => {
+        const problems = await check({ ...base(), "auth/redirect.html": redirectHtml(PUBLIC_CSP) }, false);
+        expect(problems).toMatch(/but the AI origin allowlist and cloud connectors resolve to/);
+        expect(problems).toMatch(/the CSP has "frame-src 'self' .*", but no connector that needs frames is built/);
+    });
+
+    it("fails when MSAL is in the entry chunk, or missing from a build that has the connector", async () => {
+        expect(await check({ ...base(), "assets/index-abc.js": `${GOOD_JS}\n${ONEDRIVE_JS}` })).toMatch(
+            /index-abc\.js \(the entry chunk\) contains "interaction_in_progress": MSAL .* must load only through import\(\)/,
+        );
+        const without = { ...base(), "assets/onedrive-abc.js": "export {};", "assets/msal-common-abc.js": "export {};" };
+        expect(await check(without)).toMatch(/no emitted file contains "interaction_in_progress"/);
+        // Unconfigured, MSAL isn't required.
+        const unconfigured = { ...without, "index.html": GOOD_HTML, "auth/redirect.html": redirectHtml(PUBLIC_CSP) };
+        expect(await check(unconfigured, false)).toBe("");
+    });
+
+    it("requires the redirect page when the connector is built", async () => {
+        const { "auth/redirect.html": _page, ...rest } = base();
+        void _page;
+        expect(await check(rest)).toMatch(/auth\/redirect\.html is missing/);
+        expect(await check({ ...rest, "index.html": GOOD_HTML }, false)).toBe("");
+    });
+
+    it("fails when the redirect page loads the app, or doesn't load the bridge", async () => {
+        const runsApp = { ...base(), "auth/redirect.html": redirectHtml(ONEDRIVE_CSP, ["../assets/index-abc.js"], []) };
+        const problems = await check(runsApp);
+        expect(problems).toMatch(/auth\/redirect\.html loads assets\/index-abc\.js, index\.html's own script/);
+        expect(problems).toMatch(/contains "openleague\.practice-plan": the redirect page must load only the bridge/);
+        expect(problems).toMatch(/doesn't load MSAL's redirect bridge/);
+
+        const appChunk = { ...base(), "assets/msal-common-abc.js": 'const R = Symbol.for("react.transitional.element"); export {};' };
+        expect(await check(appChunk)).toMatch(/msal-common-abc\.js, loaded by auth\/redirect\.html, contains "react\.transitional\.element"/);
+
+        const noCsp = { ...base(), "auth/redirect.html": redirectHtml(ONEDRIVE_CSP).replace(/<meta[^>]*>/, "") };
+        expect(await check(noCsp)).toMatch(/auth\/redirect\.html has no Content-Security-Policy meta/);
+
+        const missing = { ...base(), "auth/redirect.html": redirectHtml(ONEDRIVE_CSP, ["../assets/gone-abc.js"]) };
+        expect(await check(missing)).toMatch(/assets\/gone-abc\.js is referenced by auth\/redirect\.html but missing/);
     });
 });
 

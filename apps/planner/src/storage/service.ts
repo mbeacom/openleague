@@ -2,16 +2,18 @@
  * The storage connectors as the app runs them (ADR-0022): one sync engine over
  * the store's link table and working copies, with the connectors this browser
  * can use: the Local connector where the File System Access API exists, and
- * Google Drive when the build carries its settings (spec R9). A cloud
- * connector that isn't configured is absent: not in the menus, not in the bundle.
+ * Google Drive and OneDrive when the build carries their settings (spec R9).
+ * A cloud connector that isn't configured is absent: not in the menus, not in
+ * the bundle.
  */
-import { GOOGLE_DRIVE_SETTINGS } from "../config";
+import { GOOGLE_DRIVE_SETTINGS, ONEDRIVE_SETTINGS } from "../config";
 import type { FileHandleStore } from "../store/file-handles";
 import type { LocalPlannerStore } from "../store/types";
 import type { ConnectorId, StorageConnector } from "./connector";
 import { createStoreDocuments } from "./documents";
 import { createLazyGoogleDriveConnector } from "./google-drive-lazy";
 import { createLocalFileConnector, fileSystemAccess, type FsaPickers } from "./local-file";
+import { createLazyOneDriveConnector } from "./onedrive-loader";
 import { createSyncEngine, type LocalDocuments, type SyncEngine } from "./sync";
 
 export interface StorageService {
@@ -35,9 +37,10 @@ export interface StorageServiceOptions {
 }
 
 export function createStorageService(store: LocalPlannerStore, { pickers = fileSystemAccess(globalThis), handles = store.fileHandles, extra = [], now }: StorageServiceOptions = {}): StorageService {
-    // Written against the build constant itself: unset, the branch folds away and so do the connector's chunks.
-    const cloud = GOOGLE_DRIVE_SETTINGS ? [createLazyGoogleDriveConnector(GOOGLE_DRIVE_SETTINGS)] : [];
-    const all = [createLocalFileConnector({ pickers, handles }), ...cloud, ...extra];
+    // Written against the build constants themselves: unset, a branch folds away and so do that connector's chunks.
+    const google = GOOGLE_DRIVE_SETTINGS ? [createLazyGoogleDriveConnector(GOOGLE_DRIVE_SETTINGS)] : [];
+    const oneDrive = ONEDRIVE_SETTINGS ? [createLazyOneDriveConnector({ clientId: ONEDRIVE_SETTINGS.clientId })] : [];
+    const all = [createLocalFileConnector({ pickers, handles }), ...google, ...oneDrive, ...extra];
     const connectors = all.filter((connector) => connector.status() !== "unconfigured");
     const documents = createStoreDocuments(store);
     const engine = createSyncEngine({ connectors, links: store.links, documents, ...(now && { now }) });

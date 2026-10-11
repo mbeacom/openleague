@@ -58,4 +58,6 @@ export const PRIVACY_NOTE =
     (GOOGLE_DRIVE_SETTINGS
         ? "If you save to Google Drive, files go from this browser straight to your Drive; opening Save to… or Open from… loads Google's sign-in and file picker. "
         : "") +
+    (ONEDRIVE_SETTINGS ? "If you save to OneDrive, files go from this browser straight to the planner's folder in your OneDrive, after you sign in with Microsoft. " : "") +
     "Fonts load from Fontshare and Google Fonts, which see your IP address like any website.";
+

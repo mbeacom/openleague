@@ -220,7 +220,7 @@ These account, DNS, SSL, and Pages settings cannot be completed from repository 
 
 ### Cloud saving for forks
 
-The static planner at `/planner/` can save practice plans and rankings to a coach's own Google Drive (and, once its connector ships, OneDrive). Each provider is built in only when its public identifiers are set at build time; with none set, the planner builds without cloud saving, its Content Security Policy names no provider host, and nothing else changes. A fork needs none of this to build.
+The static planner at `/planner/` can save practice plans and rankings to a coach's own Google Drive or OneDrive. Each provider is built in only when its public identifiers are set at build time; with none set, the planner builds without cloud saving, its Content Security Policy names no provider host, and nothing else changes. A fork needs none of this to build.
 
 OAuth registrations are tied to an origin (Google) or an exact URL (Microsoft), so **a fork registers its own apps** and never reuses openleague.dev's client ids. A fork's Pages site usually lives at `https://<owner>.github.io/<repo>/`, with the planner at `https://<owner>.github.io/<repo>/planner/`.
 
@@ -243,17 +243,18 @@ Google Drive needs all three Google values; setting only some fails the build wi
 4. Create an OAuth client id of type **Web application**. Add **Authorized JavaScript origins** only, with no path: `https://<owner>.github.io` (or your custom domain), and `http://localhost:5173` for `bun run planner:dev`. The planner uses the Google Identity Services token model in a popup, so no redirect URI and no client secret are used.
 5. Create an API key. Restrict it to the **Google Picker API**, and restrict its website referrers to your planner's address (`https://<owner>.github.io/<repo>/planner/*`) **and `https://docs.google.com/*`**: the Picker runs in a frame on `docs.google.com`, and Google rejects the key as invalid when that entry is missing.
 
-**OneDrive** (the connector is a later phase; the variable is read now so the deployment is ready for it)
+**OneDrive**
 
-1. Register an application in Microsoft Entra that accepts the account types you want.
-2. Add the **Single-page application** platform with the redirect URI `https://<owner>.github.io/<repo>/planner/auth/redirect.html` (and `http://localhost:5173/planner/auth/redirect.html` for development). Do not create a client secret.
-3. Add the delegated Microsoft Graph permissions `Files.ReadWrite.AppFolder` and `User.Read`.
+1. Register an application in Microsoft Entra. Choose the account types you want to support: **personal Microsoft accounts** only, or **any organizational directory and personal Microsoft accounts** (the planner signs in through the `/common` authority, which accepts both).
+2. Add the **Single-page application** platform with the redirect URI `https://<owner>.github.io/<repo>/planner/auth/redirect.html` (and `http://localhost:5173/planner/auth/redirect.html` for `bun run planner:dev`, which serves the planner at `/planner/`). Microsoft compares redirect URIs exactly, path included. This page ships with the planner and runs only Microsoft's sign-in bridge; serve it without a `Cross-Origin-Opener-Policy` header and without `X-Frame-Options` stricter than `SAMEORIGIN` (GitHub Pages sets neither). Do not create a client secret.
+3. Add the delegated Microsoft Graph permissions `Files.ReadWrite.AppFolder` and `User.Read`. The planner reads and writes only its own folder, `Apps/<app name>/` in the coach's OneDrive.
+4. **Work or school accounts.** Many organizations let users consent only to apps from a verified publisher, and some require an administrator's approval. Microsoft's documentation also disagrees on whether `Files.ReadWrite.AppFolder` works for work or school accounts, so test with one before you promise it; when the folder can't be opened, the planner says so and suggests a local file or a personal account. Personal accounts need no publisher verification.
 
 **Setting the values**
 
 In your fork's **Settings** → **Environments** → **github-pages**, add the three ids as **environment variables** and the API key as an **environment secret**. The Pages workflow's build job names that environment (with `deployment: false`, so it records no extra deployment) because environment variables and secrets are readable only by jobs that name the environment, and it passes the values to the planner's build and bundle check steps only. If the environment restricts deployments to certain branches, the build job follows the same rule.
 
-After the next Pages deploy, the planner's **Save to…** and **Open from…** menus offer Google Drive, and **Saved files** shows Connect and Disconnect. To check a build locally, set the same variables when running `bun run planner:build && bun run planner:check`; the check verifies that the CSP lists exactly the configured providers' hosts and that the Google code loads only on demand.
+After the next Pages deploy, the planner's **Save to…** and **Open from…** menus offer the configured providers, and **Saved files** shows Connect and Disconnect for each. To check a build locally, set the same variables when running `bun run planner:build && bun run planner:check`; the check verifies that the CSP lists exactly the configured providers' hosts that the Google code and Microsoft's sign-in library (MSAL) load only on demand, and that `auth/redirect.html` loads only the sign-in bridge.
 
 ## Deployment Tests
 

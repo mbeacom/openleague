@@ -127,9 +127,11 @@ describe("plannerCsp with cloud connectors (spec R9, Security and privacy)", () 
         const csp = plannerCsp(origins, { cloud: resolveCloudSettings(MICROSOFT_ENV) });
         expect(directive(csp, "script-src")).toBe("script-src 'self'");
         expect(directive(csp, "connect-src")).toBe(
-            "connect-src 'self' https://api.anthropic.com https://api.openai.com http://localhost:* http://127.0.0.1:* https://login.microsoftonline.com https://graph.microsoft.com",
+            "connect-src 'self' https://api.anthropic.com https://api.openai.com http://localhost:* http://127.0.0.1:*" +
+                " https://login.microsoftonline.com https://graph.microsoft.com https://*.files.1drv.com https://my.microsoftpersonalcontent.com https://*.sharepoint.com",
         );
-        expect(directive(csp, "frame-src")).toBe("frame-src 'self' https://login.microsoftonline.com");
+        // login.live.com: a personal account's sign-in hop inside the silent-renewal iframe (phase 4a).
+        expect(directive(csp, "frame-src")).toBe("frame-src 'self' https://login.microsoftonline.com https://login.live.com");
         expect(csp).not.toContain("google.com");
         expect(csp).toContain("form-action 'none'");
     });
@@ -137,8 +139,8 @@ describe("plannerCsp with cloud connectors (spec R9, Security and privacy)", () 
     it("merges both providers into one frame-src that starts with 'self'", () => {
         const csp = plannerCsp(origins, { cloud: resolveCloudSettings({ ...GOOGLE_ENV, ...MICROSOFT_ENV }) });
         expect(csp.split("; ").filter((part) => part.startsWith("frame-src"))).toEqual([
-            "frame-src 'self' https://docs.google.com https://accounts.google.com/gsi/ https://content.googleapis.com https://login.microsoftonline.com",
+            "frame-src 'self' https://docs.google.com https://accounts.google.com/gsi/ https://content.googleapis.com https://login.microsoftonline.com https://login.live.com",
         ]);
-        expect(directive(csp, "connect-src")).toMatch(/https:\/\/oauth2\.googleapis\.com https:\/\/login\.microsoftonline\.com https:\/\/graph\.microsoft\.com$/);
+        expect(directive(csp, "connect-src")).toMatch(/https:\/\/oauth2\.googleapis\.com https:\/\/login\.microsoftonline\.com https:\/\/graph\.microsoft\.com .*https:\/\/\*\.sharepoint\.com$/);
     });
 });
