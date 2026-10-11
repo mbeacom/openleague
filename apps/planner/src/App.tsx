@@ -121,6 +121,9 @@ function RouteView({ route, store }: { route: StaticRoute; store: LocalPlannerSt
     }
 }
 
+/** The session page and editor: two columns that use a wider page. */
+const WIDE_ROUTES: ReadonlySet<StaticRoute["name"]> = new Set(["session", "sessionEdit", "sessionNew", "sessionNewWithDrill"]);
+
 export interface PlannerAppProps {
     store: LocalPlannerStore;
     durable: boolean;
@@ -136,7 +139,13 @@ export function PlannerApp({ store, durable, stale }: PlannerAppProps) {
                     {route.name === "sessionPrint" ? (
                         <BenchSheetScreen key={route.id} store={store} id={route.id} />
                     ) : (
-                        <AppShell durable={durable} stale={stale} section={navSection(route)} teamControl={<YourTeamButton store={store} />}>
+                        <AppShell
+                            durable={durable}
+                            stale={stale}
+                            section={navSection(route)}
+                            teamControl={<YourTeamButton store={store} />}
+                            wide={WIDE_ROUTES.has(route.name)}
+                        >
                             <RouteView route={route} store={store} />
                         </AppShell>
                     )}

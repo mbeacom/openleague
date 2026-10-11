@@ -31,7 +31,7 @@ export default async function EditPracticeSessionPage({ params }: PageProps) {
   const rosterOptions = await getPracticeRosterOptions(data.teamId);
 
   return (
-    <PageContainer>
+    <PageContainer maxWidth="xl">
       <EditSessionWrapper
         sessionId={data.sessionId}
         teamId={data.teamId}

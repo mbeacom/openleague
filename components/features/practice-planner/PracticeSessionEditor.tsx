@@ -52,6 +52,7 @@ import { useSessionEquipment } from "./useSessionEquipment";
 import { SessionRosterSection } from "./SessionRosterSection";
 import { DrillSuggestionsPanel } from "./DrillSuggestionsPanel";
 import { useSessionRoster } from "./useSessionRoster";
+import { EDITOR_TWO_COLUMN, PLANNER_BOTTOM_INSET, PLANNER_CONTAINER, PLANNER_TOP_INSET, STICKY_COLUMN } from "./planner-layout";
 import type { RosterOption } from "@/lib/utils/practice-roster";
 import { BookingConflictAlert, VenueBookingFields } from "./VenueBookingFields";
 import {
@@ -613,110 +614,134 @@ export function PracticeSessionEditor({
     }, []);
 
     return (
-        <Box
-            sx={{
-                display: "flex",
-                flexDirection: "column",
-                gap: 2,
-                p: isMobile ? 2 : 3,
-                maxWidth: "1400px",
-                margin: "0 auto",
-            }}
-        >
+        // Wide (by the page's width, planner-layout): the session's setup in a sticky rail on the left,
+        // the drills in the wide column. The rail comes first, so a phone keeps the same top-to-bottom order.
+        <Box sx={{ ...PLANNER_CONTAINER, display: "flex", flexDirection: "column", gap: 2 }}>
             {/* Header */}
             <Typography variant="h4" component="h1">
                 {sessionId ? "Edit Practice Session" : "Create New Practice Session"}
             </Typography>
 
-            <SessionDetailsFields
-                title={title}
-                onTitleChange={handleTitleChange}
-                date={date}
-                onDateChange={handleDateChange}
-                duration={duration}
-                onDurationChange={handleDurationChange}
-                goaliesAttending={goalies.goaliesAttending}
-                onGoaliesAttendingChange={goalies.setGoaliesAttending}
-                transitionMinutes={betweenBlocks.transitionMinutes ?? 0}
-                onTransitionMinutesChange={betweenBlocks.setTransitionMinutes}
-                isShared={isShared}
-                creating={creating}
-                scheduleLocked={Boolean(booking.selectedReservation)}
-                validationErrors={validationErrors}
-            />
+            <Box
+                sx={{
+                    display: "grid",
+                    gridTemplateColumns: "minmax(0, 1fr)",
+                    gap: 2,
+                    [EDITOR_TWO_COLUMN]: { gridTemplateColumns: "minmax(320px, 400px) minmax(0, 1fr)" },
+                }}
+            >
+                <Box
+                    component="aside"
+                    aria-label="Session setup"
+                    sx={{
+                        display: "flex",
+                        flexDirection: "column",
+                        gap: 2,
+                        minWidth: 0,
+                        // Ends above the sticky save bar (about 88px with its offset), so the rail's last field never hides under it.
+                        [EDITOR_TWO_COLUMN]: { ...STICKY_COLUMN, maxHeight: `calc(100vh - ${PLANNER_TOP_INSET} - 120px)` },
+                    }}
+                >
+                    <SessionDetailsFields
+                        title={title}
+                        onTitleChange={handleTitleChange}
+                        date={date}
+                        onDateChange={handleDateChange}
+                        duration={duration}
+                        onDurationChange={handleDurationChange}
+                        goaliesAttending={goalies.goaliesAttending}
+                        onGoaliesAttendingChange={goalies.setGoaliesAttending}
+                        transitionMinutes={betweenBlocks.transitionMinutes ?? 0}
+                        onTransitionMinutesChange={betweenBlocks.setTransitionMinutes}
+                        isShared={isShared}
+                        creating={creating}
+                        scheduleLocked={Boolean(booking.selectedReservation)}
+                        validationErrors={validationErrors}
+                    />
 
-            <SessionStaffSection
-                staff={staff.staff ?? []}
-                renderKeys={staff.renderKeys}
-                options={staffOptions}
-                assignments={staff.assignments}
-                disabled={busy}
-                onAddOption={staff.addOption}
-                onAddTyped={staff.addTyped}
-                onRename={staff.rename}
-                onRemove={staff.remove}
-            />
+                    <SessionStaffSection
+                        staff={staff.staff ?? []}
+                        renderKeys={staff.renderKeys}
+                        options={staffOptions}
+                        assignments={staff.assignments}
+                        disabled={busy}
+                        onAddOption={staff.addOption}
+                        onAddTyped={staff.addTyped}
+                        onRename={staff.rename}
+                        onRemove={staff.remove}
+                    />
 
-            <SessionRosterSection
-                state={roster}
-                teamOptions={rosterOptions}
-                goaliesAttending={goalies.goaliesAttending}
-                onUseGoalies={goalies.setGoaliesAttending}
-                disabled={busy}
-            />
-            <DrillSuggestionsPanel
-                teamId={teamId}
-                roster={roster.roster}
-                goaliesAttending={goalies.goaliesAttending}
-                plays={plays}
-                disabled={busy || creating}
-                onAdd={(play) => handleAddPlayFromLibrary(play)}
-            />
+                    <SessionRosterSection
+                        state={roster}
+                        teamOptions={rosterOptions}
+                        goaliesAttending={goalies.goaliesAttending}
+                        onUseGoalies={goalies.setGoaliesAttending}
+                        disabled={busy}
+                    />
 
-            <VenueBookingFields
-                booking={booking}
-                venues={venues}
-                reservations={reservations}
-                initialVenueId={initialData?.venueId}
-                duration={duration}
-                validationErrors={validationErrors}
-                disabled={busy}
-            />
+                    <VenueBookingFields
+                        booking={booking}
+                        venues={venues}
+                        reservations={reservations}
+                        initialVenueId={initialData?.venueId}
+                        duration={duration}
+                        validationErrors={validationErrors}
+                        disabled={busy}
+                    />
+                </Box>
 
-            <SessionDrillList
-                plays={plays}
-                duration={duration}
-                segmentKind={booking.segmentKind}
-                goaliesAttending={goalies.goaliesAttending}
-                editingPlayId={editingPlayId}
-                disabled={busy}
-                locked={creating}
-                onOpenLibrary={handleOpenLibrary}
-                transitionMinutes={betweenBlocks.transitionMinutes ?? 0}
-                onDelete={rowEdits.deleteRow}
-                onEdit={handleEditPlay}
-                onUpdate={handleUpdatePlayInSession}
-                onCancelEdit={handleCancelEdit}
-                onMoveUp={(index) => rowEdits.moveRow(index, -1)}
-                onMoveDown={(index) => rowEdits.moveRow(index, 1)}
-                onMoveUnitTo={rowEdits.moveUnitTo}
-                onMoveStationTo={rowEdits.moveStationTo}
-                onToggleStation={rowEdits.toggleStation}
-                canEditDiagram={Boolean(sessionId)}
-                onEditDiagram={drillDialog.editDiagram}
-                onNewDrill={drillDialog.newDrill}
-                onAddBlock={rowEdits.addBlock}
-                onSetRotation={rowEdits.setRotation}
-                onSetStays={rowEdits.setStays}
-                staff={staff.staff}
-                onSetRowStaff={staff.setRowStaff}
-            />
+                {/* The drills: suggestions to add, the list, then the equipment they roll up to */}
+                <Box sx={{ display: "flex", flexDirection: "column", gap: 2, minWidth: 0 }}>
+                    <DrillSuggestionsPanel
+                        teamId={teamId}
+                        roster={roster.roster}
+                        goaliesAttending={goalies.goaliesAttending}
+                        plays={plays}
+                        disabled={busy || creating}
+                        onAdd={(play) => handleAddPlayFromLibrary(play)}
+                    />
 
-            <SessionEquipmentSection plays={plays} items={equipment.items} disabled={busy} onAdd={equipment.add} onCount={equipment.setCount} onRemove={equipment.remove} />
+                    <SessionDrillList
+                        plays={plays}
+                        duration={duration}
+                        segmentKind={booking.segmentKind}
+                        goaliesAttending={goalies.goaliesAttending}
+                        editingPlayId={editingPlayId}
+                        disabled={busy}
+                        locked={creating}
+                        onOpenLibrary={handleOpenLibrary}
+                        transitionMinutes={betweenBlocks.transitionMinutes ?? 0}
+                        onDelete={rowEdits.deleteRow}
+                        onEdit={handleEditPlay}
+                        onUpdate={handleUpdatePlayInSession}
+                        onCancelEdit={handleCancelEdit}
+                        onMoveUp={(index) => rowEdits.moveRow(index, -1)}
+                        onMoveDown={(index) => rowEdits.moveRow(index, 1)}
+                        onMoveUnitTo={rowEdits.moveUnitTo}
+                        onMoveStationTo={rowEdits.moveStationTo}
+                        onToggleStation={rowEdits.toggleStation}
+                        canEditDiagram={Boolean(sessionId)}
+                        onEditDiagram={drillDialog.editDiagram}
+                        onNewDrill={drillDialog.newDrill}
+                        onAddBlock={rowEdits.addBlock}
+                        onSetRotation={rowEdits.setRotation}
+                        onSetStays={rowEdits.setStays}
+                        staff={staff.staff}
+                        onSetRowStaff={staff.setRowStaff}
+                    />
 
-            {/* Save Status and Actions */}
-            <Paper elevation={2} sx={{ p: 2 }}>
-                <Stack spacing={2}>
+                    <SessionEquipmentSection plays={plays} items={equipment.items} disabled={busy} onAdd={equipment.add} onCount={equipment.setCount} onRemove={equipment.remove} />
+                </Box>
+            </Box>
+
+            {/* Save Status and Actions: stays in view at the bottom, above the hosted phone navigation */}
+            <Paper
+                elevation={6}
+                component="section"
+                aria-label="Save"
+                sx={{ p: { xs: 1.5, sm: 2 }, position: "sticky", bottom: `calc(${PLANNER_BOTTOM_INSET} + 8px)`, zIndex: 3 }}
+            >
+                <Stack spacing={1.5}>
                     {/* Error Message */}
                     {saveError && (
                         <Alert severity="error" onClose={() => setSaveError(null)}>
@@ -741,68 +766,73 @@ export function PracticeSessionEditor({
                         </Alert>
                     )}
 
-                    {/* Save Status Indicator */}
-                    {isSaving && (
-                        <Stack direction="row" spacing={1} alignItems="center">
-                            <CircularProgress size={16} />
-                            <Typography variant="body2" color="text.secondary">
-                                Saving...
-                            </Typography>
-                        </Stack>
-                    )}
-                    {hasUnsavedChanges && !isSaving && (
-                        <Typography variant="body2" color="text.secondary">
-                            Unsaved changes
-                        </Typography>
-                    )}
+                    {/* One row: the save status, then the actions */}
+                    <Stack direction="row" spacing={2} useFlexGap flexWrap="wrap" alignItems="center" justifyContent="flex-end">
+                        <Box sx={{ mr: "auto" }}>
+                            {/* Save Status Indicator */}
+                            {isSaving && (
+                                <Stack direction="row" spacing={1} alignItems="center">
+                                    <CircularProgress size={16} />
+                                    <Typography variant="body2" color="text.secondary">
+                                        Saving...
+                                    </Typography>
+                                </Stack>
+                            )}
+                            {hasUnsavedChanges && !isSaving && (
+                                <Typography variant="body2" color="text.secondary">
+                                    Unsaved changes
+                                </Typography>
+                            )}
+                        </Box>
 
-                    {/* Action Buttons */}
-                    <Stack direction="row" spacing={2} justifyContent="flex-end">
-                        {onCancel && (
-                            <Button
-                                variant="outlined"
-                                onClick={onCancel}
-                                disabled={busy}
-                            >
-                                Cancel
-                            </Button>
-                        )}
+                        {/* Action Buttons */}
+                        <Stack direction="row" spacing={2} justifyContent="flex-end">
+                            {onCancel && (
+                                <Button
+                                    variant="outlined"
+                                    onClick={onCancel}
+                                    disabled={busy}
+                                >
+                                    Cancel
+                                </Button>
+                            )}
 
-                        <Button
-                            variant="contained"
-                            color="primary"
-                            onClick={() => handleSave(false, true)}
-                            disabled={busy || !title.trim()}
-                            startIcon={
-                                isSaving ? (
-                                    <CircularProgress size={20} color="inherit" />
-                                ) : (
-                                    <SaveIcon />
-                                )
-                            }
-                        >
-                            {isSaving ? "Saving..." : "Save Session"}
-                        </Button>
-
-                        {/* Share Button */}
-                        {/* Requirements: 3.1 - Share button with confirmation */}
-                        {sessionId && onShare && (
                             <Button
                                 variant="contained"
-                                color="secondary"
-                                onClick={handleOpenShareDialog}
-                                disabled={isSaving || isSharing || hasUnsavedChanges}
+                                color="primary"
+                                onClick={() => handleSave(false, true)}
+                                disabled={busy || !title.trim()}
                                 startIcon={
-                                    isSharing ? (
+                                    isSaving ? (
                                         <CircularProgress size={20} color="inherit" />
                                     ) : (
-                                        <ShareIcon />
+                                        <SaveIcon />
                                     )
                                 }
                             >
-                                {isSharing ? "Sharing..." : isShared ? "Shared" : "Share with Team"}
+                                {isSaving ? "Saving..." : "Save Session"}
                             </Button>
-                        )}
+
+                            {/* Share Button */}
+                            {/* Requirements: 3.1 - Share button with confirmation */}
+                            {sessionId && onShare && (
+                                <Button
+                                    variant="contained"
+                                    color="secondary"
+                                    onClick={handleOpenShareDialog}
+                                    disabled={isSaving || isSharing || hasUnsavedChanges}
+                                    startIcon={
+                                        isSharing ? (
+                                            <CircularProgress size={20} color="inherit" />
+                                        ) : (
+                                            <ShareIcon />
+                                        )
+                                    }
+                                >
+                                    {isSharing ? "Sharing..." : isShared ? "Shared" : "Share with Team"}
+                                </Button>
+                            )}
+                        </Stack>
                     </Stack>
                 </Stack>
             </Paper>

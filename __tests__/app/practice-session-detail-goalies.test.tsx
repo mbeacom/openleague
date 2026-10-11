@@ -62,27 +62,19 @@ function renderView(s: ReturnType<typeof session>) {
     );
 }
 
-/** The drill diagram in the sidebar's play sequence (not the main preview); decorative, so found by attribute. */
-function sidebarDiagram() {
-    const sequence = screen.getByText("Play Sequence").parentElement as HTMLElement;
-    const diagram = sequence.querySelector('[data-diagram="D-Zone"]');
-    expect(diagram).toHaveAttribute("aria-hidden");
-    return diagram as HTMLElement;
-}
-
-/** The marker roles each drawn diagram shows (preview and sidebar). */
+/** The marker roles each drawn diagram shows: the viewer's preview is the page's only drill diagram. */
 const drawnRoles = () => Array.from(document.querySelectorAll('[data-diagram="D-Zone"]')).map((el) => el.getAttribute("data-roles"));
 
 describe("SessionDetailView goalies", () => {
-    it("draws an optional-goalie drill without its goalie when none attend, in the preview and the sidebar", () => {
+    it("draws an optional-goalie drill without its goalie when none attend", () => {
         renderView(session(0, "optional"));
-        expect(drawnRoles()).toEqual(["F", "F"]);
+        expect(drawnRoles()).toEqual(["F"]);
         expect(seen.legends.at(-1)?.players.map((p) => p.role)).toEqual(["F"]);
     });
 
     it("draws every marker otherwise", () => {
         renderView(session(1, "optional"));
-        expect(drawnRoles()).toEqual(["G,F", "G,F"]);
+        expect(drawnRoles()).toEqual(["G,F"]);
         expect(seen.legends.at(-1)?.players.map((p) => p.role)).toEqual(["G", "F"]);
     });
 
@@ -102,14 +94,11 @@ describe("SessionDetailView goalies", () => {
         expect(G_BOARD.players).toHaveLength(2);
     });
 
-    it("draws the sidebar diagram live, without the goalie, when it is hidden", () => {
+    it("draws the preview live as an announced diagram, and none in the session plan", () => {
         renderView(session(0, "optional"));
-        expect(sidebarDiagram()).toHaveAttribute("data-roles", "F");
-    });
-
-    it("draws the sidebar diagram with the goalie when goalies attend", () => {
-        renderView(session(1, "optional"));
-        expect(sidebarDiagram()).toHaveAttribute("data-roles", "G,F");
+        expect(screen.getByRole("img", { name: "D-Zone diagram" })).toHaveAttribute("data-roles", "F");
+        const plan = screen.getByRole("complementary", { name: "Session plan" });
+        expect(plan.querySelector("[data-diagram]")).toBeNull();
     });
 
     it("says nothing about goalies when the count is not set", () => {

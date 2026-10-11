@@ -7,9 +7,6 @@ import {
   Button,
   Stack,
   Paper,
-  Card,
-  CardActionArea,
-  CardContent,
   Chip,
   Alert,
   Dialog,
@@ -52,10 +49,15 @@ import { ExportPlanMenu } from "@/components/features/practice-planner/ExportPla
 import { RosterSummary } from "@/components/features/practice-planner/RosterSummary";
 import { PlayDiagram } from "@/components/features/practice-planner/PlayDiagram";
 import { useSessionGoalies } from "@/components/features/practice-planner/useSessionGoalies";
-import { SidebarPlayCard } from "@/components/features/practice-planner/SidebarPlayCard";
 import { TeamColorsToggle } from "@/components/features/practice-planner/TeamColorsToggle";
 import { useTeamRoleColors } from "@/components/features/practice-planner/useTeamColors";
 import { sessionWithTeamColors, teamPalette } from "@/lib/utils/team-palette";
+import {
+  PLANNER_CONTAINER,
+  SESSION_TWO_COLUMN,
+  STICKY_COLUMN,
+} from "@/components/features/practice-planner/planner-layout";
+import { THUMBNAIL_ASPECT } from "@/lib/utils/canvas/thumbnail-generator";
 import type { PracticeSessionView } from "@/types/practice-planner";
 import {
   SEGMENT_KIND_FIT_LABELS,
@@ -91,7 +93,7 @@ export function SessionDetailView({ session, isAdmin }: SessionDetailViewProps) 
   const [isSharing, setIsSharing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isShared, setIsShared] = useState(session.isShared);
-  // The play sequence, the viewer and the counts are drills; blocks show on the timeline only (spec R9).
+  // The viewer and the counts are drills; blocks show on the timeline only (spec R9).
   const drills = useMemo(() => drillRows(session.plays), [session.plays]);
   const gap = session.transitionMinutes ?? 0;
 
@@ -176,6 +178,17 @@ export function SessionDetailView({ session, isAdmin }: SessionDetailViewProps) 
         : null,
     [activeGroup, shownDrills, drills]
   );
+  // The plan column holds the timeline; without rows there is no plan to navigate.
+  const hasPlan = session.plays.length > 0;
+  // A drill in a block of several says so above its name, as the plan does (2b).
+  const activeBlockLabel =
+    activeGroup && activeGroup.stations.length > 1
+      ? activeGroup.rotation
+        ? rotationBlockLabel(activeGroup.rotation.minutes, activeGroup.wallMinutes)
+        : stationBlockLabel(activeGroup.stations.length, activeGroup.wallMinutes)
+      : null;
+  // "Run by Coach Lee, Sam" under the drill's name (practice staff, spec R9).
+  const activeRunBy = activePlay ? runByLabel(staffNames(activePlay.staff, session.staff)) : null;
   // Advisory fit check against the booked segment's kind (2b); unreadable drills are skipped.
   const fitLabel = session.segmentKind ? SEGMENT_KIND_FIT_LABELS[session.segmentKind] : null;
   const tooBigCount = useMemo(
@@ -404,284 +417,262 @@ export function SessionDetailView({ session, isAdmin }: SessionDetailViewProps) 
         </Box>
       </Paper>
 
-      <RosterSummary roster={session.roster} />
-
-      {/* Timeline (3b): when each block runs */}
-      {session.plays.length > 0 && (
-        <Paper sx={{ p: { xs: 2, md: 3 } }}>
-          <Typography
-            variant="subtitle2"
-            color="text.secondary"
-            sx={{ mb: 1, textTransform: "uppercase", letterSpacing: 1 }}
-          >
-            Timeline
-          </Typography>
-          <SessionTimeline
-            plays={session.plays}
-            sessionStart={start}
-            timeZone={timeZone}
-            showZone={showZone}
-            durationMinutes={session.duration}
-            transitionMinutes={gap}
-            staff={session.staff}
-            activePlayId={activePlay?.id}
-            onSelectPlay={(id) => setActivePlayIndex(Math.max(0, drills.findIndex((sp) => sp.id === id)))}
-          />
-        </Paper>
-      )}
-
-      {/* Practice equipment: the drills' lists rolled up, plus the practice's own items */}
-      <SessionEquipmentCard plays={session.plays} equipment={session.equipment} />
-
-      {/* Content area */}
-      {drills.length === 0 ? (
-        <Paper>
-          <EmptyState
-            icon={<HockeyIcon />}
-            title="No plays in this session"
-            description={
-              isAdmin
-                ? "Edit the session to add plays from the library."
-                : "The coach hasn't added any plays yet."
-            }
-            action={
-              isAdmin ? (
-                <Button
-                  component={Link}
-                  href={routes.sessionEdit(session.id)}
-                  variant="contained"
-                  startIcon={<EditIcon />}
-                >
-                  Edit Session
-                </Button>
-              ) : undefined
-            }
-          />
-        </Paper>
-      ) : (
-        <Stack direction={{ xs: "column", md: "row" }} spacing={3}>
-          {/* Play list sidebar */}
+      {/* md+ (by the page's width): the plan as the drill navigator, sticky, beside the drill on screen. */}
+      {/* Narrower: one column, the plan then the drill. */}
+      <Box sx={PLANNER_CONTAINER}>
+        <Box
+          sx={{
+            display: "grid",
+            gridTemplateColumns: "minmax(0, 1fr)",
+            gap: 3,
+            ...(hasPlan && {
+              [SESSION_TWO_COLUMN]: { gridTemplateColumns: "minmax(300px, 360px) minmax(0, 1fr)" },
+            }),
+          }}
+        >
           <Box
+            component="aside"
+            aria-label="Session plan"
             sx={{
-              width: { xs: "100%", md: 280 },
-              flexShrink: 0,
-              order: { xs: 2, md: 1 },
+              display: "flex",
+              flexDirection: "column",
+              gap: 2,
+              minWidth: 0,
+              ...(hasPlan && { [SESSION_TWO_COLUMN]: STICKY_COLUMN }),
             }}
           >
-            <Typography
-              variant="subtitle2"
-              color="text.secondary"
-              sx={{ mb: 1.5, textTransform: "uppercase", letterSpacing: 1 }}
-            >
-              Play Sequence
-            </Typography>
-            <Stack spacing={1}>
-              {groups.map((group) => {
-                const cards = group.stations.map((sp) => {
-                  const index = drills.indexOf(sp);
-                  return (
-                    <SidebarPlayCard
-                      key={sp.id}
-                      sp={sp}
-                      drawn={drawnAt(index)}
-                      timing={stationTimingLabel(sp, group.rotation)}
-                      index={index}
-                      active={index === activePlayIndex}
-                      onSelect={() => setActivePlayIndex(index)}
-                      runBy={runByLabel(staffNames(sp.staff, session.staff))}
-                    />
-                  );
-                });
-                if (group.stations.length === 1) return cards[0];
-                const label = group.rotation
-                  ? rotationBlockLabel(group.rotation.minutes, group.wallMinutes)
-                  : stationBlockLabel(group.stations.length, group.wallMinutes);
-                return (
-                  <Box
-                    key={`stations-${group.stations[0].id}`}
-                    role="group"
-                    aria-label={label}
-                    sx={{ border: 2, borderColor: "primary.main", borderRadius: 1, p: 1 }}
-                  >
-                    <Typography
-                      variant="caption"
-                      component="p"
-                      sx={{
-                        mb: 1,
-                        fontWeight: 800,
-                        color: "primary.main",
-                        textTransform: "uppercase",
-                        letterSpacing: 1,
-                      }}
-                    >
-                      {label}
-                    </Typography>
-                    <Stack spacing={1}>{cards}</Stack>
-                  </Box>
-                );
-              })}
-            </Stack>
+            {/* Timeline (3b): when each block runs; its drill names select the drill on screen */}
+            {hasPlan && (
+              <Paper sx={{ p: 2, overflowX: "auto" }}>
+                <Typography
+                  variant="subtitle2"
+                  color="text.secondary"
+                  sx={{ mb: 1, textTransform: "uppercase", letterSpacing: 1 }}
+                >
+                  Timeline
+                </Typography>
+                <SessionTimeline
+                  plays={session.plays}
+                  sessionStart={start}
+                  timeZone={timeZone}
+                  showZone={showZone}
+                  durationMinutes={session.duration}
+                  transitionMinutes={gap}
+                  staff={session.staff}
+                  activePlayId={activePlay?.id}
+                  onSelectPlay={(id) => setActivePlayIndex(Math.max(0, drills.findIndex((sp) => sp.id === id)))}
+                  dense
+                />
+              </Paper>
+            )}
+
+            {/* Collapsed until opened, so the drill stays near the top of the page */}
+            <RosterSummary roster={session.roster} />
+            {/* Practice equipment: the drills' lists rolled up, plus the practice's own items */}
+            <SessionEquipmentCard plays={session.plays} equipment={session.equipment} />
           </Box>
 
-          {/* Main play viewer */}
-          <Box sx={{ flex: 1, order: { xs: 1, md: 2 } }}>
-            {activePlay && (
-              <Paper sx={{ overflow: "hidden" }}>
-                {/* Play navigation header */}
-                <Stack
-                  direction="row"
-                  justifyContent="space-between"
-                  alignItems="center"
-                  sx={{
-                    px: 3,
-                    py: 1.5,
-                    bgcolor: "action.hover",
-                    borderBottom: "1px solid",
-                    borderColor: "divider",
-                  }}
-                >
-                  <Stack direction="row" alignItems="center" spacing={1}>
-                    <PlayIcon sx={{ fontSize: 18, color: "primary.main" }} />
-                    <Typography variant="subtitle2">
-                      Play {activePlayIndex + 1} of {drills.length}
-                    </Typography>
-                  </Stack>
-                  <Stack direction="row" spacing={0.5}>
-                    <IconButton
-                      onClick={handlePrevPlay}
-                      disabled={activePlayIndex === 0}
-                      size="small"
-                      aria-label="Previous play"
-                    >
-                      <PrevIcon />
-                    </IconButton>
-                    <IconButton
-                      onClick={handleNextPlay}
-                      disabled={activePlayIndex === drills.length - 1}
-                      size="small"
-                      aria-label="Next play"
-                    >
-                      <NextIcon />
-                    </IconButton>
-                  </Stack>
-                </Stack>
-
-                {/* Station map (2b): the active drill's whole block, this station highlighted */}
-                {stationMapStations && activeGroup && (
-                  <Box sx={{ px: 3, pt: 2 }}>
-                    <StationMap
-                      stations={stationMapStations}
-                      activeIndex={activeGroup.stations.indexOf(activePlay)}
-                      roleColors={teamColors.roleColors}
-                    />
-                  </Box>
-                )}
-
-                {/* Thumbnail / rink preview */}
-                <Box
-                  sx={{
-                    width: "100%",
-                    height: { xs: 220, sm: 300, md: 360 },
-                    bgcolor: "action.hover",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    position: "relative",
-                  }}
-                >
-                  {/* Drawn live at the screen's pixel ratio; the drawn data already drops a hidden goalie. */}
-                  {activeDrawn ? (
-                    // Fit inside the fixed-height preview, keeping the thumbnail's shape.
-                    <PlayDiagram playData={activeDrawn} label={activePlay.play.name} sx={{ height: "100%", width: "auto" }} />
-                  ) : activePlay.play.thumbnail ? (
-                    <Image src={activePlay.play.thumbnail} alt={activePlay.play.name} fit="contain" />
-                  ) : (
-                    <Stack alignItems="center" spacing={1}>
-                      <HockeyIcon sx={{ fontSize: 48, color: "text.disabled" }} />
-                      <Typography variant="body2" color="text.secondary">
-                        No preview available
-                      </Typography>
-                    </Stack>
-                  )}
-                </Box>
-
-                <Stack spacing={1} sx={{ px: 3, pt: 2 }}>
-                  {teamColors.available && (
-                    <TeamColorsToggle checked={teamColors.enabled} onChange={teamColors.setEnabled} />
-                  )}
-                  <PlayLegend playData={activeDrawn} roleColors={teamColors.roleColors} />
-                </Stack>
-
-                {/* Play details */}
-                <Box sx={{ p: 3 }}>
+          {/* The drill on screen */}
+          <Box component="section" aria-label="Drill viewer" sx={{ minWidth: 0 }}>
+            {drills.length === 0 ? (
+              <Paper>
+                <EmptyState
+                  icon={<HockeyIcon />}
+                  title="No plays in this session"
+                  description={
+                    isAdmin
+                      ? "Edit the session to add plays from the library."
+                      : "The coach hasn't added any plays yet."
+                  }
+                  action={
+                    isAdmin ? (
+                      <Button
+                        component={Link}
+                        href={routes.sessionEdit(session.id)}
+                        variant="contained"
+                        startIcon={<EditIcon />}
+                      >
+                        Edit Session
+                      </Button>
+                    ) : undefined
+                  }
+                />
+              </Paper>
+            ) : (
+              activePlay && (
+                <Paper sx={{ overflow: "hidden" }}>
+                  {/* Play navigation header */}
                   <Stack
                     direction="row"
                     justifyContent="space-between"
-                    alignItems="flex-start"
-                    sx={{ mb: 2 }}
+                    alignItems="center"
+                    sx={{
+                      px: { xs: 2, sm: 3 },
+                      py: 1.5,
+                      bgcolor: "action.hover",
+                      borderBottom: "1px solid",
+                      borderColor: "divider",
+                    }}
                   >
-                    <Typography variant="h5" sx={{ fontWeight: 700 }}>
-                      {activePlay.play.name}
-                    </Typography>
-                    <Chip
-                      icon={<ClockIcon />}
-                      label={`${activePlay.duration} min`}
-                      size="small"
-                      variant="outlined"
-                      sx={{ fontWeight: 600 }}
-                    />
+                    <Stack direction="row" alignItems="center" spacing={1}>
+                      <PlayIcon sx={{ fontSize: 18, color: "primary.main" }} />
+                      <Typography variant="subtitle2">
+                        Play {activePlayIndex + 1} of {drills.length}
+                      </Typography>
+                    </Stack>
+                    <Stack direction="row" spacing={0.5}>
+                      <IconButton
+                        onClick={handlePrevPlay}
+                        disabled={activePlayIndex === 0}
+                        size="small"
+                        aria-label="Previous play"
+                      >
+                        <PrevIcon />
+                      </IconButton>
+                      <IconButton
+                        onClick={handleNextPlay}
+                        disabled={activePlayIndex === drills.length - 1}
+                        size="small"
+                        aria-label="Next play"
+                      >
+                        <NextIcon />
+                      </IconButton>
+                    </Stack>
                   </Stack>
 
-                  {activePlay.play.description && (
-                    <Box sx={{ mb: 2 }}>
-                      <Typography
-                        variant="caption"
-                        color="text.secondary"
-                        sx={{
-                          textTransform: "uppercase",
-                          letterSpacing: 0.5,
-                          fontWeight: 600,
-                        }}
-                      >
-                        Description
-                      </Typography>
-                      <Typography variant="body1" sx={{ mt: 0.5 }}>
-                        {activePlay.play.description}
-                      </Typography>
+                  {/* Station map (2b): the active drill's whole block, this station highlighted. */}
+                  {/* An overview, capped so the drill's own diagram stays near the top of a wide viewer. */}
+                  {stationMapStations && activeGroup && (
+                    <Box sx={{ px: { xs: 2, sm: 3 }, pt: 2, maxWidth: 560, mx: "auto", boxSizing: "content-box" }}>
+                      <StationMap
+                        stations={stationMapStations}
+                        activeIndex={activeGroup.stations.indexOf(activePlay)}
+                        roleColors={teamColors.roleColors}
+                      />
                     </Box>
                   )}
 
-                  {activePlay.instructions && (
-                    <Box
-                      sx={{
-                        p: 2,
-                        bgcolor: "primary.main",
-                        color: "primary.contrastText",
-                        borderRadius: 2,
-                      }}
-                    >
+                  {/* The diagram fills the viewer's width at the board's shape (THUMBNAIL_ASPECT) */}
+                  <Box sx={{ bgcolor: "action.hover" }}>
+                    {/* Drawn live at the screen's pixel ratio; the drawn data already drops a hidden goalie. */}
+                    {activeDrawn ? (
+                      <PlayDiagram playData={activeDrawn} label={activePlay.play.name} />
+                    ) : activePlay.play.thumbnail ? (
+                      <Box sx={{ position: "relative", width: "100%", aspectRatio: `${THUMBNAIL_ASPECT}` }}>
+                        <Image src={activePlay.play.thumbnail} alt={activePlay.play.name} fit="contain" />
+                      </Box>
+                    ) : (
+                      <Stack
+                        alignItems="center"
+                        justifyContent="center"
+                        spacing={1}
+                        sx={{ width: "100%", aspectRatio: `${THUMBNAIL_ASPECT}` }}
+                      >
+                        <HockeyIcon sx={{ fontSize: 48, color: "text.disabled" }} />
+                        <Typography variant="body2" color="text.secondary">
+                          No preview available
+                        </Typography>
+                      </Stack>
+                    )}
+                  </Box>
+
+                  {/* Team colors: below the diagram, above the legend it recolors */}
+                  <Stack spacing={1} sx={{ px: { xs: 2, sm: 3 }, pt: 2 }}>
+                    {teamColors.available && (
+                      <TeamColorsToggle checked={teamColors.enabled} onChange={teamColors.setEnabled} />
+                    )}
+                    <PlayLegend playData={activeDrawn} roleColors={teamColors.roleColors} />
+                  </Stack>
+
+                  {/* Play details */}
+                  <Box sx={{ p: { xs: 2, sm: 3 } }}>
+                    {activeBlockLabel && (
                       <Typography
                         variant="caption"
+                        component="p"
+                        sx={{ mb: 0.5, fontWeight: 800, color: "primary.main", textTransform: "uppercase", letterSpacing: 1 }}
+                      >
+                        {activeBlockLabel}
+                      </Typography>
+                    )}
+                    <Stack
+                      direction="row"
+                      justifyContent="space-between"
+                      alignItems="flex-start"
+                      spacing={1}
+                      sx={{ mb: 2 }}
+                    >
+                      <Box sx={{ minWidth: 0 }}>
+                        <Typography variant="h5" sx={{ fontWeight: 700, overflowWrap: "anywhere" }}>
+                          {activePlay.play.name}
+                        </Typography>
+                        {activeRunBy && (
+                          <Typography variant="body2" color="text.secondary" sx={{ overflowWrap: "anywhere" }}>
+                            {activeRunBy}
+                          </Typography>
+                        )}
+                      </Box>
+                      {/* Its minutes, or in a rotating block how it rotates */}
+                      <Chip
+                        icon={<ClockIcon />}
+                        label={stationTimingLabel(activePlay, activeGroup?.rotation ?? null)}
+                        size="small"
+                        variant="outlined"
+                        sx={{ fontWeight: 600, flexShrink: 0 }}
+                      />
+                    </Stack>
+
+                    {activePlay.play.description && (
+                      <Box sx={{ mb: 2 }}>
+                        <Typography
+                          variant="caption"
+                          color="text.secondary"
+                          sx={{
+                            textTransform: "uppercase",
+                            letterSpacing: 0.5,
+                            fontWeight: 600,
+                          }}
+                        >
+                          Description
+                        </Typography>
+                        <Typography variant="body1" sx={{ mt: 0.5 }}>
+                          {activePlay.play.description}
+                        </Typography>
+                      </Box>
+                    )}
+
+                    {activePlay.instructions && (
+                      <Box
                         sx={{
-                          textTransform: "uppercase",
-                          letterSpacing: 0.5,
-                          fontWeight: 600,
-                          opacity: 0.8,
+                          p: 2,
+                          bgcolor: "primary.main",
+                          color: "primary.contrastText",
+                          borderRadius: 2,
                         }}
                       >
-                        Coach&apos;s Instructions
-                      </Typography>
-                      <Typography variant="body1" sx={{ mt: 0.5 }}>
-                        {activePlay.instructions}
-                      </Typography>
-                    </Box>
-                  )}
-                </Box>
-              </Paper>
+                        <Typography
+                          variant="caption"
+                          sx={{
+                            textTransform: "uppercase",
+                            letterSpacing: 0.5,
+                            fontWeight: 600,
+                            opacity: 0.8,
+                          }}
+                        >
+                          Coach&apos;s Instructions
+                        </Typography>
+                        <Typography variant="body1" sx={{ mt: 0.5 }}>
+                          {activePlay.instructions}
+                        </Typography>
+                      </Box>
+                    )}
+                  </Box>
+                </Paper>
+              )
             )}
           </Box>
-        </Stack>
-      )}
+        </Box>
+      </Box>
 
       {isAdmin && showDuplicateDialog && (
         <DuplicateSessionDialog

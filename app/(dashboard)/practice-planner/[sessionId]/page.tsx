@@ -25,7 +25,7 @@ export default async function PracticeSessionDetailPage({ params }: PageProps) {
   }
 
   return (
-    <PageContainer>
+    <PageContainer maxWidth="xl">
       <SessionDetailView session={data.session} isAdmin={data.isAdmin} />
     </PageContainer>
   );

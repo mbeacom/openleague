@@ -31,7 +31,7 @@ export default async function NewPracticeSessionPage({ searchParams }: PageProps
   const plays = await startingDrillRows((await searchParams)?.drill, context.teamId);
 
   return (
-    <PageContainer>
+    <PageContainer maxWidth="xl">
       <PracticeSessionEditorWrapper
         teamId={context.teamId}
         bookingOptions={bookingOptions}

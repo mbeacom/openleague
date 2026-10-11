@@ -2,7 +2,7 @@
 
 import type { ReactNode } from "react";
 import type { SegmentKind } from "@/types/segments";
-import { Alert, Box, Button, Paper, Stack, Tooltip, Typography } from "@mui/material";
+import { Alert, Box, Button, FormControlLabel, Paper, Stack, Switch, Tooltip, Typography } from "@mui/material";
 import { Add as AddIcon, Draw as DrawIcon } from "@mui/icons-material";
 import type { BlockInSession, BlockKind, PlayInSession, SessionItem, SessionStaffMember } from "@/types/practice-planner";
 import { isNamedStaff } from "@/lib/utils/session-staff";
@@ -30,6 +30,9 @@ import { SessionDrillCard } from "./SessionDrillCard";
 import { SessionSortable, SortableSessionRow, buildSortLayout, type SortMove } from "./SessionSortable";
 import { StationBlockHeader, type StationRotationControls } from "./StationBlockHeader";
 import type { RowRunBy } from "./RunByField";
+import { useDrillDensity } from "./useDrillDensity";
+
+export const COMPACT_ROWS_LABEL = "Compact rows";
 
 export interface SessionDrillListProps {
     plays: SessionItem[];
@@ -122,6 +125,9 @@ export function SessionDrillList({
     staff,
     onSetRowStaff,
 }: SessionDrillListProps) {
+    // One line per drill, remembered on this device (useDrillDensity).
+    const [density, setDensity] = useDrillDensity();
+    const compact = density === "compact";
     const totalPlayTime = sessionWallMinutes(plays, transitionMinutes);
     const groups = groupStations(plays);
     // An unreadable drill (area null) is skipped by the warnings, not read as full ice; a block has no area.
@@ -211,6 +217,7 @@ export function SessionDrillList({
                         locked={locked}
                         onEditDiagram={onEditDiagram}
                         dragHandle={dragHandle}
+                        compact={compact}
                     />
                 )}
             </SortableSessionRow>
@@ -244,9 +251,16 @@ export function SessionDrillList({
         <Paper elevation={2} sx={{ p: 2 }}>
             <Stack spacing={2}>
                 <Stack direction="row" justifyContent="space-between" alignItems="center" flexWrap="wrap" useFlexGap spacing={1}>
-                    <Typography variant="h6" component="h2">
-                        Plays in Session
-                    </Typography>
+                    <Stack direction="row" alignItems="center" spacing={2} useFlexGap flexWrap="wrap">
+                        <Typography variant="h6" component="h2">
+                            Plays in Session
+                        </Typography>
+                        <FormControlLabel
+                            control={<Switch size="small" checked={compact} onChange={(event) => setDensity(event.target.checked ? "compact" : "comfortable")} />}
+                            label={COMPACT_ROWS_LABEL}
+                            sx={{ minHeight: 44, mr: 0 }}
+                        />
+                    </Stack>
                     <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap" justifyContent="flex-end">
                         <Tooltip title={canEditDiagram ? "" : "Save the session first"}>
                             <span>
@@ -324,7 +338,7 @@ export function SessionDrillList({
                 {/* Drag and drop keeps it flat too: one sortable per element (SessionSortable). */}
                 {plays.length > 0 && (
                     <SessionSortable layout={sortLayout} onMove={onSortMove} locked={locked}>
-                        <Stack spacing={2}>
+                        <Stack spacing={compact ? 1 : 2}>
                             {groups.flatMap((group): ReactNode[] => {
                                 const only = group.stations[0];
                                 if (group.stations.length === 1) {
