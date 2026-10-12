@@ -56,7 +56,7 @@ function parseMultipart(body: string, contentType: string): { metadata: Record<s
 
 /** files.list's q, as far as the connector writes it: appProperties clauses (OR'd in parentheses, else AND'd), a mimeType and trashed=false. */
 function matches(file: FakeDriveFile, q: string): boolean {
-    const clauses = Array.from(q.matchAll(/appProperties has \{ key='((?:\\.|[^'])*)' and value='((?:\\.|[^'])*)' \}/g), (match) => ({
+    const clauses = Array.from(q.matchAll(/appProperties has \{ key='((?:\\.|[^'\\])*)' and value='((?:\\.|[^'\\])*)' \}/g), (match) => ({
         key: match[1].replace(/\\(.)/g, "$1"),
         value: match[2].replace(/\\(.)/g, "$1"),
     }));
