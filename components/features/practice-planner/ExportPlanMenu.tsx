@@ -22,6 +22,7 @@ import { formatDateTimeLocalInput, resolveTimeZone, sessionStart } from "@/lib/u
 import {
     LINK_TOO_LARGE_MESSAGE,
     MAX_PLAN_FILE_BYTES,
+    PLAN_FORMAT,
     PlanLinkTooLargeError,
     encodePlanLink,
     parsePlan,
@@ -35,13 +36,13 @@ import {
 import { rosterHasNames } from "@/lib/utils/practice-roster";
 import { RosterNamesToggle } from "./RosterNamesToggle";
 import { useTeamColors } from "./useTeamColors";
-import { usePlannerPlatform, usePlannerStore, type PlannerPlanLink } from "@/lib/planner-store";
+import { usePlannerPlatform, usePlannerStore, type PlannerPlanLink, type PlannerStore } from "@/lib/planner-store";
 import { drillRows, isBlockRow } from "@/lib/utils/session-rows";
 import { staffNames } from "@/lib/utils/session-staff";
 import type { SessionStaffMember } from "@/types/practice-planner";
 import { downloadBlob } from "./export/download";
 import { downloadDocumentFile } from "./export/download-document";
-import { ENVELOPE_OVERHEAD_BYTES } from "@/lib/document-envelope";
+import { ENVELOPE_OVERHEAD_BYTES, HOSTED_SESSION_ID_NAMESPACE, isEnvelopeId, derivedDocumentId, serializeDocument, wrapDocument, type DocumentEnvelope } from "@/lib/document-envelope";
 import { DOCUMENT_FORMAT_INFO, DocumentEncodeError, type DocumentFormat } from "@/lib/document-formats";
 import type { ExportSession, ExportSessionRow } from "./export/bench-sheet-model";
 import { ExportModuleLoadError, exportBenchSheet, type BenchSheetFormat } from "./export/export-bench-sheet";
@@ -108,6 +109,25 @@ export function buildPlanDocument(
         now,
         options,
     );
+}
+
+/**
+ * A downloaded plan file's envelope id (storage connectors spec R1): the
+ * store's when it keeps one (the static planner, one per practice), else one
+ * derived from the hosted session id, so every download of a session carries
+ * the same id; a session with no id gets a new one.
+ */
+export async function planDocumentId(store: Pick<PlannerStore, "getPlanDocumentId">, session: Pick<ExportableSession, "id">): Promise<string> {
+    if (store.getPlanDocumentId && session.id) {
+        const kept = await store.getPlanDocumentId(session.id);
+        if (kept.success && isEnvelopeId(kept.data)) return kept.data;
+    }
+    return session.id ? derivedDocumentId(HOSTED_SESSION_ID_NAMESPACE, session.id) : crypto.randomUUID();
+}
+
+/** The plan file as written (storage connectors spec R2): the envelope, saved at the plan's own export time. */
+export function wrapPlanDocument(doc: PlanDocument, id: string, generator: PlanGenerator): DocumentEnvelope {
+    return wrapDocument(PLAN_FORMAT, doc, { id, updatedAt: doc.exportedAt, generator });
 }
 
 export function unreadableDiagramNotice(count: number): string | null {
@@ -180,28 +200,34 @@ export function ExportPlanMenu({ session, size = "medium" }: ExportPlanMenuProps
     const [teamColors] = useTeamColors();
     const unreadable = unreadableDiagramNotice(drillRows(session.plays).filter((sp) => sp.play.playData === null).length);
 
-    const download = (format: DocumentFormat = "json") => {
+    const download = async (format: DocumentFormat = "json") => {
         setAnchor(null);
         const doc = buildPlanDocument(session, new Date(), planGenerator, namesOption);
+        // The import checks are on the plan itself, as the importer reads it once unwrapped.
         const text = JSON.stringify(doc, null, 2);
         const warnings = [unreadable, importProblemNotice(doc, importMeasuredText(doc, format, text))].filter((text): text is string => text !== null);
         const warn = (extra: string[] = []) => {
             const all = [...warnings, ...extra];
             setNotice(all.length > 0 ? { severity: "warning", text: all.join(" ") } : null);
         };
-        if (format === "json") {
-            downloadBlob(new Blob([text], { type: "application/json" }), planFileName(session.title));
-            warn();
-            return;
+        try {
+            // Every plan file is wrapped (storage connectors spec R2); the #plan= link stays bare.
+            const envelope = wrapPlanDocument(doc, await planDocumentId(store, session), planGenerator);
+            if (format === "json") {
+                const written = serializeDocument(envelope);
+                downloadBlob(new Blob([written], { type: "application/json" }), planFileName(session.title));
+                // The wrapper's indentation counts too: a wrapped file may be the plan's limit plus ENVELOPE_OVERHEAD_BYTES.
+                const tooLarge = new TextEncoder().encode(written).byteLength > MAX_PLAN_FILE_BYTES + ENVELOPE_OVERHEAD_BYTES;
+                warn(tooLarge && !warnings.includes(FILE_TOO_LARGE_TO_IMPORT_NOTICE) ? [FILE_TOO_LARGE_TO_IMPORT_NOTICE] : []);
+                return;
+            }
+            // YAML, TOML and JSONC carry the same document; their library loads on click.
+            const written = await downloadDocumentFile(envelope, planFileName(session.title), format);
+            warn(formatTooLargeNotice(written, format));
+        } catch (error) {
+            console.error("Plan file export failed:", error);
+            setNotice({ severity: "error", text: error instanceof DocumentEncodeError ? error.message : format === "json" ? EXPORT_FAILED_NOTICE : FORMAT_EXPORT_FAILED_NOTICE });
         }
-        // YAML, TOML and JSONC carry the same document; their library loads on click.
-        downloadDocumentFile(doc, planFileName(session.title), format).then(
-            (written) => warn(formatTooLargeNotice(written, format)),
-            (error: unknown) => {
-                console.error("Plan file export failed:", error);
-                setNotice({ severity: "error", text: error instanceof DocumentEncodeError ? error.message : FORMAT_EXPORT_FAILED_NOTICE });
-            },
-        );
     };
 
     const exportSheet = async (format: BenchSheetFormat) => {
@@ -282,14 +308,14 @@ export function ExportPlanMenu({ session, size = "medium" }: ExportPlanMenuProps
             </Button>
             <Menu id="export-plan-menu" anchorEl={anchor} open={anchor !== null} onClose={() => setAnchor(null)}>
                 {offerNames && <RosterNamesToggle checked={includeNames} onChange={setIncludeNames} />}
-                <MenuItem onClick={() => download()}>
+                <MenuItem onClick={() => void download()}>
                     <ListItemIcon>
                         <DownloadIcon fontSize="small" />
                     </ListItemIcon>
                     <ListItemText>Download plan file</ListItemText>
                 </MenuItem>
                 {ALTERNATE_FILE_FORMATS.map((format) => (
-                    <MenuItem key={format} onClick={() => download(format)}>
+                    <MenuItem key={format} onClick={() => void download(format)}>
                         <ListItemIcon>
                             <DownloadIcon fontSize="small" />
                         </ListItemIcon>

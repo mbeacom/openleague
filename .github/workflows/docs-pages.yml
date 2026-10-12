@@ -40,6 +40,13 @@ jobs:
   build:
     name: Build documentation site
     runs-on: ubuntu-latest
+    # The planner's cloud connector identifiers (storage connectors spec R9) are
+    # github-pages environment variables and a secret, which only a job that
+    # names the environment can read. deployment: false reads them without
+    # recording a second deployment; the deploy job below records the real one.
+    environment:
+      name: github-pages
+      deployment: false
     env:
       # Prisma client generation runs during bun install. A real secret is used
       # when available; the fallback only satisfies generate-time URL parsing.
@@ -59,11 +66,30 @@ jobs:
       - name: Build docs pages artifact
         run: bun run docs:build-pages
 
+      # Cloud saving (storage connectors spec R9): each connector is built in only
+      # when its public identifiers are set, and the bundle check must see the
+      # same values to verify the CSP. The API key is a referrer-restricted
+      # browser key that ships in the page; it is a secret only to keep it out
+      # of logs. Unset values (forks) build the planner without cloud saving.
+      # The Microsoft accounts setting (personal or any) must match the Entra
+      # registration's supported account types; unset means personal.
       - name: Build the static planner
         run: bun run planner:build
+        env:
+          OPENLEAGUE_GOOGLE_CLIENT_ID: ${{ vars.OPENLEAGUE_GOOGLE_CLIENT_ID }}
+          OPENLEAGUE_GOOGLE_APP_ID: ${{ vars.OPENLEAGUE_GOOGLE_APP_ID }}
+          OPENLEAGUE_GOOGLE_API_KEY: ${{ secrets.OPENLEAGUE_GOOGLE_API_KEY }}
+          OPENLEAGUE_MICROSOFT_CLIENT_ID: ${{ vars.OPENLEAGUE_MICROSOFT_CLIENT_ID }}
+          OPENLEAGUE_MICROSOFT_ACCOUNTS: ${{ vars.OPENLEAGUE_MICROSOFT_ACCOUNTS }}
 
       - name: Check the static planner bundle
         run: bun run planner:check
+        env:
+          OPENLEAGUE_GOOGLE_CLIENT_ID: ${{ vars.OPENLEAGUE_GOOGLE_CLIENT_ID }}
+          OPENLEAGUE_GOOGLE_APP_ID: ${{ vars.OPENLEAGUE_GOOGLE_APP_ID }}
+          OPENLEAGUE_GOOGLE_API_KEY: ${{ secrets.OPENLEAGUE_GOOGLE_API_KEY }}
+          OPENLEAGUE_MICROSOFT_CLIENT_ID: ${{ vars.OPENLEAGUE_MICROSOFT_CLIENT_ID }}
+          OPENLEAGUE_MICROSOFT_ACCOUNTS: ${{ vars.OPENLEAGUE_MICROSOFT_ACCOUNTS }}
 
       # The docs build empties dist/docs-pages first, so the planner goes in last.
       - name: Add the planner to the Pages artifact

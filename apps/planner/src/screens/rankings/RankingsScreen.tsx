@@ -31,7 +31,8 @@ import {
 } from "@mui/material";
 import { downloadBlob } from "@/components/features/practice-planner/export/download";
 import { compareTeamNumbers, composite, type RatingMethod, type RatingsResult, type TeamRating } from "@/lib/ratings";
-import { docBracketOrder, docSource, rankingsFileName, serializeRankings, toRatingInputs, type RankingsDocument } from "@/lib/rankings-document";
+import { docBracketOrder, docSource, rankingsFileName, toRatingInputs, type RankingsDocument } from "@/lib/rankings-document";
+import { serializeDocument } from "@/lib/document-envelope";
 import type { RankingsOps } from "../../store/rankings";
 import {
     BELOW_LAST_LEVEL,
@@ -50,7 +51,7 @@ import {
 } from "./display";
 import { UpdateResultsPanel } from "./UpdateResultsPanel";
 import { RankingsTierChart } from "./RankingsTierChart";
-import { RankingsFormatMenu } from "./RankingsFormatMenu";
+import { RankingsFormatMenu, wrapRankingsForDownload } from "./RankingsFormatMenu";
 import { EstimateLabel, EstimateNote } from "./EstimateLabel";
 import { useRankingsDoc } from "./useRankingsDoc";
 import { useRankingsPlatform } from "./rankings-platform";
@@ -61,6 +62,7 @@ export const LADDER_LABEL = "Ladder";
 export const TABLE_LABEL = "Table";
 export const EXPORT_LABEL = "Export rankings file";
 export const FEW_GAMES_LABEL = "Few games";
+export const RANKINGS_EXPORT_FAILED_NOTICE = "Couldn't create the rankings file. Please try again.";
 
 export { levelsShortMessage } from "./display";
 
@@ -309,8 +311,19 @@ function MethodSummary({ method }: { method: RatingMethod }) {
     );
 }
 
-function Ready({ doc, save }: { doc: RankingsDocument; save: (doc: RankingsDocument) => Promise<unknown> }) {
-    const { routes, fetchAction } = useRankingsPlatform();
+function Ready({ doc, save, store }: { doc: RankingsDocument; save: (doc: RankingsDocument) => Promise<unknown>; store: RankingsOps }) {
+    const { routes, fetchAction, generator } = useRankingsPlatform();
+    const [exportError, setExportError] = useState<string | null>(null);
+    const exportJson = () => {
+        setExportError(null);
+        wrapRankingsForDownload(store, doc, generator).then(
+            (envelope) => downloadBlob(new Blob([serializeDocument(envelope)], { type: "application/json" }), rankingsFileName(doc)),
+            (error: unknown) => {
+                console.error("Rankings file export failed:", error);
+                setExportError(RANKINGS_EXPORT_FAILED_NOTICE);
+            },
+        );
+    };
     const result = useRatings(doc);
     const logos = useMemo(() => teamLogoUrls(doc.teams), [doc.teams]);
     const [view, setView] = useState<"ladder" | "table">("ladder");
@@ -344,15 +357,17 @@ function Ready({ doc, save }: { doc: RankingsDocument; save: (doc: RankingsDocum
                     <Button href={routes.rankingsSetup()} sx={{ minHeight: 44 }}>
                         Setup
                     </Button>
-                    <Button
-                        sx={{ minHeight: 44 }}
-                        onClick={() => downloadBlob(new Blob([serializeRankings(doc)], { type: "application/json" }), rankingsFileName(doc))}
-                    >
+                    <Button sx={{ minHeight: 44 }} onClick={exportJson}>
                         {EXPORT_LABEL}
                     </Button>
-                    <RankingsFormatMenu doc={doc} />
+                    <RankingsFormatMenu doc={doc} store={store} />
                 </Stack>
             </Stack>
+            {exportError && (
+                <Alert severity="error" onClose={() => setExportError(null)}>
+                    {exportError}
+                </Alert>
+            )}
             <EstimateNote />
 
             <UpdateResultsPanel source={docSource(doc, "schedule")} fetchAction={fetchAction(docSource(doc, "schedule"))} />
@@ -446,7 +461,7 @@ export function RankingsScreen({ store }: { store: RankingsOps }) {
     if (!state.doc) return <RankingsStatus state={{ status: "empty" }} onStartOver={() => void clear()} />;
     return (
         <TeamLogosProvider teams={state.doc.teams}>
-            <Ready doc={state.doc} save={save} />
+            <Ready doc={state.doc} save={save} store={store} />
         </TeamLogosProvider>
     );
 }

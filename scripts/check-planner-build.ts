@@ -3,15 +3,20 @@
  * planner must work from any subfolder, carry its CSP, contain no Next.js
  * runtime or unguarded process.env (both crash or bloat a browser-only
  * bundle), contain no telemetry, and actually include the plan format. Its
- * CSP's connect-src must equal the AI origin allowlist, and AI adapter code
- * must load lazily (ADR-0023).
+ * CSP's connect-src must equal the AI origin allowlist plus the configured
+ * cloud connectors' hosts, and AI adapter code must load lazily (ADR-0023).
+ * Google Drive's code and MSAL (OneDrive) load lazily too, and Google Drive's
+ * is absent from a build that doesn't configure it (storage connectors spec
+ * R9). frame-src appears exactly when a configured connector needs it, and
+ * auth/redirect.html loads only MSAL's redirect bridge (spec R6, Testing).
  */
 import { existsSync } from "node:fs";
 import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
-import { aiConnectSrc, resolveAiOrigins } from "../apps/planner/ai-origins";
-import { TRUSTED_TYPES_ENABLED } from "../apps/planner/build-config";
+import { resolveAiOrigins } from "../apps/planner/ai-origins";
+import { TRUSTED_TYPES_ENABLED, plannerCsp } from "../apps/planner/build-config";
+import { NO_CLOUD, resolveCloudSettings, type CloudSettings } from "../apps/planner/cloud-config";
 
 export const FORBIDDEN_IN_BUNDLE: ReadonlyArray<{ pattern: string; reason: string }> = [
     { pattern: "NEXT_PUBLIC_", reason: "a Next.js environment variable reached the static bundle" },
@@ -40,12 +45,48 @@ export const FORMAT_LIBRARY_MARKERS = {
     jsonc: "closeBracket",
 } as const;
 
-export const REQUIRED_IN_BUNDLE = ["openleague.practice-plan", "word/document.xml", AI_ADAPTER_MARKER, ...Object.values(FORMAT_LIBRARY_MARKERS)];
+/**
+ * A literal only the Saved files screen contains (ADR-0022): linked files and
+ * recovered copies are a rare visit, so that screen loads on demand. The
+ * storage bar and the sync engine stay in the entry chunk: a practice's page
+ * needs them on open.
+ */
+export const SAVED_FILES_MARKER = "Nothing to recover. When a document is replaced from a file";
+
+/**
+ * Literals only the Google Drive connector's chunk contains (ADR-0022): the
+ * Picker's loader URL and the Identity Services token call. The CSP names
+ * hosts, never these paths, so a policy string can't trip them.
+ */
+export const GOOGLE_DRIVE_MARKERS = ["apis.google.com/js/api.js", "initTokenClient"] as const;
+
+/**
+ * A literal only MSAL contains (one of its error codes): the OneDrive
+ * connector's sign-in library must load only through import() (spec R6).
+ */
+export const MSAL_MARKER = "interaction_in_progress";
+
+/** The title MSAL's redirect bridge sets: the one thing auth/redirect.html must run. */
+export const REDIRECT_BRIDGE_MARKER = "Microsoft Authentication";
+
+/** The sign-in redirect page, relative to outDir; deployed at /planner/auth/redirect.html. */
+export const REDIRECT_PAGE = "auth/redirect.html";
+
+/** Literals of the app itself (the plan format; React's element tag), which the redirect page must never load. */
+export const APP_MARKERS = ["openleague.practice-plan", "react.transitional.element", "react.element"] as const;
+
+export const REQUIRED_IN_BUNDLE = ["openleague.practice-plan", "word/document.xml", AI_ADAPTER_MARKER, SAVED_FILES_MARKER, ...Object.values(FORMAT_LIBRARY_MARKERS)];
 
 /** Code that must load only on demand, by a literal only it contains. */
 export const LAZY_ONLY_IN_BUNDLE: ReadonlyArray<{ pattern: string; reason: string }> = [
     { pattern: "word/document.xml", reason: "the Word export (docx) must load only through import(), on click" },
     { pattern: AI_ADAPTER_MARKER, reason: "AI adapter code must load only through import(), when the coach opens an AI feature (ADR-0023)" },
+    { pattern: SAVED_FILES_MARKER, reason: "the Saved files screen must load only through import(), when the coach opens it (ADR-0022)" },
+    ...GOOGLE_DRIVE_MARKERS.map((pattern) => ({
+        pattern,
+        reason: "the Google Drive connector and Google's loaders must load only through import(), when the coach chooses Google Drive (storage connectors spec R5)",
+    })),
+    { pattern: MSAL_MARKER, reason: "MSAL (the OneDrive connector's sign-in library) must load only through import(), when the coach uses OneDrive (spec R6)" },
     ...Object.entries(FORMAT_LIBRARY_MARKERS).map(([format, pattern]) => ({
         pattern,
         reason: `the ${format} file-format library must load only through import(), when a file in that format is saved or opened`,
@@ -60,6 +101,8 @@ export interface CheckOptions {
     aiOrigins?: readonly string[];
     /** Whether the build should carry Trusted Types. */
     trustedTypes?: boolean;
+    /** The cloud connectors the build was configured with (spec R9); none when omitted. */
+    cloud?: CloudSettings;
 }
 
 function decodeAttribute(value: string): string {
@@ -78,14 +121,26 @@ export function builtCsp(html: string): string | null {
     return content === undefined ? null : decodeAttribute(content);
 }
 
-/** The module scripts and modulepreload chunks index.html loads up front, relative to outDir. */
-function entryScripts(html: string): string[] {
-    const scripts = Array.from(html.matchAll(/<script\b[^>]*\bsrc="\.\/([^"]+\.js)"/g), (match) => match[1]);
+/**
+ * The module scripts and modulepreload chunks a page loads up front, relative
+ * to outDir. `prefix` is the page's way back to outDir: "./" for index.html,
+ * "../" for auth/redirect.html.
+ */
+function entryScripts(html: string, prefix = "./"): string[] {
+    const preloadHref = new RegExp(`\\bhref="${escapePrefix(prefix)}([^"]+\\.js)"`);
     const preloads = Array.from(html.matchAll(/<link\b[^>]*>/g), (match) => match[0])
         .filter((tag) => /\brel="modulepreload"/.test(tag))
-        .map((tag) => /\bhref="\.\/([^"]+\.js)"/.exec(tag)?.[1])
+        .map((tag) => preloadHref.exec(tag)?.[1])
         .filter((href): href is string => href !== undefined);
-    return Array.from(new Set([...scripts, ...preloads]));
+    return Array.from(new Set([...moduleScripts(html, prefix), ...preloads]));
+}
+
+const escapePrefix = (prefix: string) => prefix.replace(/[.*+?^${}()|[\]\\/]/g, "\\$&");
+
+/** A page's own <script src> files, relative to outDir. */
+function moduleScripts(html: string, prefix: string): string[] {
+    const scriptSrc = new RegExp(`<script\\b[^>]*\\bsrc="${escapePrefix(prefix)}([^"]+\\.js)"`, "g");
+    return Array.from(html.matchAll(scriptSrc), (match) => match[1]);
 }
 
 /** `process.env`, `process?.env`, `process["env"]` and `process?.["env"]`, capturing what precedes `process`. */
@@ -188,7 +243,7 @@ async function listFiles(dir: string): Promise<string[]> {
 
 export async function checkPlannerBuild(
     outDir: string,
-    { aiOrigins = resolveAiOrigins(undefined), trustedTypes = TRUSTED_TYPES_ENABLED }: CheckOptions = {},
+    { aiOrigins = resolveAiOrigins(undefined), trustedTypes = TRUSTED_TYPES_ENABLED, cloud = NO_CLOUD }: CheckOptions = {},
 ): Promise<string[]> {
     const indexPath = path.join(outDir, "index.html");
     if (!existsSync(indexPath)) return [`${indexPath} is missing: run bun run planner:build first`];
@@ -202,14 +257,30 @@ export async function checkPlannerBuild(
     if (csp === null) {
         problems.push("index.html has no Content-Security-Policy meta");
     } else {
-        // ADR-0023: connect-src is exactly the resolved allowlist, the one the adapters check against.
-        const connect = csp.split(";").map((directive) => directive.trim()).filter((directive) => directive.startsWith("connect-src"));
-        const expected = aiConnectSrc(aiOrigins);
+        // ADR-0023: connect-src is exactly the resolved allowlist, the one the adapters check against, plus the configured providers' hosts.
+        const expectedCsp = plannerCsp(aiOrigins, { trustedTypes, cloud });
+        const directives = (policy: string) => policy.split(";").map((directive) => directive.trim());
+        const connect = directives(csp).filter((directive) => directive.startsWith("connect-src"));
+        const expected = directives(expectedCsp).find((directive) => directive.startsWith("connect-src"));
         if (connect.length !== 1 || connect[0] !== expected) {
-            problems.push(`the CSP's connect-src is "${connect.join("; ")}", but the AI origin allowlist resolves to "${expected}"`);
+            problems.push(`the CSP's connect-src is "${connect.join("; ")}", but the AI origin allowlist and cloud connectors resolve to "${expected}"`);
+        }
+        // frame-src exactly as the configured connectors need it (OneDrive's silent renewal), and absent otherwise.
+        const frame = directives(csp).filter((directive) => directive.startsWith("frame-src"));
+        const expectedFrame = directives(expectedCsp).find((directive) => directive.startsWith("frame-src"));
+        if (expectedFrame === undefined ? frame.length > 0 : frame.length !== 1 || frame[0] !== expectedFrame) {
+            problems.push(
+                expectedFrame === undefined
+                    ? `the CSP has "${frame.join("; ")}", but no connector that needs frames is built`
+                    : `the CSP's frame-src is "${frame.join("; ")}", but the configured connectors need "${expectedFrame}"`,
+            );
         }
         if (trustedTypes && !/require-trusted-types-for 'script'/.test(csp)) {
             problems.push("Trusted Types is enabled, but the CSP lacks require-trusted-types-for 'script'");
+        }
+        // Storage connectors spec R9: provider hosts appear exactly when their connector is built in.
+        if (csp !== expectedCsp) {
+            problems.push(`the CSP is "${csp}", but this build's settings resolve to "${expectedCsp}"`);
         }
     }
 
@@ -235,18 +306,69 @@ export async function checkPlannerBuild(
             if (text.includes(pattern)) problems.push(`${entry} (the entry chunk) contains "${pattern}": ${reason}`);
         }
     }
-    for (const needle of REQUIRED_IN_BUNDLE) {
+    problems.push(...checkRedirectPage(contents, html, cloud.microsoft !== null));
+    for (const needle of [...REQUIRED_IN_BUNDLE, ...(cloud.google ? GOOGLE_DRIVE_MARKERS : []), ...(cloud.microsoft ? [MSAL_MARKER] : [])]) {
         if (!contents.some(([, text]) => text.includes(needle))) {
             problems.push(`no emitted file contains "${needle}": a required module is missing from the bundle`);
         }
+    }
+    if (!cloud.microsoft) {
+        // R9: an unconfigured build is today's app; MSAL's redirect bridge is built only with OneDrive.
+        for (const [file, text] of contents) {
+            if (text.includes(REDIRECT_BRIDGE_MARKER)) problems.push(`${file} contains "${REDIRECT_BRIDGE_MARKER}", but this build doesn't configure OneDrive (storage connectors spec R9)`);
+        }
+    }
+    if (!cloud.google) {
+        for (const needle of GOOGLE_DRIVE_MARKERS) {
+            for (const [file, text] of contents) {
+                if (text.includes(needle)) problems.push(`${file} contains "${needle}", but this build doesn't configure Google Drive (storage connectors spec R9)`);
+            }
+        }
+    }
+    return problems;
+}
+
+/**
+ * auth/redirect.html (spec R6): required when OneDrive is built, and absent
+ * otherwise (R9). It carries the CSP, loads the redirect bridge, and loads
+ * nothing of the app: not index.html's own script, and no chunk with app code.
+ */
+function checkRedirectPage(contents: ReadonlyArray<readonly [string, string]>, indexHtml: string, oneDrive: boolean): string[] {
+    const page = contents.find(([file]) => file.split(path.sep).join("/") === REDIRECT_PAGE)?.[1];
+    if (page === undefined) return oneDrive ? [`${REDIRECT_PAGE} is missing: the OneDrive connector's sign-in popups and silent renewal end there`] : [];
+    if (!oneDrive) return [`${REDIRECT_PAGE} is in a build that doesn't configure OneDrive: it is built only with the OneDrive connector (storage connectors spec R9)`];
+    const problems: string[] = [];
+    if (builtCsp(page) === null) problems.push(`${REDIRECT_PAGE} has no Content-Security-Policy meta`);
+    const scripts = entryScripts(page, "../");
+    if (scripts.length === 0) problems.push(`${REDIRECT_PAGE} loads no script: it must run MSAL's redirect bridge`);
+    // index.html's own <script> (the app); a modulepreload both pages share (Vite's polyfill) is fine.
+    const appScripts = new Set(moduleScripts(indexHtml, "./"));
+    const texts: string[] = [];
+    for (const script of scripts) {
+        if (appScripts.has(script)) problems.push(`${REDIRECT_PAGE} loads ${script}, index.html's own script: the redirect page must load only the bridge`);
+        const text = contents.find(([file]) => file.split(path.sep).join("/") === script)?.[1];
+        if (text === undefined) {
+            problems.push(`${script} is referenced by ${REDIRECT_PAGE} but missing from the build`);
+            continue;
+        }
+        texts.push(text);
+        for (const marker of APP_MARKERS) {
+            if (text.includes(marker)) problems.push(`${script}, loaded by ${REDIRECT_PAGE}, contains "${marker}": the redirect page must load only the bridge, never the app`);
+        }
+    }
+    if (texts.length > 0 && !texts.some((text) => text.includes(REDIRECT_BRIDGE_MARKER))) {
+        problems.push(`${REDIRECT_PAGE} doesn't load MSAL's redirect bridge`);
     }
     return problems;
 }
 
 async function main() {
     const outDir = path.join(process.cwd(), "dist", "planner");
-    // The same variable the Vite config read for this build.
-    const problems = await checkPlannerBuild(outDir, { aiOrigins: resolveAiOrigins(process.env.OPENLEAGUE_AI_CONNECT_ORIGINS) });
+    // The same variables the Vite config read for this build.
+    const problems = await checkPlannerBuild(outDir, {
+        aiOrigins: resolveAiOrigins(process.env.OPENLEAGUE_AI_CONNECT_ORIGINS),
+        cloud: resolveCloudSettings(process.env),
+    });
     if (problems.length > 0) {
         console.error(`Static planner bundle check failed (${problems.length}):`);
         for (const problem of problems) console.error(`  - ${problem}`);

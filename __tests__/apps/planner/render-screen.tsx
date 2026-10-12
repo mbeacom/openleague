@@ -11,10 +11,12 @@ import { createLocalPlannerStore } from "@/apps/planner/src/store/local-store";
 import { createMemoryRepo } from "@/apps/planner/src/store/memory-repo";
 import type { LocalPlannerStore } from "@/apps/planner/src/store/types";
 
-export function memoryStore(): { store: LocalPlannerStore; repo: ReturnType<typeof createMemoryRepo> } {
+/** `uuids`: ids shaped as UUIDs, for tests that write envelope ids (which must be UUIDs) into files. */
+export function memoryStore({ uuids = false }: { uuids?: boolean } = {}): { store: LocalPlannerStore; repo: ReturnType<typeof createMemoryRepo> } {
     const repo = createMemoryRepo();
     let id = 0;
-    return { repo, store: createLocalPlannerStore(repo, { newId: () => `id-${++id}` }) };
+    const newId = uuids ? () => `00000000-0000-4000-8000-${String(++id).padStart(12, "0")}` : () => `id-${++id}`;
+    return { repo, store: createLocalPlannerStore(repo, { newId }) };
 }
 
 /** The provider tree, also for `rerender`, which replaces the whole root element. */

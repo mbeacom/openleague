@@ -17,8 +17,8 @@ export interface ContractSubject {
     overwriteRemote: (ref: RemoteRef, text: string) => Promise<void>;
     /** The token is withdrawn and silent renewal fails. */
     withdrawAuth: () => void;
-    /** The network fails. */
-    goOffline: () => void;
+    /** The network fails. Absent for a connector with no network (local files), which skips the offline case. */
+    goOffline?: () => void;
 }
 
 const KIND = "openleague.rankings";
@@ -118,6 +118,7 @@ export function describeConnectorContract(name: string, make: () => ContractSubj
 
         it("says offline when the network fails", async () => {
             const subject = await make();
+            if (!subject.goOffline) return;
             const file = await created(subject.connector);
             subject.goOffline();
             expect(await subject.connector.open(file)).toEqual({ ok: false, error: { code: "offline" } });

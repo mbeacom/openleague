@@ -1,14 +1,17 @@
 /**
  * "Download as…": the rankings file in YAML, TOML or JSONC (config-format
  * exports spec). The plain export button stays JSON, the default; each
- * format's library loads on click.
+ * format's library loads on click. Every rankings file is wrapped in the
+ * document envelope with the document's id (storage connectors spec R2).
  */
 import { useState } from "react";
 import { Alert, Button, Menu, MenuItem, Snackbar } from "@mui/material";
 import { downloadDocumentFile } from "@/components/features/practice-planner/export/download-document";
-import { ENVELOPE_OVERHEAD_BYTES } from "@/lib/document-envelope";
+import { ENVELOPE_OVERHEAD_BYTES, isEnvelopeId, wrapDocument, type DocumentEnvelope, type DocumentGenerator } from "@/lib/document-envelope";
 import { DOCUMENT_FORMAT_INFO, DocumentEncodeError, type DocumentFormat } from "@/lib/document-formats";
-import { MAX_RANKINGS_FILE_BYTES, rankingsFileName, serializeRankings, type RankingsDocument } from "@/lib/rankings-document";
+import { MAX_RANKINGS_FILE_BYTES, RANKINGS_FORMAT, rankingsFileName, serializeRankings, type RankingsDocument } from "@/lib/rankings-document";
+import type { RankingsOps } from "../../store/rankings";
+import { useRankingsPlatform } from "./rankings-platform";
 
 export const DOWNLOAD_AS_LABEL = "Download as…";
 export const RANKINGS_FORMATS = ["json", "yaml", "toml", "jsonc"] as const satisfies readonly DocumentFormat[];
@@ -19,28 +22,50 @@ export const rankingsFormatLabel = (format: DocumentFormat) => `${DOCUMENT_FORMA
 const byteLength = (text: string) => new TextEncoder().encode(text).byteLength;
 
 /**
- * Why the file just written in `format` couldn't be opened again, or null. The
- * reader holds bare JSON to MAX_RANKINGS_FILE_BYTES as written; any other
- * format to that plus ENVELOPE_OVERHEAD_BYTES as written, and then to
- * MAX_RANKINGS_FILE_BYTES once decoded and measured as compact JSON.
+ * The rankings file's envelope id: the store's (the static planner keeps one
+ * per document), else a new one (a store that keeps none). Throws when the
+ * store can't read its id: a new id on every download would defeat the id
+ * match when the file is opened again.
+ */
+export async function rankingsDocumentId(store: Pick<RankingsOps, "getRankingsDocumentId">): Promise<string> {
+    if (!store.getRankingsDocumentId) return crypto.randomUUID();
+    const kept = await store.getRankingsDocumentId();
+    if (!kept.success) throw new Error(kept.error);
+    return isEnvelopeId(kept.data) ? kept.data : crypto.randomUUID();
+}
+
+/** The rankings file as written: the envelope, saved now. */
+export async function wrapRankingsForDownload(store: Pick<RankingsOps, "getRankingsDocumentId">, doc: RankingsDocument, generator: DocumentGenerator): Promise<DocumentEnvelope> {
+    return wrapDocument(RANKINGS_FORMAT, doc, { id: await rankingsDocumentId(store), updatedAt: new Date().toISOString(), generator });
+}
+
+/**
+ * Why the file just written in `format` couldn't be opened again, or null.
+ * Every file is wrapped, so the reader holds the written text to
+ * MAX_RANKINGS_FILE_BYTES plus ENVELOPE_OVERHEAD_BYTES; a format other than
+ * JSON is then also held to MAX_RANKINGS_FILE_BYTES once decoded and measured
+ * as compact JSON.
  */
 export function rankingsReopenProblem(doc: RankingsDocument, written: string, format: DocumentFormat): string | null {
     const label = DOCUMENT_FORMAT_INFO[format].label;
     const tooLarge = `This ${label} file is too large to open again (the limit is ${MAX_RANKINGS_FILE_BYTES / 1_000_000} MB).`;
-    if (format === "json") return byteLength(written) > MAX_RANKINGS_FILE_BYTES ? tooLarge : null;
+    if (format === "json") return byteLength(written) > MAX_RANKINGS_FILE_BYTES + ENVELOPE_OVERHEAD_BYTES ? tooLarge : null;
     const fits = byteLength(written) <= MAX_RANKINGS_FILE_BYTES + ENVELOPE_OVERHEAD_BYTES && byteLength(JSON.stringify(doc)) <= MAX_RANKINGS_FILE_BYTES;
     if (fits) return null;
     // JSON is only worth suggesting when the plain export would open again.
     return byteLength(serializeRankings(doc)) <= MAX_RANKINGS_FILE_BYTES ? `${tooLarge} Export it as JSON instead.` : tooLarge;
 }
 
-export function RankingsFormatMenu({ doc }: { doc: RankingsDocument }) {
+export function RankingsFormatMenu({ doc, store }: { doc: RankingsDocument; store: Pick<RankingsOps, "getRankingsDocumentId"> }) {
+    const { generator } = useRankingsPlatform();
     const [anchor, setAnchor] = useState<HTMLElement | null>(null);
     const [notice, setNotice] = useState<{ severity: "warning" | "error"; text: string } | null>(null);
 
     const download = (format: DocumentFormat) => {
         setAnchor(null);
-        downloadDocumentFile(doc, rankingsFileName(doc), format).then(
+        wrapRankingsForDownload(store, doc, generator)
+            .then((envelope) => downloadDocumentFile(envelope, rankingsFileName(doc), format))
+            .then(
             (text) => {
                 const problem = rankingsReopenProblem(doc, text, format);
                 setNotice(problem ? { severity: "warning", text: problem } : null);

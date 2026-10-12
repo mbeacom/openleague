@@ -40,7 +40,22 @@ export type ConnectorError =
     | { code: "quota" }
     | { code: "unavailable"; retryAfterSeconds?: number }
     /** Anything else, with no body text. */
-    | { code: "provider"; status: number };
+    | { code: "provider"; status: number }
+    /** The coach dismissed a picker this call opened (the local file connector's save picker). Nothing was written. */
+    | { code: "cancelled" }
+    /**
+     * The document can't be written in the file's format (TOML has no null for a
+     * drill diagram's empty value). `message` is the encoder's own text, never a
+     * provider's.
+     */
+    | { code: "unwritable"; message: string }
+    /**
+     * OneDrive (spec R6): the app folder couldn't be reached for a work or
+     * school account. Microsoft's documentation disagrees on whether
+     * Files.ReadWrite.AppFolder covers those accounts, and a tenant can block
+     * it, so this is said plainly rather than as a generic failure.
+     */
+    | { code: "app-folder-unavailable" };
 
 export type Result<T> = { ok: true; value: T } | { ok: false; error: ConnectorError };
 
@@ -76,6 +91,18 @@ export interface StorageConnector {
     status: () => ConnectorStatus;
     /** Interactive: call from a user gesture. */
     connect: () => Promise<Result<void>>;
+    /**
+     * Loads what connect() and a picker need (a lazy chunk, a provider script)
+     * ahead of the tap, so the popup opens while the browser still counts the
+     * tap as its cause. Called when a menu offering this connector opens; never fails.
+     */
+    prepare?: () => Promise<void>;
+    /**
+     * True once prepare() has finished, so connect() can open its popup
+     * straight from the tap. Absent with prepare(): the screens wait for the
+     * prepare() they started.
+     */
+    prepared?: () => boolean;
     /** Revokes or clears tokens; links are kept. */
     disconnect: () => Promise<void>;
     list: (filter?: { kind?: string }) => Promise<Result<RemoteFile[]>>;

@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="referrer" content="no-referrer" />
+    <meta name="robots" content="noindex" />
+    <title>Signing in</title>
+  </head>
+  <body>
+    <!--
+      The MSAL redirect bridge (storage connectors spec R6): Microsoft sign-in
+      popups and the silent-renewal iframe end on this page, which hands the
+      response to the planner window and closes. It loads only the bridge: no
+      app code, no router, no other MSAL API.
+    -->
+    <p>Signing in to OneDrive…</p>
+    <script type="module" src="../src/auth/redirect.ts"></script>
+  </body>
+</html>
