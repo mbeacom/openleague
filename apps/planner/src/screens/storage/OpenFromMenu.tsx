@@ -18,7 +18,8 @@ import type { RemoteRef, StorageConnector } from "../../storage/connector";
 import { planStartDate } from "../PlanReviewPanel";
 import { useStorage } from "./StorageContext";
 import { ReplaceOrKeepDialog } from "./ReplaceOrKeepDialog";
-import { CONNECTOR_LABELS, DOWNLOAD_COPY_HINT, IMPORT_COPY_LABEL, OPEN_FROM_LABEL, STORE_FAILED_MESSAGE, syncErrorText } from "./messages";
+import { connectIfNeeded, useConnectorPreparation } from "./connection";
+import { CONNECTOR_LABELS, DOWNLOAD_COPY_HINT, LOADING_HINT, connectErrorText, IMPORT_COPY_LABEL, OPEN_FROM_LABEL, STORE_FAILED_MESSAGE, syncErrorText } from "./messages";
 
 export interface OpenFromMenuProps {
     kind: DocumentKind;
@@ -42,6 +43,7 @@ export function OpenFromMenu({ kind, importHref, onOpened }: OpenFromMenuProps) 
     const [busy, setBusy] = useState(false);
     const [problem, setProblem] = useState<string | null>(null);
     const [pending, setPending] = useState<Pending | null>(null);
+    const preparation = useConnectorPreparation();
     if (!storage) return null;
     const { store, engine, connectors } = storage;
 
@@ -70,6 +72,12 @@ export function OpenFromMenu({ kind, importHref, onOpened }: OpenFromMenuProps) 
     const pick = (connector: StorageConnector) =>
         attempt(async () => {
             setAnchor(null);
+            // A cloud connector signs in first, from this tap; its picker needs the session.
+            const unconnected = await connectIfNeeded(connector);
+            if (unconnected) {
+                setProblem(connectErrorText(unconnected, connector.id));
+                return;
+            }
             const picked = await connector.pickToOpen({ kind });
             if (!picked.ok) {
                 setProblem(syncErrorText(picked.error, "the file"));
@@ -133,17 +141,24 @@ export function OpenFromMenu({ kind, importHref, onOpened }: OpenFromMenuProps) 
                 aria-haspopup="menu"
                 aria-controls={anchor ? `open-from-${kind}` : undefined}
                 aria-expanded={anchor ? "true" : undefined}
-                onClick={(event) => setAnchor(event.currentTarget)}
+                onClick={(event) => {
+                    preparation.prepare(connectors);
+                    setAnchor(event.currentTarget);
+                }}
                 sx={{ minHeight: 44 }}
             >
                 {OPEN_FROM_LABEL}
             </Button>
             <Menu id={`open-from-${kind}`} anchorEl={anchor} open={anchor !== null} onClose={() => setAnchor(null)}>
-                {connectors.map((connector) => (
-                    <MenuItem key={connector.id} onClick={() => void pick(connector)} sx={{ minHeight: 44 }}>
-                        <ListItemText primary={CONNECTOR_LABELS[connector.id].item} secondary="Linked: Save writes back to it" />
-                    </MenuItem>
-                ))}
+                {connectors.map((connector) => {
+                    // Held while its sign-in loads, so the popup opens from the tap.
+                    const loading = preparation.isPreparing(connector.id);
+                    return (
+                        <MenuItem key={connector.id} disabled={loading} onClick={() => !loading && void pick(connector)} sx={{ minHeight: 44 }}>
+                            <ListItemText primary={CONNECTOR_LABELS[connector.id].item} secondary={loading ? LOADING_HINT : "Linked: Save writes back to it"} />
+                        </MenuItem>
+                    );
+                })}
                 <MenuItem component="a" href={importHref} onClick={() => setAnchor(null)} sx={{ minHeight: 44 }}>
                     <ListItemText primary={IMPORT_COPY_LABEL} secondary={DOWNLOAD_COPY_HINT} />
                 </MenuItem>

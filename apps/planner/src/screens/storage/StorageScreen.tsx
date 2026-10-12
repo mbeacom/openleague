@@ -18,6 +18,7 @@ import type { RecoveredCopySummary } from "../../store/recovered";
 import { RECOVERED_RETENTION_DAYS } from "../../store/recovered";
 import { parseDocKey } from "../../storage/documents";
 import { planStartDate } from "../PlanReviewPanel";
+import { CloudConnections } from "./CloudConnections";
 import { useStorage } from "./StorageContext";
 import { CONNECTOR_LABELS, DOWNLOAD_IS_A_COPY, SAVED_IN_BROWSER, UNLINK_LABEL, savedAtText } from "./messages";
 
@@ -148,6 +149,7 @@ export function StorageScreen() {
                         ) : (
                             <Typography color="text.secondary">{DOWNLOAD_IS_A_COPY}</Typography>
                         )}
+                        <CloudConnections connectors={connectors} />
                     </Stack>
                 </Box>
 

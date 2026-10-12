@@ -218,6 +218,43 @@ The repository includes `.github/workflows/docs-pages.yml` to publish a static d
 
 These account, DNS, SSL, and Pages settings cannot be completed from repository code alone.
 
+### Cloud saving for forks
+
+The static planner at `/planner/` can save practice plans and rankings to a coach's own Google Drive (and, once its connector ships, OneDrive). Each provider is built in only when its public identifiers are set at build time; with none set, the planner builds without cloud saving, its Content Security Policy names no provider host, and nothing else changes. A fork needs none of this to build.
+
+OAuth registrations are tied to an origin (Google) or an exact URL (Microsoft), so **a fork registers its own apps** and never reuses openleague.dev's client ids. A fork's Pages site usually lives at `https://<owner>.github.io/<repo>/`, with the planner at `https://<owner>.github.io/<repo>/planner/`.
+
+The four values, all optional:
+
+| Name | Kind | Value |
+|---|---|---|
+| `OPENLEAGUE_GOOGLE_CLIENT_ID` | variable | The OAuth client id (ends in `.apps.googleusercontent.com`) |
+| `OPENLEAGUE_GOOGLE_APP_ID` | variable | The Google Cloud **project number** (digits), used by the Picker |
+| `OPENLEAGUE_GOOGLE_API_KEY` | secret | A browser API key restricted as below |
+| `OPENLEAGUE_MICROSOFT_CLIENT_ID` | variable | The Entra application (client) id, a GUID |
+
+Google Drive needs all three Google values; setting only some fails the build with the names of the missing ones. Every value ships in the page, so none of them is a credential. The API key is stored as a secret only to keep it out of workflow logs.
+
+**Google Drive**
+
+1. Create a Google Cloud project and note its project number.
+2. Enable the **Google Drive API** and the **Google Picker API**.
+3. Configure the OAuth consent screen (External) with the single scope `https://www.googleapis.com/auth/drive.file`. While the app is in Testing mode, only the test users you list can connect.
+4. Create an OAuth client id of type **Web application**. Add **Authorized JavaScript origins** only, with no path: `https://<owner>.github.io` (or your custom domain), and `http://localhost:5173` for `bun run planner:dev`. The planner uses the Google Identity Services token model in a popup, so no redirect URI and no client secret are used.
+5. Create an API key. Restrict it to the **Google Picker API**, and restrict its website referrers to your planner's address (`https://<owner>.github.io/<repo>/planner/*`) **and `https://docs.google.com/*`**: the Picker runs in a frame on `docs.google.com`, and Google rejects the key as invalid when that entry is missing.
+
+**OneDrive** (the connector is a later phase; the variable is read now so the deployment is ready for it)
+
+1. Register an application in Microsoft Entra that accepts the account types you want.
+2. Add the **Single-page application** platform with the redirect URI `https://<owner>.github.io/<repo>/planner/auth/redirect.html` (and `http://localhost:5173/planner/auth/redirect.html` for development). Do not create a client secret.
+3. Add the delegated Microsoft Graph permissions `Files.ReadWrite.AppFolder` and `User.Read`.
+
+**Setting the values**
+
+In your fork's **Settings** → **Environments** → **github-pages**, add the three ids as **environment variables** and the API key as an **environment secret**. The Pages workflow's build job names that environment (with `deployment: false`, so it records no extra deployment) because environment variables and secrets are readable only by jobs that name the environment, and it passes the values to the planner's build and bundle check steps only. If the environment restricts deployments to certain branches, the build job follows the same rule.
+
+After the next Pages deploy, the planner's **Save to…** and **Open from…** menus offer Google Drive, and **Saved files** shows Connect and Disconnect. To check a build locally, set the same variables when running `bun run planner:build && bun run planner:check`; the check verifies that the CSP lists exactly the configured providers' hosts and that the Google code loads only on demand.
+
 ## Deployment Tests
 
 Run the repository-local deployment checks before promoting a release:

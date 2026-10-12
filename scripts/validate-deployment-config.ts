@@ -76,6 +76,70 @@ function hasCiDatabaseUrlFallback(workflow: string): boolean {
   return workflow.includes(CI_DATABASE_URL_FALLBACK);
 }
 
+/** The planner's cloud connector variables (storage connectors spec R9) and where the Pages workflow reads each from. */
+export const PLANNER_CLOUD_ENV: ReadonlyArray<{ name: string; source: 'vars' | 'secrets' }> = [
+  { name: 'OPENLEAGUE_GOOGLE_CLIENT_ID', source: 'vars' },
+  { name: 'OPENLEAGUE_GOOGLE_APP_ID', source: 'vars' },
+  { name: 'OPENLEAGUE_GOOGLE_API_KEY', source: 'secrets' },
+  { name: 'OPENLEAGUE_MICROSOFT_CLIENT_ID', source: 'vars' },
+];
+
+const PLANNER_CLOUD_STEPS = ['Build the static planner', 'Check the static planner bundle'];
+
+/** A job's text, from its `  <name>:` line to the next top-level job. */
+function workflowJob(workflow: string, job: string): string {
+  const lines = workflow.split('\n');
+  const start = lines.findIndex((line) => line === `  ${job}:`);
+  if (start < 0) return '';
+  const end = lines.findIndex((line, index) => index > start && /^ {2}\S/.test(line));
+  return lines.slice(start, end < 0 ? undefined : end).join('\n');
+}
+
+/** A job's steps, each from its `- name:` line, keyed by name. */
+function workflowSteps(job: string): Map<string, string> {
+  const steps = new Map<string, string>();
+  for (const chunk of job.split(/\n(?= {6}- name: )/).slice(1)) {
+    const name = /^ {6}- name: (.+)$/m.exec(chunk)?.[1]?.trim();
+    if (name) steps.set(name, chunk);
+  }
+  return steps;
+}
+
+/**
+ * The Pages workflow's wiring of the planner's cloud connector identifiers:
+ * the build job reads the github-pages environment (whose variables and
+ * secret only a job naming it can see) without recording a deployment, and
+ * passes each value to the planner's build and bundle check only.
+ */
+export function docsWorkflowCloudProblems(workflow: string): string[] {
+  const problems: string[] = [];
+  const build = workflowJob(workflow, 'build');
+  if (!/\n {4}environment:\n {6}name: github-pages\n {6}deployment: false\n/.test(`${build}\n`)) {
+    problems.push('GitHub Pages build job must name the github-pages environment with deployment: false, so it can read the planner\'s cloud connector variables without recording a deployment.');
+  }
+  const steps = workflowSteps(build);
+  for (const stepName of PLANNER_CLOUD_STEPS) {
+    const step = steps.get(stepName);
+    if (!step) {
+      problems.push(`GitHub Pages build job must have a "${stepName}" step.`);
+      continue;
+    }
+    for (const { name, source } of PLANNER_CLOUD_ENV) {
+      if (!step.includes(`${name}: \${{ ${source}.${name} }}`)) {
+        problems.push(`GitHub Pages "${stepName}" step must set ${name} from ${source}.${name}.`);
+      }
+    }
+  }
+  // Only those steps see the values: never the job's env, nor any other step.
+  for (const { name } of PLANNER_CLOUD_ENV) {
+    const outside = [...steps].filter(([stepName, step]) => !PLANNER_CLOUD_STEPS.includes(stepName) && step.includes(name)).map(([stepName]) => stepName);
+    const beforeSteps = build.split(/\n {4}steps:\n/)[0] ?? '';
+    if (beforeSteps.includes(name)) outside.unshift('the job env');
+    if (outside.length > 0) problems.push(`${name} must reach only the planner build and check steps, not ${outside.join(', ')}.`);
+  }
+  return problems;
+}
+
 export async function validateDeploymentConfig(rootDir = process.cwd()): Promise<string[]> {
   const failures: string[] = [];
   const [packageJson, vercel, envExample] = await Promise.all([
@@ -185,6 +249,8 @@ export async function validateDeploymentConfig(rootDir = process.cwd()): Promise
       includesAll(docsWorkflow, ['actions/configure-pages', 'actions/upload-artifact', 'name: github-pages', 'actions/deploy-pages', 'bun run docs:build-pages']),
       'GitHub Pages workflow must build, upload, and deploy the documentation artifact.',
     );
+
+    failures.push(...docsWorkflowCloudProblems(docsWorkflow));
 
     for (const actionName of ['actions/configure-pages', 'actions/upload-artifact', 'actions/deploy-pages']) {
       requireCondition(
