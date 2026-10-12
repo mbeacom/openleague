@@ -165,8 +165,14 @@ Common rules:
   does not exist. The hash is kept in the stored URL and passed as `h=` to the
   player (R5).
 - `startSec` is dropped for `drive`, `onedrive` and `link`.
-- Normalization is idempotent: `parseVideoUrl(parseVideoUrl(x).link.url)` yields
-  the same link. A test pins it.
+- Normalization is idempotent for the fields derived from the URL:
+  `parseVideoUrl(parseVideoUrl(x).link.url)` yields the same `url` and
+  `provider`. The start time is not: parsing moves `t=` or `#t=` out of the URL
+  into `startSec`, so a reparse of the stored URL alone finds no start. Reading or
+  writing a stored link therefore takes the start from its `startSec` field, and
+  only falls back to a start found in the URL when that field is absent. A stored
+  `{ url, startSec: 90 }` reads and writes back with `startSec: 90`. Tests pin
+  both rules.
 - On read, an unparseable entry is dropped and logged, and the remaining links
   are kept, the same lenient rule as `readableEquipmentNeeds`. Videos are
   advisory and never make a drill or plan unreadable. On write, an invalid entry
@@ -264,6 +270,11 @@ a second closes the first.
   `sanitizePlayDataForWrite` normalizes and omits an empty list.
 - The element-count refine and thumbnail generation ignore videos.
   `PLAY_DATA_VERSION` stays 2.
+- Static: the field is additive, but `DB_VERSION` still goes to the next free
+  number, with an upgrade case that writes nothing. A tab still running an older
+  build would otherwise read a drill through its old schema and save it back
+  without `videos`; the bump makes that tab reload (`onversionchange`) first,
+  the same rule ADR-0020 applied to age groups and area.
 - Rejected: a sibling `Play.videos` column and `drill.videos` document field.
   These would be semantically tidier, but every copy, import, export and static
   store path would have to carry a new field by hand. The equipment work chose
@@ -281,10 +292,10 @@ a second closes the first.
   sessions, the list is capped at 5 and always loaded with its parent, and a
   table would add a relation to every session read, copy and delete for no gain.
 - Static: `StoredSession` gains an optional `videos`. `DB_VERSION` goes to the
-  next free number (8 once the storage connectors take 7), with an upgrade case that writes nothing,
-  following versions 5 and 6. The bump makes a tab running an older build reload
+  next free number after the drill field's bump (phase 1), with an upgrade case
+  that writes nothing, following versions 5 and 6. The bump makes a tab running an older build reload
   before this build writes rows the older build would rewrite without the field.
-  If parallel work takes 7 first, this takes the next free number.
+  If parallel work takes that number first, this takes the next free one.
 
 Per-row (per-instance) videos are out of scope. A drill's videos belong to the
 drill, and a practice's to the practice.
@@ -400,13 +411,13 @@ Each phase is one pull request that ships on its own.
    `PlayData.videos` in types, `playDataSchema`, `upgradePlayData` and
    `sanitizePlayDataForWrite`; the editor field; `VideoLinkList` with **Open**
    only; drill detail, library indicator, session drill rows and import preview.
-   The ADR-0020 amendment for the drill field. Hosted and static both, with no
-   migration and no `DB_VERSION` change.
+   The ADR-0020 amendment for the drill field. Hosted and static both: no
+   hosted migration, and a static `DB_VERSION` bump with a no-op upgrade case.
 2. **Inline player.** The **Play here** action and frame (R5); `frame-src`
    widened in `next.config.ts` and `plannerCsp`; CSP tests updated. Can be
    skipped or reverted without touching data.
 3. **Practice videos.** `PracticeSession.videos` migration and action schemas;
-   static `StoredSession.videos` and the `DB_VERSION` bump; `session.videos` in
+   static `StoredSession.videos` and another `DB_VERSION` bump; `session.videos` in
    the plan document (amendment extended); session editor and viewer section.
 4. **Exports.** Bench sheet, HTML and Word lines, and the `bench-sheet-model`
    fields. Optionally the lazy QR option, if the owner approves it (Open
@@ -419,7 +430,8 @@ Each phase is one pull request that ships on its own.
   (`90`, `1m30s`, `1h2m3s`) and the 86 399 cap; tracking-parameter removal;
   refusals for `http:`, `javascript:`, `data:`, credentials, ports, IP hosts,
   over-long URLs, a channel or playlist URL on a known host, and an ID of the
-  wrong length. Idempotence. Provider corrected when the stored value
+  wrong length. Idempotence of `url` and `provider`; a stored `startSec`
+  survives a read and a write. Provider corrected when the stored value
   disagrees.
 - **PlayData:** an invalid video entry is dropped on read with the rest of the
   drill intact. More than 5 is an error on write and truncated on read. An empty
@@ -432,8 +444,8 @@ Each phase is one pull request that ships on its own.
 - **Copy paths (hosted actions, mocked Prisma):** library → session copy,
   starter → library, duplicate session and import all preserve
   `playData.videos`.
-- **Static store:** the version upgrade leaves existing rows readable;
-  sessions save and load `videos`.
+- **Static store:** each version upgrade writes nothing and leaves existing rows
+  readable; sessions save and load `videos`.
 - **Components (jsdom):** `VideoLinkList` renders no `iframe` and no `img` with
   a remote `src` before activation. **Open** has `target="_blank"` and
   `rel="noopener noreferrer"`. **Play here** inserts one iframe with the
