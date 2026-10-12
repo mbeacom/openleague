@@ -26,6 +26,14 @@ describe("RotationGridTable", () => {
         expect(within(table).getAllByRole("rowheader").map((cell) => cell.textContent)).toEqual(["6:00 PM", "6:05 PM"]);
     });
 
+    it("wraps station names at word boundaries, never mid-word", () => {
+        render(<RotationGridTable table={{ ...TABLE, columns: ["Goalie Crease", "Skate A", "Skate B"] }} caption="Rotation grid" />);
+        const header = screen.getByRole("columnheader", { name: "Goalie Crease" });
+        expect(header).toHaveStyle({ overflowWrap: "break-word", wordBreak: "normal" });
+        expect(header).not.toHaveStyle({ overflowWrap: "anywhere" });
+        expect(header).not.toHaveStyle({ hyphens: "auto" });
+    });
+
     it("prints as a plain table", () => {
         const html = renderToStaticMarkup(<RotationGridTable table={TABLE} caption="Rotation grid" variant="print" />);
         expect(html).toContain('class="bench-rotation"');

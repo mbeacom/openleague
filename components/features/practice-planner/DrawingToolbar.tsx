@@ -308,6 +308,12 @@ export function DrawingToolbar({
                         aria-label="color picker"
                         sx={{
                             ...TOOL_BUTTON_SX,
+                            // A fixed 44px circle: the phone layout's column
+                            // stretches its children, which drew it as an oval.
+                            width: 44,
+                            height: 44,
+                            flexShrink: 0,
+                            alignSelf: isMobile ? "flex-start" : "center",
                             // The swatch fill alone can vanish into the paper
                             // (#212121 on dark, #FFFFFF on light); the ring
                             // keeps the control's edge at >=3:1 in both.

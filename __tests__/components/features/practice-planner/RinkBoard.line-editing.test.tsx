@@ -244,6 +244,43 @@ describe("RinkBoard line editing: history and interruptions", () => {
         expectPoint(ctx.last().drawings[0].points[1], 130, 60);
     });
 
+    it("undo during a line drag drops the drag: the release never writes it back", () => {
+        const start = withLines(line(STRAIGHT));
+        const ctx = setup({ playData: start });
+        ctx.click(60, 40);
+        ctx.drag([80, 40], [80, 20]);
+        ctx.rerender(ctx.last());
+        fireEvent.mouseDown(ctx.canvas, ctx.at(120, 40));
+        fireEvent.mouseMove(ctx.canvas, ctx.at(130, 60));
+        act(() => ctx.ref.current!.undo());
+        expect(ctx.last().drawings[0].points).toEqual(STRAIGHT);
+        const calls = ctx.onPlayDataChange.mock.calls.length;
+        ctx.rerender(ctx.last());
+        fireEvent.mouseMove(ctx.canvas, ctx.at(135, 65));
+        fireEvent.mouseUp(ctx.canvas);
+        expect(ctx.onPlayDataChange).toHaveBeenCalledTimes(calls);
+        expect(ctx.last().drawings[0].points).toEqual(STRAIGHT);
+    });
+
+    it("redo during a line drag drops the drag too", () => {
+        const start = withLines(line(STRAIGHT));
+        const ctx = setup({ playData: start });
+        ctx.click(60, 40);
+        ctx.drag([80, 40], [80, 20]);
+        const edited = ctx.last();
+        ctx.rerender(edited);
+        act(() => ctx.ref.current!.undo());
+        ctx.rerender(ctx.last());
+        fireEvent.mouseDown(ctx.canvas, ctx.at(120, 40));
+        fireEvent.mouseMove(ctx.canvas, ctx.at(130, 60));
+        act(() => ctx.ref.current!.redo());
+        const calls = ctx.onPlayDataChange.mock.calls.length;
+        ctx.rerender(ctx.last());
+        fireEvent.mouseUp(ctx.canvas);
+        expect(ctx.onPlayDataChange).toHaveBeenCalledTimes(calls);
+        expect(ctx.last().drawings[0].points).toEqual(edited.drawings[0].points);
+    });
+
     it("cancels a handle drag when the tool changes", () => {
         const start = withLines(line(STRAIGHT));
         const ctx = setup({ playData: start });
@@ -313,6 +350,29 @@ describe("RinkBoard line editing: removing bends", () => {
         expect(ctx.last().drawings[0]).toMatchObject({ path: "straight", points: [{ x: 40, y: 40 }, { x: 120, y: 40 }] });
     });
 
+    it("removes a bend on an unselected line with a double-click: the first click selects it", () => {
+        vi.useFakeTimers({ toFake: ["Date"] });
+        vi.setSystemTime(10_000);
+        const ctx = setup({ playData: withLines(line(BENT, "curve")) });
+        ctx.click(80, 20);
+        expect(ctx.onSelectionChange).toHaveBeenLastCalledWith("l");
+        vi.setSystemTime(10_200);
+        ctx.click(80, 20);
+        expect(ctx.onPlayDataChange).toHaveBeenCalledTimes(1);
+        expect(ctx.last().drawings[0]).toMatchObject({ path: "straight", points: [{ x: 40, y: 40 }, { x: 120, y: 40 }] });
+    });
+
+    it("only selects an unselected line on a single click on its bend", () => {
+        vi.useFakeTimers({ toFake: ["Date"] });
+        vi.setSystemTime(10_000);
+        const ctx = setup({ playData: withLines(line(BENT, "curve")) });
+        ctx.click(80, 20);
+        expect(ctx.onSelectionChange).toHaveBeenLastCalledWith("l");
+        vi.setSystemTime(10_400);
+        ctx.click(80, 20);
+        expect(ctx.onPlayDataChange).not.toHaveBeenCalled();
+    });
+
     it("keeps the bend for two slow clicks", () => {
         vi.useFakeTimers({ toFake: ["Date"] });
         vi.setSystemTime(10_000);
@@ -337,6 +397,28 @@ describe("RinkBoard line editing: removing bends", () => {
         vi.setSystemTime(10_250);
         tap(80, 20);
         expect(ctx.last().drawings[0].points).toHaveLength(2);
+    });
+
+    it("never counts a bend drag dropped by undo as the first tap of a double-click", () => {
+        vi.useFakeTimers({ toFake: ["Date"] });
+        vi.setSystemTime(10_000);
+        const other = line([{ x: 40, y: 70 }, { x: 120, y: 70 }], "straight", "m");
+        const ctx = setup({ playData: withLines(line(BENT, "curve"), other) });
+        // One edit on the other line, so there is something to undo
+        ctx.click(60, 70);
+        ctx.drag([80, 70], [80, 60]);
+        ctx.rerender(ctx.last());
+        ctx.click(60, 30);
+        fireEvent.mouseDown(ctx.canvas, ctx.at(80, 20));
+        fireEvent.mouseMove(ctx.canvas, ctx.at(90, 30));
+        act(() => ctx.ref.current!.undo());
+        ctx.rerender(ctx.last());
+        fireEvent.mouseUp(window);
+        const calls = ctx.onPlayDataChange.mock.calls.length;
+        vi.setSystemTime(10_100);
+        ctx.click(80, 20);
+        expect(ctx.onPlayDataChange).toHaveBeenCalledTimes(calls);
+        expect(ctx.last().drawings.find((d) => d.id === "l")!.points).toEqual(BENT);
     });
 
     it("never removes an end", () => {

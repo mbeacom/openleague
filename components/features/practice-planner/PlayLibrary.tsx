@@ -449,7 +449,6 @@ export function PlayLibrary({
         favoritesRef.current = favorites;
         favoritesOnlyRef.current = favoritesOnly;
     }, [favorites, favoritesOnly]);
-    const filtersActive = Boolean(filters.focus || filters.goalies || ageFilter || favoritesOnly);
     // Only the latest load may set the grid: on the hosted page the remembered age arrives after
     // hydration, and a quick chip change can also leave an earlier, slower answer in flight.
     const latestLoad = useRef(0);
@@ -477,6 +476,19 @@ export function PlayLibrary({
     const [currentPage, setCurrentPage] = useState(1);
     const [totalPages, setTotalPages] = useState(1);
     const playsPerPage = 20;
+
+    // An age changed in another tab arrives through the hook, not handleAgeChange: either way, back to page 1.
+    // Adjusted during render, so the load effect never asks for the old page under the new age.
+    const [pagedAge, setPagedAge] = useState(ageFilter);
+    if (pagedAge !== ageFilter) {
+        setPagedAge(ageFilter);
+        setCurrentPage(1);
+    }
+
+    // The whole library is empty (manage mode, once its names are known): a remembered age then narrows nothing, so
+    // the page says so and offers Create Play rather than "No plays found".
+    const libraryEmpty = mode === "manage" && libraryNames !== null && libraryNames.size === 0;
+    const filtersActive = Boolean(filters.focus || filters.goalies || (ageFilter && !libraryEmpty) || favoritesOnly);
 
     /**
      * The whole library's drill names, for the starter list (manage mode only).
@@ -951,7 +963,7 @@ export function PlayLibrary({
                                 Tap the star on a drill to find it here.
                             </Typography>
                         </>
-                    ) : ageFilter && !favoritesOnly && !searchQuery && dateFilter === "all" && !filters.focus && !filters.goalies && visibleStarters.length === 0 ? (
+                    ) : ageFilter && !libraryEmpty && !favoritesOnly && !searchQuery && dateFilter === "all" && !filters.focus && !filters.goalies && visibleStarters.length === 0 ? (
                         <AgeFilterEmpty noun="drills" ageGroup={ageFilter} onShowAll={() => handleAgeChange(null)} />
                     ) : (
                         <>
