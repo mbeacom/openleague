@@ -6,6 +6,7 @@ import type { ActionResult } from "@/lib/planner-store";
 import type { RankingsDocument } from "@/lib/rankings-document";
 import type { RankingsOps } from "../../store/rankings";
 import { MovementLabel, NO_GAMES_LABEL, RankingsStatus, formatRating, formatSigned, levelText } from "./display";
+import { EstimateNote } from "./EstimateLabel";
 import { useRatings } from "./RankingsScreen";
 import { useRankingsDoc } from "./useRankingsDoc";
 import { useRankingsPlatform } from "./rankings-platform";
@@ -49,6 +50,7 @@ function TeamDetail({ doc, number, save }: { doc: RankingsDocument; number: stri
                 {row.startingBracket && !row.movement ? ` · Started ${row.startingBracket}` : " "}
                 <MovementLabel movement={row.movement} startingBracket={row.startingBracket} />
             </Typography>
+            <EstimateNote />
             {row.games === 0 ? (
                 <Alert severity="info">{`${NO_GAMES_LABEL}: this team has no final games, so it has no rating.`}</Alert>
             ) : (

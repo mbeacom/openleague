@@ -51,6 +51,7 @@ import {
 import { UpdateResultsPanel } from "./UpdateResultsPanel";
 import { RankingsTierChart } from "./RankingsTierChart";
 import { RankingsFormatMenu } from "./RankingsFormatMenu";
+import { EstimateLabel, EstimateNote } from "./EstimateLabel";
 import { useRankingsDoc } from "./useRankingsDoc";
 import { useRankingsPlatform } from "./rankings-platform";
 import { TeamLogosProvider, TeamMark, teamLogoUrls } from "./TeamMark";
@@ -132,6 +133,7 @@ function Tiles({ row, total }: { row: TeamRating; total: number }) {
                     <Typography variant="overline" color="text.secondary">
                         {tile.label}
                     </Typography>
+                    <EstimateLabel sx={{ ml: 1 }} />
                     <Typography sx={{ fontSize: tile.value.length > 8 ? { xs: 22, sm: 24 } : { xs: 28, sm: 34 }, fontWeight: 800, lineHeight: 1.1 }}>{tile.value}</Typography>
                     {tile.extra}
                 </Paper>
@@ -351,6 +353,7 @@ function Ready({ doc, save }: { doc: RankingsDocument; save: (doc: RankingsDocum
                     <RankingsFormatMenu doc={doc} />
                 </Stack>
             </Stack>
+            <EstimateNote />
 
             <UpdateResultsPanel source={docSource(doc, "schedule")} fetchAction={fetchAction(docSource(doc, "schedule"))} />
 

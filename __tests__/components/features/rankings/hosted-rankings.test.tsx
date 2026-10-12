@@ -24,6 +24,7 @@ import { HostedRankingsScreen, hostedRankingsRoutes } from "@/components/feature
 import { NEW_RANKINGS_LABEL, NO_RANKINGS_MESSAGE, OPEN_RANKINGS_FILE_LABEL, RankingsListView } from "@/components/features/rankings/RankingsListView";
 import { FETCH_FOR_ME_LABEL } from "@/apps/planner/src/screens/rankings/FetchForMeAction";
 import { ADD_SCHEDULE_PAGE_LABEL } from "@/apps/planner/src/screens/rankings/UpdateResultsPanel";
+import { ESTIMATE_LABEL, ESTIMATE_NOTE } from "@/apps/planner/src/screens/rankings/EstimateLabel";
 import { serializeRankings, withTeamLogo } from "@/lib/rankings-document";
 import { logoPng } from "@/__tests__/helpers/logo-png";
 import { sampleRankingsDoc } from "@/__tests__/apps/planner/rankings-fixtures";
@@ -58,6 +59,19 @@ describe("HostedRankingsScreen", () => {
         fireEvent.mouseDown(await screen.findByRole("combobox", { name: "Pick your team" }));
         fireEvent.click(await screen.findByRole("option", { name: /902 Lakeview M2/ }));
         await waitFor(() => expect(actions.saveRankingsRecord).toHaveBeenCalledWith({ id: ID, document: expect.objectContaining({ myTeam: "902" }) }));
+    });
+
+    it("labels ratings as estimates on the hosted rankings and team pages", async () => {
+        const doc = sampleRankingsDoc();
+        actions.getRankingsRecord.mockResolvedValue({ success: true, data: { id: ID, title: doc.meta.title, document: doc } });
+        const { unmount } = wrap(<HostedRankingsScreen id={ID} view={{ name: "rankings" }} />);
+        await screen.findByRole("heading", { name: "Fall Pre-season" });
+        expect(screen.getAllByText(ESTIMATE_LABEL).length).toBeGreaterThan(0);
+        expect(screen.getByText(ESTIMATE_NOTE)).toBeInTheDocument();
+        unmount();
+        wrap(<HostedRankingsScreen id={ID} view={{ name: "team", number: "903" }} />);
+        await screen.findByRole("heading", { name: /Hilltop M1/ });
+        expect(screen.getByText(ESTIMATE_NOTE)).toBeInTheDocument();
     });
 
     it("offers an import for a cleared record", async () => {
