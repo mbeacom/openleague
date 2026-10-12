@@ -303,3 +303,20 @@ The session gains `roster`, a practice's tentative roster, or `null`:
 - The static planner's IndexedDB goes from version 5 to 6 with no data change, so a tab still running an older build reloads before it can rewrite a session without its roster.
 
 Spec: `docs/superpowers/specs/2026-10-07-practice-roster-suggestions-design.md`.
+
+### 2026-10-11: Drill video links (one additive diagram field, versions stay 1 and 2)
+
+Inside each drill's `playData` (`PlayData.version` stays 2), the document gains an optional `videos`: at most 5 links to videos of the drill, each `{ url, provider, startSec?, title? }`. `PLAN_VERSION` stays 1.
+
+**Rules:**
+- Links only. A plan never carries an uploaded video, a thumbnail, embed markup or anything fetched from a provider. The title is the coach's own text (1–80 characters once cleaned).
+- `url` is an `https` link, normalized by one shared parser (`lib/utils/video-links.ts`): no credentials, port or IP-literal host, at most 500 characters. YouTube, Vimeo (with an unlisted video's hash), Google Drive and OneDrive links are recognized and stored in a canonical form; any other public `https` link is kept as a plain link (`provider: "link"`). `provider` is re-derived from `url` on every read and write, never trusted. `startSec` (0–86 399) applies to YouTube and Vimeo only.
+- `videos` is advisory, like `equipmentNeeds`: a missing or `null` list reads as none, an unparseable entry is dropped (and logged) with the rest kept, and more than 5 valid entries keeps the first 5. A bad link never makes a diagram or a plan unreadable.
+- Writers emit `videos` only when the drill has at least one link. Hosted and static writes refuse an invalid entry, or a sixth link, as a field error.
+
+**Compatibility:**
+- A reader built before this amendment strips the key (its diagram schema is a plain object) and opens the file without the links. A round trip through an older build drops them and nothing else.
+- The static planner's IndexedDB goes from version 7 to 8 with no data change. The links live inside `playData`, which an older static build reads leniently but saves through its own schema, so the bump is what makes a tab still running an older build reload before it can save a drill without its links.
+- A hosted tab opened before the deploy reads plays through the updated server and receives the links inside `playData` without showing them; a save from it sends them back, and the updated server validates them as any other write.
+
+Practice-level videos, the inline player and bench-sheet lines are later phases of the same spec. Spec: `docs/superpowers/specs/2026-10-11-practice-video-links-design.md`.

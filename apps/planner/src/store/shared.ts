@@ -3,7 +3,7 @@ import type { ActionResult, LibraryPlaySummary } from "@/lib/planner-store";
 import { GOALIES_ATTENDING_MESSAGE, drillTags, toGoaliesAttending } from "@/lib/utils/drill-tags";
 import { AGE_GROUP_UNKNOWN_MESSAGE, ageGroupsSchema, toAgeGroups, type AgeGroup } from "@/lib/utils/age-groups";
 import { MAX_THUMBNAIL_SIZE, isAcceptableThumbnail } from "@/lib/utils/thumbnail-rules";
-import { sanitizePlayDataForWrite } from "@/lib/utils/play-data";
+import { playDataIssueMessage, sanitizePlayDataForWrite } from "@/lib/utils/play-data";
 import type { PlayData } from "@/types/practice-planner";
 import type { PlannerRepo, RepoTx, StoredPlay } from "./records";
 import type { LocalStoreOptions } from "./types";
@@ -123,7 +123,7 @@ export function writablePlayData(playData: PlayData): PlayData {
     } catch {
         throw new StoreRefusal("Invalid play data");
     }
-    if (!sanitized.ok) throw new StoreRefusal("Invalid play data", sanitized.issues);
+    if (!sanitized.ok) throw new StoreRefusal(playDataIssueMessage(sanitized.issues), sanitized.issues);
     return sanitized.data;
 }
 

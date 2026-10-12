@@ -18,7 +18,7 @@ import {
     type DuplicatePracticeSessionInput,
     type SaveSessionDrillInput,
 } from "@/lib/utils/validation";
-import { sanitizePlayDataForWrite } from "@/lib/utils/play-data";
+import { playDataIssueMessage, sanitizePlayDataForWrite } from "@/lib/utils/play-data";
 import { equipmentJson, readPracticeEquipment } from "@/lib/utils/equipment-needs";
 import {
     CLONE_SOURCE_SELECT,
@@ -37,7 +37,7 @@ export type ActionResult<T> =
 function failure(error: unknown, fallback: string): { success: false; error: string; details?: unknown } {
     if (error instanceof z.ZodError) {
         const isPlayData = error.issues.some((issue) => issue.path[0] === "playData");
-        return { success: false, error: isPlayData ? "Invalid play data" : "Invalid input", details: error.issues };
+        return { success: false, error: isPlayData ? playDataIssueMessage(error.issues) : "Invalid input", details: error.issues };
     }
     if (error instanceof SessionDrillError) {
         return { success: false, error: error.message };
@@ -67,7 +67,7 @@ export async function saveSessionDrill(
 
         const sanitized = sanitizePlayDataForWrite(validated.playData);
         if (!sanitized.ok) {
-            return { success: false, error: "Invalid play data", details: sanitized.issues };
+            return { success: false, error: playDataIssueMessage(sanitized.issues), details: sanitized.issues };
         }
         // Tags: absent = keep (owned drill) / inherit (fork) / default (new drill) (spec R3).
         const tags = {

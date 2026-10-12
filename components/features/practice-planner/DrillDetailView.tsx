@@ -6,7 +6,7 @@
  * from here. The primary click on a library card opens this; Edit is one of
  * its actions. Store and links come from the planner seam.
  */
-import { useCallback, useState, type ReactNode } from "react";
+import { useCallback, useId, useState, type ReactNode } from "react";
 import { Alert, Box, Button, Chip, CircularProgress, Divider, Paper, Stack, Typography } from "@mui/material";
 import {
     AddCircleOutline as AddToPracticeIcon,
@@ -33,6 +33,7 @@ import { downloadBlob } from "./export/download";
 import { PRINT_DIAGRAM_SIZE } from "./print/PrintDiagram";
 import { PlayDiagram } from "./PlayDiagram";
 import { PlayLegend } from "./PlayLegend";
+import { VideoLinkList } from "./VideoLinkList";
 
 export interface DrillDetailViewProps {
     play: LibraryPlay;
@@ -71,6 +72,8 @@ export function DrillDetailView({ play, teamId, canEdit, usageCount, extras }: D
     const tags = drillTags(play);
     const equipment = diagramEquipment(play.playData);
     const description = play.description?.trim() ?? "";
+    const videos = play.playData.videos ?? [];
+    const videosHeadingId = useId();
 
     const handleDuplicate = useCallback(async () => {
         setDuplicating(true);
@@ -220,6 +223,14 @@ export function DrillDetailView({ play, teamId, canEdit, usageCount, extras }: D
                     <Typography variant="body1" color={description ? "text.primary" : "text.secondary"} sx={{ whiteSpace: "pre-line", overflowWrap: "anywhere" }}>
                         {description || "No description yet."}
                     </Typography>
+                    {videos.length > 0 && (
+                        <Box component="section" aria-labelledby={videosHeadingId} sx={{ mt: 2 }}>
+                            <Typography id={videosHeadingId} variant="subtitle1" component="h3" sx={{ fontWeight: 700 }}>
+                                Videos
+                            </Typography>
+                            <VideoLinkList videos={videos} label={`Videos for ${play.name}`} />
+                        </Box>
+                    )}
                     <Divider sx={{ my: 2 }} />
                     <Stack component="dl" spacing={1.5} sx={{ m: 0 }}>
                         <DetailRow label="Focus">

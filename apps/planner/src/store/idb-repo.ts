@@ -16,7 +16,8 @@
  * practice equipment (sessions gained an optional equipment list, and stored
  * diagrams an optional equipmentNeeds); 6 = practice roster (sessions gained
  * an optional roster field); 7 = storage connectors (the links store, and the
- * rankings store, which takes over the single rankings record from meta).
+ * rankings store, which takes over the single rankings record from meta); 8 =
+ * drill video links (stored diagrams gained an optional videos list).
  * Bumping the version is what makes a tab still running an older build close
  * its connection and reload (onversionchange below) before this build writes
  * rows it can't read.
@@ -24,7 +25,7 @@
 import { META_RANKINGS, type DocumentLink, type PlannerRepo, type RepoTx, type StoredPlay, type StoredRankings, type StoredSession } from "./records";
 
 export const DB_NAME = "openleague-planner";
-export const DB_VERSION = 7;
+export const DB_VERSION = 8;
 const STORES = ["plays", "sessions", "meta", "rankings", "links"];
 
 export class StorageBlockedError extends Error {
@@ -111,6 +112,11 @@ export function upgradeDatabase(db: IDBDatabase, oldVersion: number, tx?: IDBTra
         db.createObjectStore("rankings", { keyPath: "id" });
         db.createObjectStore("links", { keyPath: "docKey" });
         if (oldVersion >= 1 && tx) moveRankingsOutOfMeta(tx, options);
+    }
+    if (oldVersion < 8 && db.version >= 8) {
+        // Drill video links: stored diagrams only gained an optional list (older records read
+        // with none), so there is nothing to migrate. The bump makes a tab still running an
+        // older build reload before it can save a drill without its links.
     }
 }
 

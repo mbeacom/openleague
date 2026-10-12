@@ -1,9 +1,10 @@
 /** The portable practice-plan document (ADR-0020): parse, serialize, limits, file name. */
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
     INVALID_PLAN_MESSAGE,
     MAX_DRILL_DESCRIPTION_LENGTH,
     MAX_PLAN_DRILLS,
+    MAX_PLAN_FILE_BYTES,
     NEWER_VERSION_MESSAGE,
     NOT_A_PLAN_MESSAGE,
     PLAN_ROW_KIND_MESSAGE,
@@ -751,5 +752,75 @@ describe("practice equipment in plan files (practice equipment spec R6)", () => 
         const parsed = older.safeParse(file.session.drills[0].drill.playData);
         expect(parsed.success).toBe(true);
         expect(parsed.success && "equipmentNeeds" in parsed.data).toBe(false);
+    });
+});
+
+describe("drill video links in plan files (practice video links R7)", () => {
+    const YT = "Ab3dE5fG7hJ";
+    const VIDEOS = [
+        { url: `https://www.youtube.com/watch?v=${YT}`, provider: "youtube" as const, startSec: 90, title: "Breakout demo" },
+        { url: "https://drive.google.com/file/d/1FakeDriveFileId_abcdefghijk/view", provider: "drive" as const },
+    ];
+    const FILMED: PlayData = { ...BOARD, videos: VIDEOS };
+    const filmed = (): PlanSessionInput =>
+        input({ drills: [{ sequence: 0, duration: 10, runsWithPrevious: false, instructions: null, name: "Breakout", description: null, playData: FILMED }] });
+
+    it("writes a drill's videos inside its diagram, and none for a drill without", () => {
+        const doc = serializePlan(filmed(), "openleague-static", NOW);
+        expect(drillRows(doc.session.drills)[0].drill.playData.videos).toEqual(VIDEOS);
+        const plain = serializePlan(input(), "openleague-static", NOW);
+        expect("videos" in drillRows(plain.session.drills)[0].drill.playData).toBe(false);
+    });
+
+    it("round-trips through a file", () => {
+        const raw = JSON.parse(JSON.stringify(serializePlan(filmed(), "openleague-hosted", NOW)));
+        const result = parsePlan(raw);
+        expect(result.ok).toBe(true);
+        if (result.ok) expect(drillRows(result.plan.session.drills)[0].drill.playData.videos).toEqual(VIDEOS);
+    });
+
+    it("opens a file with a bad entry, dropping that entry only", () => {
+        const raw = JSON.parse(JSON.stringify(serializePlan(filmed(), "openleague-static", NOW)));
+        raw.session.drills[0].drill.playData.videos.unshift({ url: "javascript:alert(1)", provider: "link" });
+        const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+        const result = parsePlan(raw);
+        errors.mockRestore();
+        expect(result.ok).toBe(true);
+        if (result.ok) expect(drillRows(result.plan.session.drills)[0].drill.playData.videos).toEqual(VIDEOS);
+    });
+
+    it("opens in a reader that predates the key: the same plan minus the videos", async () => {
+        const { z } = await import("zod");
+        // An older reader's diagram schema: a plain object without videos (Zod strips unknown keys).
+        const older = z.object({ version: z.literal(2), players: z.array(z.unknown()), drawings: z.array(z.unknown()), equipment: z.array(z.unknown()), annotations: z.array(z.unknown()) });
+        const file = JSON.parse(JSON.stringify(serializePlan(filmed(), "openleague-static", NOW)));
+        const parsed = older.safeParse(file.session.drills[0].drill.playData);
+        expect(parsed.success).toBe(true);
+        expect(parsed.success && "videos" in parsed.data).toBe(false);
+
+        // With the key removed everywhere, today's reader yields the same plan minus the videos.
+        const stripped = JSON.parse(JSON.stringify(file));
+        delete stripped.session.drills[0].drill.playData.videos;
+        const withVideos = parsePlan(file);
+        const without = parsePlan(stripped);
+        expect(withVideos.ok && without.ok).toBe(true);
+        if (withVideos.ok && without.ok) {
+            const expected = JSON.parse(JSON.stringify(withVideos.plan));
+            delete expected.session.drills[0].drill.playData.videos;
+            expect(JSON.parse(JSON.stringify(without.plan))).toEqual(expected);
+        }
+    });
+
+    it("fits 50 drills with 5 maximum-length links each under the file limit", () => {
+        const longLink = (n: number) => ({ url: `https://example.org/${String(n).padEnd(480, "x")}`, provider: "link" as const, title: "T".repeat(80) });
+        const playData: PlayData = { ...BOARD, videos: [1, 2, 3, 4, 5].map(longLink) };
+        const drills = Array.from({ length: MAX_PLAN_DRILLS }, (_, i) => ({
+            sequence: i, duration: 1, runsWithPrevious: false, instructions: null, name: `Drill ${i + 1}`, description: null, playData,
+        }));
+        const doc = serializePlan(input({ durationMinutes: 300, drills }), "openleague-static", NOW);
+        expect(playData.videos?.[0].url.length).toBeLessThanOrEqual(500);
+        expect(planByteLength(doc)).toBeLessThan(MAX_PLAN_FILE_BYTES);
+        const result = parsePlan(JSON.parse(JSON.stringify(doc)));
+        expect(result.ok).toBe(true);
     });
 });
