@@ -6,8 +6,10 @@ import {
     RANKINGS_FORMAT,
     createRankingsDocument,
     readRankingsFile,
+    readRankingsFileDocument,
     serializeRankings,
 } from "@/lib/rankings-document";
+import { encodeDocument } from "@/lib/document-formats";
 import { INVALID_ENVELOPE_MESSAGE, serializeDocument, wrapDocument } from "@/lib/document-envelope";
 import { PLAN_FORMAT, serializePlan } from "@/lib/plan-document";
 
@@ -47,5 +49,36 @@ describe("readRankingsFile", () => {
     it("treats a file that can't be read as not a rankings file, without throwing", async () => {
         const unreadable = { size: 10, text: () => Promise.reject(new Error("read failed")) } as unknown as File;
         await expect(readRankingsFile(unreadable)).resolves.toEqual({ ok: false, error: { code: "not-rankings", message: NOT_RANKINGS_MESSAGE } });
+    });
+});
+
+describe("readRankingsFileDocument", () => {
+    const LAST_MODIFIED = Date.parse("2026-10-09T08:30:00.000Z");
+
+    it("returns a wrapped file's envelope id and updatedAt, not the file's own time", async () => {
+        const text = serializeDocument(wrapDocument(RANKINGS_FORMAT, RANKINGS, META));
+        const result = await readRankingsFileDocument(new File([text], "fall.rankings.json", { lastModified: LAST_MODIFIED }));
+        expect(result.ok && { id: result.id, updatedAt: result.updatedAt, wrapped: result.wrapped }).toEqual({ id: META.id, updatedAt: META.updatedAt, wrapped: true });
+        expect(result.ok && result.doc).toEqual(RANKINGS);
+    });
+
+    it("gives a bare file no id, and the file's lastModified as its time (rankings carry none)", async () => {
+        const result = await readRankingsFileDocument(new File([serializeRankings(RANKINGS)], "fall.rankings.json", { lastModified: LAST_MODIFIED }));
+        expect(result.ok && { id: result.id, updatedAt: result.updatedAt, wrapped: result.wrapped }).toEqual({ id: null, updatedAt: "2026-10-09T08:30:00.000Z", wrapped: false });
+    });
+
+    it("says unknown (null) for a bare file with no usable time", async () => {
+        const result = await readRankingsFileDocument(new File([serializeRankings(RANKINGS)], "fall.rankings.json", { lastModified: 0 }));
+        expect(result.ok && result.updatedAt).toBeNull();
+    });
+
+    it("passes the envelope id through any format", async () => {
+        const text = await encodeDocument(wrapDocument(RANKINGS_FORMAT, RANKINGS, META), "toml");
+        const result = await readRankingsFileDocument(new File([text], "fall.rankings.toml"));
+        expect(result.ok && result.id).toBe(META.id);
+    });
+
+    it("fails as readRankingsFile does", async () => {
+        expect(await readRankingsFileDocument(new File(["not json"], "notes.txt"))).toEqual({ ok: false, error: { code: "not-rankings", message: NOT_RANKINGS_MESSAGE } });
     });
 });

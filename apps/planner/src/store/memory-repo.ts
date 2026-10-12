@@ -4,12 +4,14 @@
  * IndexedDB's semantics: values are structured clones, writes are serialized
  * and all-or-nothing, reads can't write.
  */
-import type { PlannerRepo, RepoTx, StoredPlay, StoredSession } from "./records";
+import type { DocumentLink, PlannerRepo, RepoTx, StoredPlay, StoredRankings, StoredSession } from "./records";
 
 interface Tables {
     plays: Map<string, StoredPlay>;
     sessions: Map<string, StoredSession>;
     meta: Map<string, unknown>;
+    rankings: Map<string, StoredRankings>;
+    links: Map<string, DocumentLink>;
 }
 
 const copy = <T,>(value: T): T => structuredClone(value);
@@ -46,11 +48,31 @@ function txOver(tables: Tables, writable: boolean): RepoTx {
             if (!writable) readOnly();
             tables.meta.set(key, copy(value));
         },
+        getRankingsRecord: async (id) => copy(tables.rankings.get(id)),
+        putRankingsRecord: async (record) => {
+            if (!writable) readOnly();
+            tables.rankings.set(record.id, copy(record));
+        },
+        deleteRankingsRecord: async (id) => {
+            if (!writable) readOnly();
+            tables.rankings.delete(id);
+        },
+        allRankingsRecords: async () => [...tables.rankings.values()].map(copy),
+        getLink: async (docKey) => copy(tables.links.get(docKey)),
+        putLink: async (link) => {
+            if (!writable) readOnly();
+            tables.links.set(link.docKey, copy(link));
+        },
+        deleteLink: async (docKey) => {
+            if (!writable) readOnly();
+            tables.links.delete(docKey);
+        },
+        allLinks: async () => [...tables.links.values()].map(copy),
     };
 }
 
 export function createMemoryRepo(): PlannerRepo {
-    let tables: Tables = { plays: new Map(), sessions: new Map(), meta: new Map() };
+    let tables: Tables = { plays: new Map(), sessions: new Map(), meta: new Map(), rankings: new Map(), links: new Map() };
     let queue: Promise<unknown> = Promise.resolve();
 
     function enqueue<T>(job: () => Promise<T>): Promise<T> {

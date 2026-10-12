@@ -106,14 +106,15 @@ describe.each(REPOS)("the key stays contained (%s store)", (_repoName, open) => 
             expect(text).not.toContain(SENTINEL);
         }
 
-        // No store holds it: plays, sessions, and every meta record (settings, team profile, rankings…).
+        // No store holds it: plays, sessions, and every meta record (settings, team profile…), rankings and links.
         const dump = await repo.read(async (tx) => {
             const meta: Record<string, unknown> = {};
             for (const key of [META_AI_SETTINGS, META_PERSIST_REQUESTED, META_RANKINGS, META_SEEDED_STARTER_IDS, META_STARTERS_SEEDED, META_TEAM_PROFILE, META_THUMBNAIL_STYLE]) {
                 meta[key] = await tx.getMeta(key);
             }
-            return { plays: await tx.allPlays(), sessions: await tx.allSessions(), meta };
+            return { plays: await tx.allPlays(), sessions: await tx.allSessions(), meta, rankings: await tx.allRankingsRecords(), links: await tx.allLinks() };
         });
+        expect(dump.rankings.length).toBe(1);
         expect(dump.sessions.length).toBe(1);
         expect(JSON.stringify(dump)).not.toContain(SENTINEL);
     });

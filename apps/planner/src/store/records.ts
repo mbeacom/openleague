@@ -5,6 +5,7 @@
  */
 import type { EquipmentCountItem, PlayFocus, PlayGoalies, SessionRowKind } from "@/types/practice-planner";
 import type { AgeGroup } from "@/lib/utils/age-groups";
+import type { ConnectorId } from "../storage/connector";
 
 export interface StoredPlay {
     id: string;
@@ -81,6 +82,43 @@ export interface StoredSession {
 }
 
 /**
+ * One rankings document (storage connectors spec R3): keyed by a local id, so a
+ * device can hold several. `document` is an openleague.rankings document,
+ * validated on read (a damaged record is reported, never thrown).
+ */
+export interface StoredRankings {
+    id: string;
+    /** The envelope id (a UUID), kept for the document's life; "Keep both" gives it a new one. */
+    documentId: string;
+    document: unknown;
+    createdAt: Date;
+    updatedAt: Date;
+}
+
+/**
+ * Which remote file a local document is saved to (storage connectors spec R3).
+ * Per-device sync state: it never goes into a file, so a copied or emailed file
+ * carries none. At most one link per document. It holds no credential.
+ */
+export interface DocumentLink {
+    /** `${kind}:${localId}` (docKeyOf). */
+    docKey: string;
+    /** The envelope id. */
+    documentId: string;
+    connector: ConnectorId;
+    remote: { fileId: string; name: string; driveId?: string };
+    /** The remote revision this device last read or wrote. */
+    baseRevision: string | null;
+    /** SHA-256 of the payload at that revision. */
+    baseHash: string;
+    /** True if baseRevision came from this device's own save, false if from a read. */
+    baseWrittenHere: boolean;
+    /** Local edits since baseRevision. */
+    dirty: boolean;
+    lastSyncedAt: string;
+}
+
+/**
  * One transaction. Work given to read/write must await only these calls:
  * awaiting anything else lets IndexedDB commit the transaction early.
  */
@@ -96,6 +134,14 @@ export interface RepoTx {
     allSessions: () => Promise<StoredSession[]>;
     getMeta: (key: string) => Promise<unknown>;
     putMeta: (key: string, value: unknown) => Promise<void>;
+    getRankingsRecord: (id: string) => Promise<StoredRankings | undefined>;
+    putRankingsRecord: (record: StoredRankings) => Promise<void>;
+    deleteRankingsRecord: (id: string) => Promise<void>;
+    allRankingsRecords: () => Promise<StoredRankings[]>;
+    getLink: (docKey: string) => Promise<DocumentLink | undefined>;
+    putLink: (link: DocumentLink) => Promise<void>;
+    deleteLink: (docKey: string) => Promise<void>;
+    allLinks: () => Promise<DocumentLink[]>;
 }
 
 export interface PlannerRepo {
@@ -116,7 +162,11 @@ export const META_PERSIST_REQUESTED = "persistRequested";
 export const META_THUMBNAIL_STYLE = "thumbnailStyle";
 /** The device's "Your team" profile (practice logo spec R4): a TeamProfile, or null once cleared. Never in plan files. */
 export const META_TEAM_PROFILE = "teamProfile";
-/** The rankings document (static rankings spec): one per device, in the meta store, so no schema bump. */
+/**
+ * Legacy: where builds before IndexedDB version 7 kept the device's one rankings
+ * document. The version 7 upgrade moves it into the rankings store and deletes
+ * this key; nothing else reads or writes it.
+ */
 export const META_RANKINGS = "rankings";
 /** AI settings (ADR-0023): provider, model, base URL and acknowledgement. Never a key. */
 export const META_AI_SETTINGS = "aiSettings";

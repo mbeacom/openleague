@@ -5,8 +5,10 @@ import {
     NOT_A_PLAN_MESSAGE,
     PLAN_FORMAT,
     readPlanFile,
+    readPlanFileDocument,
     serializePlan,
 } from "@/lib/plan-document";
+import { encodeDocument } from "@/lib/document-formats";
 import { DOCUMENT_ENVELOPE_FORMAT, ENVELOPE_OVERHEAD_BYTES, NEWER_ENVELOPE_MESSAGE, UNKNOWN_KIND_MESSAGE, serializeDocument, wrapDocument } from "@/lib/document-envelope";
 import { RANKINGS_FORMAT, createRankingsDocument } from "@/lib/rankings-document";
 import { createEmptyPlayData } from "@/lib/utils/play-data";
@@ -71,5 +73,40 @@ describe("readPlanFile", () => {
     it("treats a file that can't be read as not a plan, without throwing", async () => {
         const unreadable = { size: 10, text: () => Promise.reject(new Error("read failed")) } as unknown as File;
         await expect(readPlanFile(unreadable)).resolves.toEqual({ ok: false, error: { code: "not-a-plan", message: NOT_A_PLAN_MESSAGE } });
+    });
+});
+
+describe("readPlanFileDocument", () => {
+    const LAST_MODIFIED = Date.parse("2026-10-09T08:30:00.000Z");
+
+    it("returns a wrapped plan's envelope id and updatedAt", async () => {
+        const text = serializeDocument(wrapDocument(PLAN_FORMAT, PLAN, META));
+        const result = await readPlanFileDocument(new File([text], "tuesday.olplan.json", { lastModified: LAST_MODIFIED }));
+        expect(result.ok && { id: result.id, updatedAt: result.updatedAt, wrapped: result.wrapped, title: result.plan.session.title }).toEqual({
+            id: META.id,
+            updatedAt: META.updatedAt,
+            wrapped: true,
+            title: "Tuesday Skills",
+        });
+    });
+
+    it("gives a bare plan no id, and its exportedAt before the file's own time", async () => {
+        const result = await readPlanFileDocument(new File([JSON.stringify(PLAN)], "tuesday.olplan.json", { lastModified: LAST_MODIFIED }));
+        expect(result.ok && { id: result.id, updatedAt: result.updatedAt, wrapped: result.wrapped }).toEqual({ id: null, updatedAt: PLAN.exportedAt, wrapped: false });
+    });
+
+    it("passes the envelope id through any format", async () => {
+        const text = await encodeDocument(wrapDocument(PLAN_FORMAT, PLAN, META), "yaml");
+        const result = await readPlanFileDocument(new File([text], "tuesday.olplan.yaml"));
+        expect(result.ok && result.id).toBe(META.id);
+    });
+
+    it("keeps readPlanFile's result to the plan alone", async () => {
+        const text = serializeDocument(wrapDocument(PLAN_FORMAT, PLAN, META));
+        expect(await readPlanFile(new File([text], "tuesday.olplan.json", { lastModified: LAST_MODIFIED }))).toEqual({ ok: true, plan: PLAN });
+    });
+
+    it("fails as readPlanFile does", async () => {
+        expect(await readPlanFileDocument(new File(["not json"], "notes.txt"))).toEqual({ ok: false, error: { code: "not-a-plan", message: NOT_A_PLAN_MESSAGE } });
     });
 });

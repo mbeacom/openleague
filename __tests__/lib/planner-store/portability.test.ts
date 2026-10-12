@@ -28,6 +28,9 @@ const ENTRIES = [
     "lib/rankings-document/pull.ts",
     // The static planner's whole bundle (sub-project 3).
     "apps/planner/src/main.tsx",
+    // The storage connector seam (ADR-0022), not yet reached from main.tsx.
+    "apps/planner/src/storage/sync.ts",
+    "apps/planner/src/storage/fake.ts",
 ];
 
 /** Forbidden even as `import type`: the static app has no generated Prisma client. */

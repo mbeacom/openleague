@@ -2,7 +2,10 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { IDBFactory } from "fake-indexeddb";
 import { createMemoryRepo } from "@/apps/planner/src/store/memory-repo";
 import { DB_VERSION, OPEN_TIMEOUT_MS, StorageBlockedError, openIdbRepo, upgradeDatabase } from "@/apps/planner/src/store/idb-repo";
-import type { PlannerRepo, StoredPlay, StoredSession } from "@/apps/planner/src/store/records";
+import { META_RANKINGS, type DocumentLink, type PlannerRepo, type StoredPlay, type StoredRankings, type StoredSession } from "@/apps/planner/src/store/records";
+import { createLocalPlannerStore } from "@/apps/planner/src/store/local-store";
+import { RANKINGS_DAMAGED } from "@/apps/planner/src/store/rankings";
+import { createRankingsDocument } from "@/lib/rankings-document";
 
 let dbSeq = 0;
 const AT = new Date("2026-10-03T12:00:00.000Z");
@@ -70,6 +73,37 @@ describe.each(REPOS)("%s repo", (_name, open) => {
         const repo = await open();
         await expect(repo.read((tx) => tx.putPlay(play("p1")))).rejects.toBeDefined();
         expect(await repo.read((tx) => tx.getPlay("p1"))).toBeUndefined();
+    });
+
+    it("stores rankings records by id and links by document key", async () => {
+        const repo = await open();
+        const record: StoredRankings = { id: "r1", documentId: "r1", document: { format: "openleague.rankings" }, createdAt: AT, updatedAt: AT };
+        const link: DocumentLink = {
+            docKey: "openleague.rankings:r1",
+            documentId: "r1",
+            connector: "google-drive",
+            remote: { fileId: "f1", name: "fall.rankings.json", driveId: "d1" },
+            baseRevision: "rev-1",
+            baseHash: "abc",
+            baseWrittenHere: false,
+            dirty: true,
+            lastSyncedAt: AT.toISOString(),
+        };
+        await repo.write(async (tx) => {
+            await tx.putRankingsRecord(record);
+            await tx.putLink(link);
+        });
+        expect(await repo.read((tx) => tx.getRankingsRecord("r1"))).toEqual(record);
+        expect(await repo.read((tx) => tx.getLink("openleague.rankings:r1"))).toEqual(link);
+        expect(await repo.read((tx) => tx.allRankingsRecords())).toEqual([record]);
+        expect(await repo.read((tx) => tx.allLinks())).toEqual([link]);
+        await expect(repo.read((tx) => tx.putLink(link))).rejects.toBeDefined();
+        await repo.write(async (tx) => {
+            await tx.deleteRankingsRecord("r1");
+            await tx.deleteLink("openleague.rankings:r1");
+        });
+        expect(await repo.read((tx) => tx.allRankingsRecords())).toEqual([]);
+        expect(await repo.read((tx) => tx.getLink("openleague.rankings:r1"))).toBeUndefined();
     });
 
     it("applies concurrent writes one after another", async () => {
@@ -184,7 +218,7 @@ describe("IndexedDB schema versions (practice timing rows, practice staff)", () 
         });
     }
 
-    it("is version 6", () => expect(DB_VERSION).toBe(6));
+    it("is version 7", () => expect(DB_VERSION).toBe(7));
 
     it("opens a version 1 database at the current version with every store, index and record intact", async () => {
         const factory = new IDBFactory();
@@ -299,6 +333,127 @@ describe("IndexedDB schema versions (practice timing rows, practice staff)", () 
         expect(await repo.read((tx) => tx.getSession("s1"))).toEqual(v1Session);
         expect(await versionOf(factory, "v5-open-tab")).toBe(DB_VERSION);
         repo.close();
+    });
+
+    it("makes a tab still open at version 6 (rankings in meta) reload before this build writes, keeping its data", async () => {
+        const factory = new IDBFactory();
+        const v6 = await openAt(factory, "v6-open-tab", 6);
+        await seed(v6);
+        // A build that keeps rankings in meta would write where this build no longer reads: its tab must reload first.
+        const reload = vi.fn();
+        v6.onversionchange = () => {
+            v6.close();
+            reload();
+        };
+        const repo = await openIdbRepo({ factory, name: "v6-open-tab" });
+        expect(reload).toHaveBeenCalledTimes(1);
+        expect(await repo.read((tx) => tx.getSession("s1"))).toEqual(v1Session);
+        expect(await versionOf(factory, "v6-open-tab")).toBe(DB_VERSION);
+        repo.close();
+    });
+});
+
+describe("IndexedDB version 7 (storage connectors: links, and rankings keyed by id)", () => {
+    const MOVED_AT = new Date("2026-10-11T09:00:00.000Z");
+    const upgrade = { now: () => MOVED_AT, newId: () => "0b7c1f0e-5a3e-4c1e-9a47-6f0d7b2f8a11" };
+    const RANKINGS = { format: "openleague.rankings", version: 1, meta: { title: "Fall Pre-season" } };
+
+    function openAt(factory: IDBFactory, name: string, version: number): Promise<IDBDatabase> {
+        return new Promise((resolve, reject) => {
+            const request = factory.open(name, version);
+            request.onupgradeneeded = (event) => upgradeDatabase(request.result, event.oldVersion, request.transaction);
+            request.onsuccess = () => resolve(request.result);
+            request.onerror = () => reject(request.error);
+        });
+    }
+
+    /** What a version 6 build stored: the one rankings document under a meta key. */
+    async function v6WithRankings(factory: IDBFactory, name: string, value: unknown): Promise<void> {
+        const v6 = await openAt(factory, name, 6);
+        await new Promise<void>((resolve, reject) => {
+            const tx = v6.transaction(["sessions", "meta"], "readwrite");
+            tx.objectStore("sessions").put(session("s1"));
+            tx.objectStore("meta").put({ key: META_RANKINGS, value });
+            tx.objectStore("meta").put({ key: "thumbnailStyle", value: 3 });
+            tx.oncomplete = () => resolve();
+            tx.onerror = () => reject(tx.error);
+        });
+        v6.close();
+    }
+
+    it("moves the version 6 rankings record out of meta into the rankings store, keeping everything else", async () => {
+        const factory = new IDBFactory();
+        await v6WithRankings(factory, "v6-rankings", RANKINGS);
+
+        const repo = await openIdbRepo({ factory, name: "v6-rankings", upgrade });
+        const contents = await repo.read(async (tx) => ({
+            rankings: await tx.allRankingsRecords(),
+            legacy: await tx.getMeta(META_RANKINGS),
+            style: await tx.getMeta("thumbnailStyle"),
+            sessions: await tx.allSessions(),
+            links: await tx.allLinks(),
+        }));
+        repo.close();
+
+        expect(contents.rankings).toEqual([
+            { id: "0b7c1f0e-5a3e-4c1e-9a47-6f0d7b2f8a11", documentId: "0b7c1f0e-5a3e-4c1e-9a47-6f0d7b2f8a11", document: RANKINGS, createdAt: MOVED_AT, updatedAt: MOVED_AT },
+        ]);
+        expect(contents.legacy).toBeUndefined();
+        expect(contents.style).toBe(3);
+        expect(contents.sessions.map((s) => s.id)).toEqual(["s1"]);
+        expect(contents.links).toEqual([]);
+    });
+
+    it("keeps showing the moved document through the store, damaged or not", async () => {
+        const factory = new IDBFactory();
+        await v6WithRankings(factory, "v6-store", createRankingsDocument({ title: "Fall" }));
+        const repo = await openIdbRepo({ factory, name: "v6-store", upgrade });
+        const store = createLocalPlannerStore(repo);
+        const read = await store.getRankings();
+        expect(read.success && read.data?.meta.title).toBe("Fall");
+        repo.close();
+
+        const damagedFactory = new IDBFactory();
+        // Moved as stored: a record that didn't parse before still reports itself, so the screen offers "Start over".
+        await v6WithRankings(damagedFactory, "v6-damaged", RANKINGS);
+        const damagedRepo = await openIdbRepo({ factory: damagedFactory, name: "v6-damaged", upgrade });
+        expect(await createLocalPlannerStore(damagedRepo).getRankings()).toEqual({ success: false, error: RANKINGS_DAMAGED });
+        damagedRepo.close();
+    });
+
+    it("moves a cleared record (null) as nothing, and drops the meta key", async () => {
+        const factory = new IDBFactory();
+        await v6WithRankings(factory, "v6-cleared", null);
+        const repo = await openIdbRepo({ factory, name: "v6-cleared", upgrade });
+        const contents = await repo.read(async (tx) => ({ rankings: await tx.allRankingsRecords(), legacy: await tx.getMeta(META_RANKINGS) }));
+        repo.close();
+        expect(contents).toEqual({ rankings: [], legacy: undefined });
+    });
+
+    it("upgrades a version 6 database with no rankings without inventing one", async () => {
+        const factory = new IDBFactory();
+        const v6 = await openAt(factory, "v6-none", 6);
+        v6.close();
+        const repo = await openIdbRepo({ factory, name: "v6-none", upgrade });
+        expect(await repo.read((tx) => tx.allRankingsRecords())).toEqual([]);
+        repo.close();
+    });
+
+    it("creates every store on a fresh install", async () => {
+        const factory = new IDBFactory();
+        const repo = await openIdbRepo({ factory, name: "fresh", upgrade });
+        repo.close();
+        const db = await new Promise<IDBDatabase>((resolve, reject) => {
+            const request = factory.open("fresh");
+            request.onsuccess = () => resolve(request.result);
+            request.onerror = () => reject(request.error);
+        });
+        expect(db.version).toBe(7);
+        expect([...db.objectStoreNames].sort()).toEqual(["links", "meta", "plays", "rankings", "sessions"]);
+        const tx = db.transaction(["rankings", "links"], "readonly");
+        expect(tx.objectStore("rankings").keyPath).toBe("id");
+        expect(tx.objectStore("links").keyPath).toBe("docKey");
+        db.close();
     });
 });
 
