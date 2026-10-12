@@ -128,7 +128,14 @@ export function readTeamProfile(raw: unknown): TeamProfile | null {
 
 /** The mark a profile draws. `id` seeds the Crest's fallback color (the static planner passes LOCAL_TEAM_ID). */
 export function toTeamMark(profile: TeamProfile, id: string): TeamMark {
-    return { id, name: profile.name, logoUrl: profile.logo?.dataUrl ?? null, color: profile.primaryColor, logoImage: profile.logo };
+    return {
+        id,
+        name: profile.name,
+        logoUrl: profile.logo?.dataUrl ?? null,
+        color: profile.primaryColor,
+        secondaryColor: profile.secondaryColor,
+        logoImage: profile.logo,
+    };
 }
 
 /** The mark image's alt text (spec R5), from the cleaned name. Callers escape it for their format. */

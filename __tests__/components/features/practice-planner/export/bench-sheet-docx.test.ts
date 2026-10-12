@@ -8,6 +8,7 @@ import {
     renderBenchSheetDocxBytes,
 } from "@/components/features/practice-planner/export/bench-sheet-docx";
 import type { BenchSheetModel } from "@/components/features/practice-planner/export/bench-sheet-model";
+import { DEFAULT_TEAM_PALETTE, teamPalette } from "@/lib/utils/team-palette";
 import { unzipEntry, zipEntryNames } from "@/__tests__/helpers/zip";
 
 const PNG = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
@@ -36,6 +37,8 @@ const MODEL: BenchSheetModel = {
         drill(2, { diagram: null }),
         drill(3),
     ],
+    palette: DEFAULT_TEAM_PALETTE,
+    firstPageDrills: 0,
 };
 
 async function documentXml(model: BenchSheetModel): Promise<string> {
@@ -76,6 +79,26 @@ describe("renderBenchSheetDocx", () => {
     it("starts every pair of drills on a new page", async () => {
         const xml = await documentXml(MODEL);
         expect(xml.match(/<w:pageBreakBefore\/>/g)).toHaveLength(2); // drills 1 and 3
+    });
+
+    it("lets the drills that fit follow the legend on page 1, then starts each later pair on a new page", async () => {
+        const xml = await documentXml({ ...MODEL, firstPageDrills: 1 });
+        expect(xml.match(/<w:pageBreakBefore\/>/g)).toHaveLength(1); // drill 2 only
+        const two = await documentXml({ ...MODEL, drills: [...MODEL.drills, drill(4)], firstPageDrills: 2 });
+        expect(two.match(/<w:pageBreakBefore\/>/g)).toHaveLength(1); // drill 3 only
+    });
+
+    it("colors headings, table headers and the header rule from the palette", async () => {
+        const defaults = await documentXml(MODEL);
+        expect(defaults).toContain('w:color w:val="0D47A1"');
+        expect(defaults).toContain('w:fill="E3F2FD"');
+        expect(defaults).toMatch(/<w:bottom [^>]*w:color="1976D2"/);
+        const team = teamPalette({ color: "#7A0019", secondaryColor: "#1B5E20" });
+        const xml = await documentXml({ ...MODEL, palette: team });
+        expect(xml).toContain(`w:color w:val="${team.ink.slice(1)}"`);
+        expect(xml).toContain(`w:fill="${team.tint.slice(1)}"`);
+        expect(xml).toMatch(/<w:bottom [^>]*w:color="1B5E20"/);
+        expect(xml).not.toContain('w:val="0D47A1"');
     });
 
     it("embeds one picture per readable diagram and swatch, and says when a diagram is missing", async () => {
@@ -131,6 +154,11 @@ describe("renderBenchSheetDocx", () => {
         const modelImports = source.match(/^import\b[^;]*from\s+"\.\/bench-sheet-model";/gm) ?? [];
         expect(modelImports.length).toBeGreaterThan(0);
         for (const statement of modelImports) expect(statement).toMatch(/^import type\b/);
+        // Team colors arrive as data: the palette module loads MUI, so only its types come in.
+        for (const statement of source.match(/^import\b[^;]*from\s+"@\/lib\/utils\/team-palette";/gm) ?? []) expect(statement).toMatch(/^import type\b/);
+        // The shared pagination it does load imports nothing but types.
+        const layout = readFileSync(path.join(process.cwd(), "components/features/practice-planner/export/bench-sheet-layout.ts"), "utf8");
+        for (const statement of layout.match(/^import\b[^;]*;/gm) ?? []) expect(statement).toMatch(/^import type\b/);
     });
 });
 
@@ -149,6 +177,7 @@ describe("renderBenchSheetDocx: rotation and the gap (spec R10)", () => {
         const xml = await documentXml({
             ...MODEL,
             gap: "2 min between blocks",
+            legend: [],
             timeline: [{
                 kind: "rotation",
                 start: "6:00 PM",
@@ -246,6 +275,31 @@ describe("renderBenchSheetDocx: equipment (practice equipment spec R5)", () => {
         expect(xml).toContain("No drills planned");
         expect(xml).toContain(">Equipment<");
         expect(xml).toContain("• Cones ×12");
+    });
+
+    it("runs the equipment and the legend in three columns, as the HTML file and the page-1 estimate do", async () => {
+        const xml = await documentXml({
+            ...MODEL,
+            equipment: ["Cones", "Pucks", "Nets", "Pylons", "Sticks"],
+            legend: ["Pass", "Shot", "Skate", "Backward"].map((label) => ({ label, image: PNG })),
+            drills: [],
+        });
+        // Timeline, equipment, legend
+        const tables = xml.split("<w:tbl>").slice(1).map((table) => table.slice(0, table.indexOf("</w:tbl>")));
+        expect(tables).toHaveLength(3);
+        for (const [table, rows] of [[tables[1], 2], [tables[2], 2]] as const) {
+            expect(table.match(/<w:gridCol /g)).toHaveLength(3);
+            expect(table.match(/<w:tr\b/g)).toHaveLength(rows);
+            expect(table).toMatch(/<w:tblBorders>(?:(?!<\/w:tblBorders>)[\s\S])*w:val="none"/);
+        }
+        // Down each column first, as CSS columns fill: Cones and Pucks share the first column
+        const equipment = tables[1];
+        expect(equipment.indexOf("• Cones")).toBeLessThan(equipment.indexOf("• Nets"));
+        const firstRow = equipment.slice(0, equipment.indexOf("</w:tr>"));
+        expect(firstRow).toContain("• Cones");
+        expect(firstRow).toContain("• Nets");
+        expect(firstRow).toContain("• Sticks");
+        expect(firstRow).not.toContain("• Pucks");
     });
 
     it("has no Equipment heading when the practice needs nothing", async () => {

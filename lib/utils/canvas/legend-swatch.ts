@@ -37,7 +37,7 @@ export function paintLegendSwatch(ctx: CanvasRenderingContext2D, entry: LegendEn
             strokeSwatch("skate", "stop");
             break;
         case "role":
-            drawPlayerGlyph(ctx, { id: "", role: entry.role, label: "", color: ROLE_DEFAULT_COLORS[entry.role], position: { x: 0, y: 0 } }, center, 8, false);
+            drawPlayerGlyph(ctx, { id: "", role: entry.role, label: "", color: entry.color ?? ROLE_DEFAULT_COLORS[entry.role], position: { x: 0, y: 0 } }, center, 8, false);
             break;
         case "equipment":
             drawEquipmentGlyph(ctx, { kind: entry.kind, rotation: 0 }, center, 8, false);

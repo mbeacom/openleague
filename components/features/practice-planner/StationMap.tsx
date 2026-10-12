@@ -17,6 +17,7 @@ import {
 } from "@/lib/utils/canvas/station-map";
 import { backingPixelRatio, sizeBackingStore, watchPixelRatio } from "@/lib/utils/canvas/backing-store";
 import { PlayLegend } from "./PlayLegend";
+import type { PlayerRole } from "@/types/practice-planner";
 import { useDiagramFontVersion } from "@/lib/hooks/useDiagramFontVersion";
 
 // Intrinsic (logical) canvas size; CSS scales it to the container's width.
@@ -28,9 +29,11 @@ export interface StationMapProps {
     stations: StationMapStation[];
     /** Index into `stations` of the drill being viewed. */
     activeIndex: number;
+    /** Team colors the stations' markers were remapped to, for the legend; absent: defaults */
+    roleColors?: Partial<Record<PlayerRole, string>>;
 }
 
-export function StationMap({ stations, activeIndex }: StationMapProps) {
+export function StationMap({ stations, activeIndex, roleColors }: StationMapProps) {
     const canvasRef = useRef<HTMLCanvasElement>(null);
     // The devicePixelRatio last seen changing (null until it first does). Browser
     // zoom or moving the window to another display changes it; the redraw below
@@ -72,7 +75,7 @@ export function StationMap({ stations, activeIndex }: StationMapProps) {
                 aria-label={`Station map: ${description}`}
                 style={{ width: "100%", height: "auto", display: "block" }}
             />
-            <PlayLegend playData={combinedLegendData(stations)} />
+            <PlayLegend playData={combinedLegendData(stations)} roleColors={roleColors} />
         </Stack>
     );
 }

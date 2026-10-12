@@ -2,6 +2,7 @@
 import { describe, expect, it } from "vitest";
 import { EXPORT_CSP, escapeHtml, renderBenchSheetHtml } from "@/components/features/practice-planner/export/bench-sheet-html";
 import type { BenchSheetModel } from "@/components/features/practice-planner/export/bench-sheet-model";
+import { DEFAULT_TEAM_PALETTE, teamPalette } from "@/lib/utils/team-palette";
 
 const PNG = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
 
@@ -28,6 +29,8 @@ const MODEL: BenchSheetModel = {
     equipment: [],
     legend: [{ label: "Pass", image: PNG }],
     drills: [drill(1, { station: "Station 1 of 2", text: "Hard to the net" }), drill(2), drill(3)],
+    palette: DEFAULT_TEAM_PALETTE,
+    firstPageDrills: 0,
 };
 
 const parse = (html: string) => new DOMParser().parseFromString(html, "text/html");
@@ -61,6 +64,36 @@ describe("renderBenchSheetHtml", () => {
         const pages = Array.from(doc.querySelectorAll(".drills > .page"));
         expect(pages.map((page) => page.querySelectorAll("article.drill").length)).toEqual([2, 1]);
         for (const page of pages) expect(page.getAttribute("style")).toContain("page-break-before:always");
+    });
+
+    it("lets the drills that fit follow the legend on page 1, then pairs the rest on fresh pages", () => {
+        const doc = parse(renderBenchSheetHtml({ ...MODEL, firstPageDrills: 1 }));
+        const pages = Array.from(doc.querySelectorAll(".drills > .page"));
+        expect(pages.map((page) => page.querySelectorAll("article.drill").length)).toEqual([1, 2]);
+        expect(pages[0].getAttribute("style")).toBeNull();
+        expect(pages[1].getAttribute("style")).toContain("page-break-before:always");
+        expect(Array.from(doc.querySelectorAll("article.drill h2")).map((h) => h.textContent)).toEqual(["1. Drill 1", "2. Drill 2", "3. Drill 3"]);
+    });
+
+    it("paints headings, the header rule and table headers from the palette's CSS variables", () => {
+        const defaults = parse(renderBenchSheetHtml(MODEL)).querySelector("style")?.textContent ?? "";
+        expect(defaults).toContain("--ink: #0D47A1;");
+        expect(defaults).toContain("--accent: #1976D2;");
+        expect(defaults).toContain("--tint: #E3F2FD;");
+        expect(defaults).toContain("border-bottom: 3px solid var(--accent)");
+        expect(defaults).toContain("th { background: var(--tint); color: var(--ink);");
+        const team = teamPalette({ color: "#7A0019", secondaryColor: "#1B5E20" });
+        const css = parse(renderBenchSheetHtml({ ...MODEL, palette: team })).querySelector("style")?.textContent ?? "";
+        expect(css).toContain(`--ink: ${team.ink};`);
+        expect(css).toContain("--accent: #1B5E20;");
+    });
+
+    it("lets only #RRGGBB palette values into the stylesheet", () => {
+        const evil = { ...DEFAULT_TEAM_PALETTE, ink: "red; } body { background: url(x)", accent: "#12345" };
+        const css = parse(renderBenchSheetHtml({ ...MODEL, palette: evil })).querySelector("style")?.textContent ?? "";
+        expect(css).not.toContain("url(");
+        expect(css).toContain("--ink: #0D47A1;");
+        expect(css).toContain("--accent: #1976D2;");
     });
 
     it("sizes the diagram to fit Word's Letter text column if the stylesheet is dropped, keeping the 720:306 aspect", () => {

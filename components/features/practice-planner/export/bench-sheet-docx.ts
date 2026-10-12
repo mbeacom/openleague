@@ -7,9 +7,11 @@
  * every user string goes through xmlSafe(); images come only from PNG data URIs.
  */
 // eslint-disable-next-line no-restricted-imports -- the one module allowed to load docx; reached only through import()
-import { Document, HeadingLevel, ImageRun, Packer, Paragraph, Table, TableCell, TableRow, TextRun, WidthType } from "docx";
+import { BorderStyle, Document, HeadingLevel, ImageRun, Packer, Paragraph, Table, TableBorders, TableCell, TableRow, TextRun, WidthType } from "docx";
 import { ROTATION_ALL, type RotationTable } from "@/lib/utils/session-timeline";
+import type { TeamPalette } from "@/lib/utils/team-palette";
 import type { BenchSheetModel } from "./bench-sheet-model";
+import { LIST_COLUMNS, benchSheetPages } from "./bench-sheet-layout";
 import { DIAGRAM_UNAVAILABLE_TEXT, EQUIPMENT_HEADING, LEGEND_HEADING, NO_DRILLS_TEXT } from "./labels";
 import { isPngDataUri, pngDataUriToBytes } from "./png";
 
@@ -20,10 +22,33 @@ const PAGE = { size: { width: 12240, height: 15840 }, margin: { top: 680, right:
 /** The print diagram's 720×306 aspect, at a width that fits the text column. */
 const DIAGRAM = { width: 680, height: 289 };
 const SWATCH = { width: 30, height: 15 };
-const LEAGUE_BLUE = "0D47A1";
 const PENALTY_RED = "C62828";
-const TABLE_HEADER_FILL = "E3F2FD";
 const MONO = "Consolas";
+/** The header's bottom rule: 2¼ pt (eighths of a point), as the HTML file's 3 px. */
+const HEADER_RULE_SIZE = 18;
+
+/** Word's colors: RRGGBB without the "#". */
+interface DocxColors {
+    /** Headings and table-header text */
+    ink: string;
+    /** Table-header fill */
+    tint: string;
+    /** The header's bottom rule */
+    accent: string;
+}
+
+const HEX6 = /^#[0-9A-F]{6}$/i;
+/**
+ * DEFAULT_TEAM_PALETTE's colors, in Word's form. Repeated here rather than
+ * imported: team-palette.ts loads MUI, and this lazy chunk must not.
+ */
+const DEFAULT_COLORS: DocxColors = { ink: "0D47A1", tint: "E3F2FD", accent: "1976D2" };
+
+/** The palette in Word's form; a color that is not #RRGGBB takes the default's. */
+function docxColors(palette: TeamPalette): DocxColors {
+    const word = (key: keyof DocxColors) => (HEX6.test(palette[key]) ? palette[key].slice(1).toUpperCase() : DEFAULT_COLORS[key]);
+    return { ink: word("ink"), tint: word("tint"), accent: word("accent") };
+}
 
 interface RunStyle {
     bold?: boolean;
@@ -47,8 +72,8 @@ function picture(dataUri: string, size: { width: number; height: number }, rawAl
     return new ImageRun({ type: "png", data: pngDataUriToBytes(dataUri), transformation: size, altText: { name: alt || "Symbol", title: alt, description: alt } });
 }
 
-function header(model: BenchSheetModel): Paragraph[] {
-    return [
+function header(model: BenchSheetModel, colors: DocxColors): Paragraph[] {
+    const lines = [
         // The mark opens the header block (practice logo spec R5), in its own paragraph so the
         // heading, and the Navigation pane or a table of contents built from it, stays text.
         ...(model.mark && isPngDataUri(model.mark.image)
@@ -56,20 +81,34 @@ function header(model: BenchSheetModel): Paragraph[] {
             : []),
         new Paragraph({
             heading: HeadingLevel.HEADING_1,
-            children: textRuns(model.title, { bold: true, color: LEAGUE_BLUE }),
+            children: textRuns(model.title, { bold: true, color: colors.ink }),
         }),
-        ...(model.teamName ? [new Paragraph({ children: textRuns(model.teamName, { bold: true }) })] : []),
-        new Paragraph({ children: textRuns(model.when) }),
-        ...(model.place ? [new Paragraph({ children: textRuns(model.place) })] : []),
-        ...(model.staff ? [new Paragraph({ children: textRuns(model.staff) })] : []),
-        ...(model.roster ? [new Paragraph({ children: textRuns(model.roster) })] : []),
-        ...model.rosterPlayers.map((line) => new Paragraph({ children: textRuns(line) })),
-        ...(model.gap ? [new Paragraph({ children: textRuns(model.gap) })] : []),
+    ];
+    const details: Array<{ text: string; style?: RunStyle }> = [
+        ...(model.teamName ? [{ text: model.teamName, style: { bold: true } }] : []),
+        ...[model.when, model.place, model.staff, model.roster, ...model.rosterPlayers, model.gap].filter((line): line is string => Boolean(line)).map((text) => ({ text })),
+    ];
+    // The last line carries the header's rule, in the accent (the HTML file's header border).
+    return [
+        ...lines,
+        ...details.map(
+            ({ text, style }, index) =>
+                new Paragraph({
+                    children: textRuns(text, style),
+                    ...(index === details.length - 1
+                        ? { border: { bottom: { color: colors.accent, space: 4, style: BorderStyle.SINGLE, size: HEADER_RULE_SIZE } }, spacing: { after: 160 } }
+                        : {}),
+                }),
+        ),
     ];
 }
 
-function cell(children: Array<Paragraph | Table>, isHeader = false): TableCell {
-    return new TableCell({ children, shading: isHeader ? { fill: TABLE_HEADER_FILL } : undefined });
+function cell(children: Array<Paragraph | Table>, headerFill?: string): TableCell {
+    return new TableCell({ children, shading: headerFill ? { fill: headerFill } : undefined });
+}
+
+function headerCell(label: string, colors: DocxColors): TableCell {
+    return cell([new Paragraph({ children: textRuns(label, { bold: true, color: colors.ink }) })], colors.tint);
 }
 
 /** A station block's header and its stations: a plain block's and a rotation block's alike. */
@@ -85,10 +124,10 @@ const GRID_WIDTH = 7900;
 const GRID_START_WIDTH = 1300;
 
 /** A rotation block's grid as a real table (spec R10): Start plus one column per station. */
-function gridTable(grid: RotationTable): Table {
+function gridTable(grid: RotationTable, colors: DocxColors): Table {
     const head = new TableRow({
         tableHeader: true,
-        children: ["Start", ...grid.columns].map((label) => cell([new Paragraph({ children: textRuns(label, { bold: true, color: LEAGUE_BLUE }) })], true)),
+        children: ["Start", ...grid.columns].map((label) => headerCell(label, colors)),
     });
     const rows = grid.rows.map(
         (row) =>
@@ -109,10 +148,10 @@ function gridTable(grid: RotationTable): Table {
     });
 }
 
-function timeline(model: BenchSheetModel): Array<Paragraph | Table> {
+function timeline(model: BenchSheetModel, colors: DocxColors): Array<Paragraph | Table> {
     const head = new TableRow({
         tableHeader: true,
-        children: ["Start", "Min", "Drill"].map((label) => cell([new Paragraph({ children: textRuns(label, { bold: true, color: LEAGUE_BLUE }) })], true)),
+        children: ["Start", "Min", "Drill"].map((label) => headerCell(label, colors)),
     });
     const rows = model.timeline.map(
         (row) =>
@@ -126,7 +165,7 @@ function timeline(model: BenchSheetModel): Array<Paragraph | Table> {
                             ? [
                                   ...stationParagraphs(row.label, row.stations),
                                   // Word wants a paragraph after a table in a cell.
-                                  ...(row.kind === "rotation" ? [gridTable(row.grid), new Paragraph({ children: [] })] : []),
+                                  ...(row.kind === "rotation" ? [gridTable(row.grid, colors), new Paragraph({ children: [] })] : []),
                               ]
                             : [new Paragraph({ children: textRuns([row.label, row.kind === "block" ? row.note : null, row.runBy].filter(Boolean).join(" · ")) })],
                     ),
@@ -139,43 +178,72 @@ function timeline(model: BenchSheetModel): Array<Paragraph | Table> {
     ];
 }
 
+/** The text column: the page less its margins (twips). */
+const TEXT_WIDTH = PAGE.size.width - PAGE.margin.left - PAGE.margin.right;
+
+/**
+ * Items in LIST_COLUMNS borderless columns, filled down each column first as
+ * the HTML file's CSS columns are, so the Word file is as tall as the page-1
+ * estimate in bench-sheet-layout.ts assumes.
+ */
+function columns(items: readonly Paragraph[]): Table {
+    const rowCount = Math.ceil(items.length / LIST_COLUMNS);
+    const width = Math.floor(TEXT_WIDTH / LIST_COLUMNS);
+    const rows = Array.from({ length: rowCount }, (_, row) =>
+        new TableRow({
+            cantSplit: true,
+            children: Array.from({ length: LIST_COLUMNS }, (_, column) => {
+                const item = items[column * rowCount + row];
+                return new TableCell({ width: { size: width, type: WidthType.DXA }, children: [item ?? new Paragraph({ children: [] })] });
+            }),
+        }),
+    );
+    return new Table({ width: { size: 100, type: WidthType.PERCENTAGE }, columnWidths: Array.from({ length: LIST_COLUMNS }, () => width), borders: TableBorders.NONE, rows });
+}
+
 /** The practice's equipment (practice equipment spec R5): after the timeline, before the legend. */
-function equipment(model: BenchSheetModel): Paragraph[] {
+function equipment(model: BenchSheetModel, colors: DocxColors): Array<Paragraph | Table> {
     if (model.equipment.length === 0) return [];
     return [
-        new Paragraph({ heading: HeadingLevel.HEADING_2, spacing: { before: 240 }, children: textRuns(EQUIPMENT_HEADING, { bold: true, color: LEAGUE_BLUE }) }),
-        ...model.equipment.map((item) => new Paragraph({ children: textRuns(`• ${item}`) })),
+        new Paragraph({ heading: HeadingLevel.HEADING_2, spacing: { before: 240 }, children: textRuns(EQUIPMENT_HEADING, { bold: true, color: colors.ink }) }),
+        columns(model.equipment.map((item) => new Paragraph({ children: textRuns(`• ${item}`) }))),
     ];
 }
 
-function legend(model: BenchSheetModel): Paragraph[] {
+function legend(model: BenchSheetModel, colors: DocxColors): Array<Paragraph | Table> {
     if (model.legend.length === 0) return [];
     return [
-        new Paragraph({ heading: HeadingLevel.HEADING_2, spacing: { before: 240 }, children: textRuns(LEGEND_HEADING, { bold: true, color: LEAGUE_BLUE }) }),
-        ...model.legend.map(
-            (entry) =>
-                new Paragraph({
-                    children: [
-                        ...(isPngDataUri(entry.image) ? [picture(entry.image, SWATCH, entry.label), new TextRun({ text: "  " })] : []),
-                        ...textRuns(entry.label),
-                    ],
-                }),
+        new Paragraph({ heading: HeadingLevel.HEADING_2, spacing: { before: 240 }, children: textRuns(LEGEND_HEADING, { bold: true, color: colors.ink }) }),
+        columns(
+            model.legend.map(
+                (entry) =>
+                    new Paragraph({
+                        children: [
+                            ...(isPngDataUri(entry.image) ? [picture(entry.image, SWATCH, entry.label), new TextRun({ text: "  " })] : []),
+                            ...textRuns(entry.label),
+                        ],
+                    }),
+            ),
         ),
     ];
 }
 
-/** Two drills per page: drills 1, 3, 5… start a page (so drills begin on page 2). */
-function drills(model: BenchSheetModel): Paragraph[] {
+/**
+ * Drills that fit follow the legend on page 1 (model.firstPageDrills); then two
+ * to a page, the first of each pair starting a fresh page.
+ */
+function drills(model: BenchSheetModel, colors: DocxColors): Paragraph[] {
+    const startsPage = new Set(benchSheetPages(model.drills, model.firstPageDrills).filter((page) => !page.onFirstPage).map((page) => page.first));
     return model.drills.flatMap((drill, index) => {
-        const startsPage = index % 2 === 0;
+        const breaks = startsPage.has(index);
         const hasText = Boolean(drill.text); // "" is no text: gates keepNext and the text paragraph alike
         return [
             new Paragraph({
                 heading: HeadingLevel.HEADING_2,
-                pageBreakBefore: startsPage,
+                pageBreakBefore: breaks,
                 keepNext: true,
-                spacing: { before: startsPage ? 0 : 360 },
-                children: textRuns(`${drill.number}. ${drill.name}`, { bold: true, color: LEAGUE_BLUE }),
+                spacing: { before: breaks ? 0 : 360 },
+                children: textRuns(`${drill.number}. ${drill.name}`, { bold: true, color: colors.ink }),
             }),
             new Paragraph({
                 keepNext: true,
@@ -194,10 +262,11 @@ function drills(model: BenchSheetModel): Paragraph[] {
 }
 
 function benchSheetDocument(model: BenchSheetModel): Document {
+    const colors = docxColors(model.palette);
     const body =
         model.timeline.length === 0
-            ? [...header(model), new Paragraph({ children: textRuns(NO_DRILLS_TEXT, { bold: true }) }), ...equipment(model)]
-            : [...header(model), ...timeline(model), ...equipment(model), ...legend(model), ...drills(model)];
+            ? [...header(model, colors), new Paragraph({ children: textRuns(NO_DRILLS_TEXT, { bold: true }) }), ...equipment(model, colors)]
+            : [...header(model, colors), ...timeline(model, colors), ...equipment(model, colors), ...legend(model, colors), ...drills(model, colors)];
     return new Document({
         title: xmlSafe(model.title),
         creator: "OpenLeague",

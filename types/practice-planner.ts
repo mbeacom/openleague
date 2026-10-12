@@ -152,6 +152,8 @@ export interface TeamMark {
     logoUrl: string | null;
     /** The owner's brand color; null = the Crest's derived color. */
     color: string | null;
+    /** The owner's second brand color (team colors); absent or null = none. */
+    secondaryColor?: string | null;
     /** Export-ready logo when the platform already holds one (static). Absent: hosted fetches it (getPracticeLogoImage). */
     logoImage?: LogoImage | null;
 }

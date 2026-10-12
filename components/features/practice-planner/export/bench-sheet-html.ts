@@ -9,13 +9,12 @@
  * meta is defense in depth: even an escaping bug could not run or load anything.
  */
 import type { RotationTable } from "@/lib/utils/session-timeline";
-import type { BenchSheetDrillItem, BenchSheetModel } from "./bench-sheet-model";
+import { DEFAULT_TEAM_PALETTE, type TeamPalette } from "@/lib/utils/team-palette";
+import { benchSheetPages, type BenchSheetDrillItem, type BenchSheetModel } from "./bench-sheet-model";
 import { DIAGRAM_UNAVAILABLE_TEXT, EQUIPMENT_HEADING, LEGEND_HEADING, NO_DRILLS_TEXT } from "./labels";
 import { isPngDataUri } from "./png";
 
 export const EXPORT_CSP = "default-src 'none'; img-src data:; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'";
-
-const DRILLS_PER_PAGE = 2;
 
 const ESCAPES: Record<string, string> = { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" };
 
@@ -52,26 +51,40 @@ function multiline(text: string): Trusted {
     return new Trusted(text.split(/\r?\n/).map(escapeHtml).join("<br>"));
 }
 
-function chunk<T>(items: readonly T[], size: number): T[][] {
-    return Array.from({ length: Math.ceil(items.length / size) }, (_, i) => items.slice(i * size, (i + 1) * size));
+const HEX6 = /^#[0-9A-F]{6}$/i;
+
+/**
+ * The palette as CSS variables. Only a #RRGGBB reaches the stylesheet
+ * (teamPalette returns only those); anything else takes the default's color.
+ */
+function paletteVariables(palette: TeamPalette): Trusted {
+    const pick = (key: keyof Omit<TeamPalette, "fromTeam" | "gradient">) => (HEX6.test(palette[key]) ? palette[key] : DEFAULT_TEAM_PALETTE[key]);
+    const entries: Array<[string, string]> = [
+        ["--band", pick("band")],
+        ["--on-band", pick("onBand")],
+        ["--accent", pick("accent")],
+        ["--ink", pick("ink")],
+        ["--tint", pick("tint")],
+    ];
+    return new Trusted(`:root { ${entries.map(([name, value]) => `${name}: ${value};`).join(" ")} }`);
 }
 
-/** "Digital Playbook" on paper. Fonts are named, never fetched. */
+/** "Digital Playbook" on paper, in the team's colors when it has them. Fonts are named, never fetched. */
 const STYLES = new Trusted(`
 @page { margin: 12mm; }
 html { background: #fff; }
 body { margin: 0; color: #111; background: #fff; font: 11pt/1.4 "Cabinet Grotesk", "Avenir Next", "Segoe UI", system-ui, sans-serif; }
 .sheet { max-width: 190mm; margin: 0 auto; padding: 12mm 4mm; }
-h1, h2 { color: #0D47A1; line-height: 1.15; margin: 0 0 4px; }
+h1, h2 { color: var(--ink); line-height: 1.15; margin: 0 0 4px; }
 h1 { font-size: 24pt; font-weight: 900; letter-spacing: -0.01em; }
 h2 { font-size: 13pt; font-weight: 800; }
 .mark { vertical-align: middle; margin-right: 10px; }
-header { border-bottom: 3px solid #1976D2; padding-bottom: 8px; margin-bottom: 12px; }
+header { border-bottom: 3px solid var(--accent); padding-bottom: 8px; margin-bottom: 12px; }
 header p { margin: 2px 0; }
 .team { font-weight: 700; }
 table { width: 100%; border-collapse: collapse; border: 1px solid #90A4AE; font-size: 10pt; }
 th, td { border: 1px solid #90A4AE; padding: 4px 6px; text-align: left; vertical-align: top; }
-th { background: #E3F2FD; color: #0D47A1; }
+th { background: var(--tint); color: var(--ink); -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 .time, .meta { font-family: "JetBrains Mono", ui-monospace, Menlo, Consolas, monospace; }
 td ul { margin: 2px 0 0; padding-left: 1.1em; }
 .rotation { width: auto; margin: 6px 0 2px; }
@@ -96,7 +109,7 @@ td ul { margin: 2px 0 0; padding-left: 1.1em; }
 .unavailable { border: 1px dashed #999; color: #555; text-align: center; padding: 18% 0; margin: 0; }
 .text { margin: 6px 0 0; }
 .empty { font-weight: 700; }
-@media screen { .page { border-top: 1px dashed #B0BEC5; margin-top: 16px; padding-top: 12px; } }
+@media screen { .page { border-top: 1px dashed #B0BEC5; margin-top: 16px; padding-top: 12px; } .page.first { border-top: 0; } }
 @media print { .sheet { max-width: none; padding: 0; } .diagram { max-height: 85mm; width: auto; max-width: 100%; } }
 `);
 
@@ -180,10 +193,15 @@ ${item.text ? html`<p class="text">${multiline(item.text)}</p>` : null}
 `;
 }
 
+/** Drills that fit follow the legend on page 1 (model.firstPageDrills); every later pair starts a page. */
 function drills(model: BenchSheetModel): Trusted {
-    const pages = chunk(model.drills, DRILLS_PER_PAGE).map(
-        (page) => html`<div class="page" style="page-break-before:always;break-before:page">
-${page.map(drill)}</div>
+    const pages = benchSheetPages(model.drills, model.firstPageDrills).map((page) =>
+        page.onFirstPage
+            ? html`<div class="page first">
+${page.items.map(drill)}</div>
+`
+            : html`<div class="page" style="page-break-before:always;break-before:page">
+${page.items.map(drill)}</div>
 `,
     );
     return html`<section class="drills">
@@ -207,7 +225,7 @@ ${drills(model)}`;
 <meta http-equiv="Content-Security-Policy" content="${new Trusted(EXPORT_CSP)}">
 <meta name="generator" content="OpenLeague">
 <title>${model.title} · Bench sheet</title>
-<style>${STYLES}</style>
+<style>${paletteVariables(model.palette)}${STYLES}</style>
 </head>
 <body>
 <main class="sheet">

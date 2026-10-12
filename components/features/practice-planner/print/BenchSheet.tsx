@@ -2,8 +2,12 @@
 
 /**
  * Bench sheet (practice planner 3b). Page 1: the header, the timeline and one
- * combined legend. Then the drills, paired into .bench-page containers that
- * app/(print)/print.css starts on fresh pages. Nothing auto-prints: the
+ * combined legend, then as many of the first drills as fit there (the model's
+ * firstPageDrills, which the HTML and Word files share). The rest go two to a
+ * .bench-page container that app/(print)/print.css starts on a fresh page.
+ * Headings and table headers wear the team's colors (teamPalette); the
+ * toolbar's "Team colors" option redraws the diagrams' team markers in them,
+ * for this sheet only. Nothing auto-prints: the
  * toolbar's Print button calls window.print(), and stays disabled until every
  * drill's diagram and the team mark are ready. The toolbar itself is hidden in print.
  */
@@ -23,11 +27,14 @@ import { useClockText } from "@/lib/hooks/useClockText";
 import { SessionTimeline } from "../SessionTimeline";
 import { BenchSheetDrill, drillText } from "./BenchSheetDrill";
 import { drillEquipment, drillEquipmentText } from "@/lib/utils/equipment-needs";
-import { benchSheetEquipment } from "../export/bench-sheet-model";
+import { benchSheetEquipment, benchSheetPages, buildBenchSheetModel, type BenchSheetRenderers } from "../export/bench-sheet-model";
 import { EQUIPMENT_HEADING } from "../export/labels";
 import { printPixelRatio } from "./PrintDiagram";
 import { LegendList } from "./LegendList";
 import { TeamMarkImage } from "./TeamMarkImage";
+import { TeamColorsToggle } from "../TeamColorsToggle";
+import { useTeamRoleColors } from "../useTeamColors";
+import { sessionWithTeamColors, teamPalette } from "@/lib/utils/team-palette";
 
 export type BenchSheetSession = PracticeSessionView;
 
@@ -35,19 +42,21 @@ export const NO_DRILLS_MESSAGE = "No drills planned";
 export const PREPARING_PRINT = "Preparing print…";
 
 const MS_PER_MINUTE = 60_000;
-const DRILLS_PER_PAGE = 2;
 
-function chunk<T>(items: T[], size: number): T[][] {
-    return Array.from({ length: Math.ceil(items.length / size) }, (_, i) => items.slice(i * size, (i + 1) * size));
-}
+/** The layout call needs only text: no images are drawn for it. */
+const NO_IMAGES: BenchSheetRenderers = { diagram: () => null, swatch: () => null, crest: () => null };
 
 export function BenchSheet({ session: stored }: { session: BenchSheetSession }) {
-    // Goalie markers hidden at render time only (spec R7); the stored session is untouched.
-    const session = useMemo(() => sessionForDisplay(stored), [stored]);
     const { Link, routes } = usePlannerPlatform();
     // A static device without "Your team" has no name: nothing prints (practice logo spec R4).
-    const teamName = session.teamName?.trim() || null;
-    const mark = teamName ? session.teamMark ?? null : null;
+    const teamName = stored.teamName?.trim() || null;
+    const mark = teamName ? stored.teamMark ?? null : null;
+    const palette = useMemo(() => teamPalette(mark), [mark]);
+    const teamColors = useTeamRoleColors(mark);
+    // Goalie markers hidden and team colors applied at render time only (spec R7); the stored session is untouched.
+    const session = useMemo(() => sessionWithTeamColors(sessionForDisplay(stored), teamColors.roleColors), [stored, teamColors.roleColors]);
+    // How many drills follow the legend on page 1: the model's call, so the downloads paginate alike.
+    const firstPageDrills = useMemo(() => buildBenchSheetModel(stored, NO_IMAGES, { includeRosterNames: true }).firstPageDrills, [stored]);
     const start = sessionStart(session);
     const end = new Date(start.getTime() + session.duration * MS_PER_MINUTE);
     const { timeZone, showZone } = sessionTimeZone(session);
@@ -73,16 +82,24 @@ export function BenchSheet({ session: stored }: { session: BenchSheetSession }) 
     });
     const pixelRatio = printPixelRatio(drills.filter(({ sp }) => sp.play.playData !== null).length);
 
+    // The colors the diagrams are drawn in. A change redraws every diagram, so each remounts under the new
+    // key (its own "reported" resets) and the readiness gathered for the old drawing no longer counts.
+    const drawingKey = useMemo(() => JSON.stringify(teamColors.roleColors), [teamColors.roleColors]);
     // Keyed by session-play row id: a session may schedule the same play twice.
-    const [readyIds, setReadyIds] = useState<ReadonlySet<string>>(() => new Set());
+    const [ready, setReady] = useState<{ drawingKey: string; ids: ReadonlySet<string> }>(() => ({ drawingKey, ids: new Set() }));
     const markReady = useCallback(
-        (id: string) => setReadyIds((prev) => (prev.has(id) ? prev : new Set(prev).add(id))),
+        (key: string, id: string) =>
+            setReady((prev) => {
+                if (prev.drawingKey !== key) return { drawingKey: key, ids: new Set([id]) };
+                return prev.ids.has(id) ? prev : { drawingKey: key, ids: new Set(prev.ids).add(id) };
+            }),
         []
     );
+    const readyIds = ready.drawingKey === drawingKey ? ready.ids : null;
     // The team mark counts too: a hosted logo is a network image (practice logo spec R5).
     const [markShown, setMarkShown] = useState(false);
     const onMarkReady = useCallback(() => setMarkShown(true), []);
-    const allReady = drills.every(({ sp }) => readyIds.has(sp.id)) && (!mark || markShown);
+    const allReady = drills.every(({ sp }) => readyIds?.has(sp.id) ?? false) && (!mark || markShown);
 
     const equipmentSection =
         equipment.length > 0 ? (
@@ -101,7 +118,19 @@ export function BenchSheet({ session: stored }: { session: BenchSheetSession }) 
         ) : null;
 
     return (
-        <Box className="bench-sheet" sx={{ maxWidth: 820, mx: "auto", p: { xs: 2, sm: 4 }, bgcolor: "#fff", color: "#000" }}>
+        <Box
+            className="bench-sheet"
+            sx={{
+                maxWidth: 820,
+                mx: "auto",
+                p: { xs: 2, sm: 4 },
+                bgcolor: "#fff",
+                color: "#000",
+                // Read by print.css for the timeline's header cells.
+                "--bench-ink": palette.ink,
+                "--bench-tint": palette.tint,
+            }}
+        >
             <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap className="no-print" sx={{ mb: 3 }}>
                 <Button
                     variant="contained"
@@ -115,6 +144,7 @@ export function BenchSheet({ session: stored }: { session: BenchSheetSession }) 
                 <Button component={Link} href={routes.session(session.id)} variant="outlined" startIcon={<ArrowBackIcon />}>
                     Back to session
                 </Button>
+                {teamColors.available && <TeamColorsToggle checked={teamColors.enabled} onChange={teamColors.setEnabled} />}
                 {!allReady && (
                     <Typography variant="body2" role="status" sx={{ color: "text.secondary" }}>
                         {PREPARING_PRINT}
@@ -122,10 +152,10 @@ export function BenchSheet({ session: stored }: { session: BenchSheetSession }) 
                 )}
             </Stack>
 
-            <Box component="header" sx={{ mb: 3 }}>
+            <Box component="header" sx={{ mb: 3, pb: 1, borderBottom: `3px solid ${palette.accent}` }}>
                 <Stack direction="row" spacing={1.5} alignItems="center">
                     {mark && <TeamMarkImage mark={mark} onReady={onMarkReady} />}
-                    <Typography variant="h4" component="h1" sx={{ fontWeight: 800, minWidth: 0 }}>
+                    <Typography variant="h4" component="h1" sx={{ fontWeight: 800, minWidth: 0, color: palette.ink }}>
                         {session.title}
                     </Typography>
                 </Stack>
@@ -169,15 +199,16 @@ export function BenchSheet({ session: stored }: { session: BenchSheetSession }) 
                         staff={session.staff}
                     />
                     {equipmentSection}
-                    <LegendList playData={legend} />
+                    <LegendList playData={legend} roleColors={teamColors.roleColors} />
                     {drills.length > 0 && (
-                    <Box component="section" aria-label="Drills" className="bench-page-break" sx={{ mt: 4 }}>
-                        {chunk(drills, DRILLS_PER_PAGE).map((page, p) => (
-                            <div className="bench-page" key={page[0].sp.id}>
-                                {page.map(({ sp, startsAt, station }, k) => (
+                    // Drills start on page 2 unless the first ones fit under a short page 1.
+                    <Box component="section" aria-label="Drills" className={firstPageDrills > 0 ? undefined : "bench-page-break"} sx={{ mt: 4 }}>
+                        {benchSheetPages(drills, firstPageDrills).map((page) => (
+                            <div className="bench-page" key={page.items[0].sp.id}>
+                                {page.items.map(({ sp, startsAt, station }, k) => (
                                     <BenchSheetDrill
-                                        key={sp.id}
-                                        number={p * DRILLS_PER_PAGE + k + 1}
+                                        key={`${drawingKey}:${sp.id}`}
+                                        number={page.first + k + 1}
                                         name={sp.play.name}
                                         startLabel={clock.time(startsAt)}
                                         minutes={sp.duration}
@@ -186,7 +217,7 @@ export function BenchSheet({ session: stored }: { session: BenchSheetSession }) 
                                         text={drillText(sp.instructions, sp.play.description)}
                                         equipment={drillEquipmentText(drillEquipment(sp.play.playData))}
                                         pixelRatio={pixelRatio}
-                                        onReady={() => markReady(sp.id)}
+                                        onReady={() => markReady(drawingKey, sp.id)}
                                     />
                                 ))}
                             </div>

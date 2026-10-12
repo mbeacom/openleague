@@ -53,6 +53,9 @@ import { RosterSummary } from "@/components/features/practice-planner/RosterSumm
 import { PlayDiagram } from "@/components/features/practice-planner/PlayDiagram";
 import { useSessionGoalies } from "@/components/features/practice-planner/useSessionGoalies";
 import { SidebarPlayCard } from "@/components/features/practice-planner/SidebarPlayCard";
+import { TeamColorsToggle } from "@/components/features/practice-planner/TeamColorsToggle";
+import { useTeamRoleColors } from "@/components/features/practice-planner/useTeamColors";
+import { sessionWithTeamColors, teamPalette } from "@/lib/utils/team-palette";
 import type { PracticeSessionView } from "@/types/practice-planner";
 import {
   SEGMENT_KIND_FIT_LABELS,
@@ -150,9 +153,13 @@ export function SessionDetailView({ session, isAdmin }: SessionDetailViewProps) 
   const clock = useClockText(timeZone, showZone);
   const activePlay = drills[activePlayIndex] ?? null;
   const { shown, messages: goalieMessages } = useSessionGoalies(session);
+  // Team colors: the header band always; diagram markers only when the coach turns the option on.
+  const palette = useMemo(() => teamPalette(session.teamMark), [session.teamMark]);
+  const teamColors = useTeamRoleColors(session.teamMark);
+  const colored = useMemo(() => sessionWithTeamColors(shown, teamColors.roleColors), [shown, teamColors.roleColors]);
   // The diagram as drawn for this session (spec R7); the stored play is never changed.
   // The display copy keeps the row order, so its drills line up with `drills`.
-  const shownDrills = useMemo(() => drillRows(shown.plays), [shown]);
+  const shownDrills = useMemo(() => drillRows(colored.plays), [colored]);
   const drawnAt = (index: number) => shownDrills[index]?.play.playData ?? drills[index]?.play.playData ?? null;
   const activeDrawn = activePlay ? drawnAt(activePlayIndex) : null;
   const groups = useMemo(() => groupStations(drills), [drills]);
@@ -215,8 +222,7 @@ export function SessionDetailView({ session, isAdmin }: SessionDetailViewProps) 
             left: 0,
             right: 0,
             height: "4px",
-            background:
-              "linear-gradient(90deg, #0D47A1 0%, #1976D2 50%, #42A5F5 100%)",
+            background: palette.gradient,
           },
         }}
       >
@@ -566,6 +572,7 @@ export function SessionDetailView({ session, isAdmin }: SessionDetailViewProps) 
                     <StationMap
                       stations={stationMapStations}
                       activeIndex={activeGroup.stations.indexOf(activePlay)}
+                      roleColors={teamColors.roleColors}
                     />
                   </Box>
                 )}
@@ -598,9 +605,12 @@ export function SessionDetailView({ session, isAdmin }: SessionDetailViewProps) 
                   )}
                 </Box>
 
-                <Box sx={{ px: 3, pt: 2 }}>
-                  <PlayLegend playData={activeDrawn} />
-                </Box>
+                <Stack spacing={1} sx={{ px: 3, pt: 2 }}>
+                  {teamColors.available && (
+                    <TeamColorsToggle checked={teamColors.enabled} onChange={teamColors.setEnabled} />
+                  )}
+                  <PlayLegend playData={activeDrawn} roleColors={teamColors.roleColors} />
+                </Stack>
 
                 {/* Play details */}
                 <Box sx={{ p: 3 }}>

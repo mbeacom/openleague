@@ -112,19 +112,40 @@ describe("BenchSheet", () => {
         expect(within(legend).getAllByText("Pass")).toHaveLength(1);
     });
 
-    it("starts drills on a new page and pairs them, two per page", () => {
-        renderSheet();
+    // A long page 1: 26 timeline rows leave no room for a drill under the legend.
+    const LONG: BenchSheetSession = {
+        ...SESSION,
+        plays: Array.from({ length: 26 }, (_, i) => sessionPlay(`Drill ${i + 1}`, i, false, 2)),
+    };
+
+    it("starts drills on a new page after a long page 1 and pairs them, two per page", () => {
+        renderSheet({ ...LONG, plays: LONG.plays.slice(0, 25) });
         const region = screen.getByRole("region", { name: "Drills" });
         expect(region).toHaveClass("bench-page-break");
         const pages = region.querySelectorAll(".bench-page");
-        expect(Array.from(pages, (page) => page.querySelectorAll("article").length)).toEqual([2, 2, 1]);
+        expect(Array.from(pages, (page) => page.querySelectorAll("article").length)).toEqual([...Array(12).fill(2), 1]);
         expect(region.querySelector(".bench-drill--page-end")).toBeNull();
     });
 
     it("leaves no partial trailing page for an even number of drills", () => {
-        renderSheet({ ...SESSION, plays: SESSION.plays.slice(0, 4) });
+        renderSheet(LONG);
         const pages = screen.getByRole("region", { name: "Drills" }).querySelectorAll(".bench-page");
-        expect(Array.from(pages, (page) => page.querySelectorAll("article").length)).toEqual([2, 2]);
+        expect(Array.from(pages, (page) => page.querySelectorAll("article").length)).toEqual(Array(13).fill(2));
+    });
+
+    it("lets the first drill follow the legend on a short page 1, then pairs the rest on fresh pages", () => {
+        renderSheet();
+        const region = screen.getByRole("region", { name: "Drills" });
+        expect(region).not.toHaveClass("bench-page-break");
+        const pages = region.querySelectorAll(".bench-page");
+        expect(Array.from(pages, (page) => page.querySelectorAll("article").length)).toEqual([1, 2, 2]);
+        expect(drills().map((drill) => drill.getAttribute("aria-label"))).toEqual([
+            "Drill 1: Breakout",
+            "Drill 2: Regroup",
+            "Drill 3: Shooting",
+            "Drill 4: Lost",
+            "Drill 5: Cooldown",
+        ]);
     });
 
     it("tags stations with the block's start and prints each drill's own minutes", () => {
@@ -267,6 +288,73 @@ describe("BenchSheet goalie markers", () => {
         await waitFor(() => expect(mockGenerate).toHaveBeenCalled());
         const drawnPlayers = (mockGenerate.mock.calls[0] as unknown as [PlayData])[0].players;
         expect(drawnPlayers.map((p) => p.role)).toEqual(["F"]);
+    });
+});
+
+describe("BenchSheet: team colors", () => {
+    const board: PlayData = {
+        ...createEmptyPlayData(),
+        players: [
+            { id: "x", role: "X", label: "", position: { x: 40, y: 42.5 }, color: "#1976D2" },
+            { id: "d", role: "D", label: "", position: { x: 50, y: 42.5 }, color: "#0D47A1" },
+            { id: "o", role: "O", label: "", position: { x: 60, y: 42.5 }, color: "#D32F2F" },
+        ],
+    };
+    const MARK = { id: "cteamxxxxxxxxxxxxxxxxxxxx", name: "Ice Hawks U12", logoUrl: null, color: "#7A0019", secondaryColor: "#1B5E20" };
+    const COLORED: BenchSheetSession = { ...SESSION, teamMark: MARK, plays: [sessionPlay("Breakout", 0, false, 10, { playData: board })] };
+    const drawnColors = () => (mockGenerate.mock.calls.at(-1) as unknown as [PlayData])[0].players.map((p) => p.color);
+
+    afterEach(() => {
+        try {
+            window.localStorage.clear();
+        } catch {
+            // storage blocked: nothing to clear
+        }
+    });
+
+    it("rules the header in the team's accent and keeps diagrams in their default colors until asked", async () => {
+        renderSheet(COLORED);
+        const header = screen.getByRole("heading", { level: 1, name: "Tuesday Skills" }).closest("header");
+        expect(header).toHaveStyle({ borderBottom: "3px solid #1B5E20" });
+        const toggle = screen.getByRole("switch", { name: "Team colors" });
+        expect(toggle).not.toBeChecked();
+        await waitFor(() => expect(mockGenerate).toHaveBeenCalled());
+        expect(drawnColors()).toEqual(["#1976D2", "#0D47A1", "#D32F2F"]);
+    });
+
+    it("redraws team markers in the team's colors when turned on, never the opponent, and remembers the choice", async () => {
+        renderSheet(COLORED);
+        fireEvent.click(screen.getByRole("switch", { name: "Team colors" }));
+        await waitFor(() => expect(drawnColors()).toEqual(["#7A0019", "#1B5E20", "#D32F2F"]));
+        expect(window.localStorage.getItem("openleague.planner.teamColors")).toBe("on");
+        // The stored session is untouched.
+        expect((COLORED.plays[0] as DrillRow).play.playData?.players[0].color).toBe("#1976D2");
+    });
+
+    it("holds Print again while the diagrams redraw for a changed option", async () => {
+        renderSheet(COLORED);
+        const button = screen.getByRole("button", { name: "Print" });
+        await waitFor(() => expect(screen.getAllByRole("img", { name: /^Diagram: / })).toHaveLength(1));
+        screen.getAllByRole("img").forEach((img) => fireEvent.load(img));
+        await waitFor(() => expect(button).toBeEnabled());
+        fireEvent.click(screen.getByRole("switch", { name: "Team colors" }));
+        await waitFor(() => expect(drawnColors()).toEqual(["#7A0019", "#1B5E20", "#D32F2F"]));
+        expect(button).toBeDisabled();
+        fireEvent.load(screen.getByRole("img", { name: /^Diagram: / }));
+        expect(button).toBeEnabled();
+        // And back: the earlier mode's readiness does not count again
+        fireEvent.click(screen.getByRole("switch", { name: "Team colors" }));
+        await waitFor(() => expect(drawnColors()).toEqual(["#1976D2", "#0D47A1", "#D32F2F"]));
+        expect(button).toBeDisabled();
+        fireEvent.load(screen.getByRole("img", { name: /^Diagram: / }));
+        expect(button).toBeEnabled();
+    });
+
+    it("offers no option when the team has no color a marker can wear", () => {
+        renderSheet({ ...COLORED, teamMark: { ...MARK, color: null, secondaryColor: null } });
+        expect(screen.queryByRole("switch", { name: "Team colors" })).toBeNull();
+        renderSheet({ ...COLORED, teamMark: null });
+        expect(screen.queryByRole("switch", { name: "Team colors" })).toBeNull();
     });
 });
 

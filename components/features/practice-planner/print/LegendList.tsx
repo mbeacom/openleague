@@ -6,13 +6,13 @@
  * session's drills; buildLegend's Sets remove duplicates.
  */
 import { Box, Typography } from "@mui/material";
-import type { PlayData } from "@/types/practice-planner";
+import type { PlayData, PlayerRole } from "@/types/practice-planner";
 import { buildLegend } from "@/lib/utils/canvas/legend";
 import { LegendSwatch } from "../PlayLegend";
 
-export function LegendList({ playData }: { playData: PlayData | null }) {
+export function LegendList({ playData, roleColors }: { playData: PlayData | null; roleColors?: Partial<Record<PlayerRole, string>> }) {
     if (!playData) return null;
-    const entries = buildLegend(playData);
+    const entries = buildLegend(playData, roleColors);
     if (entries.length === 0) return null;
     return (
         <Box component="section" aria-label="Legend" className="bench-legend" sx={{ mt: 3 }}>
