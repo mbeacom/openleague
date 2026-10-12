@@ -121,6 +121,24 @@ describe("DrillVideosField", () => {
         expect(onChange).toHaveBeenLastCalledWith([{ ...initial[1], title: "Second, renamed" }]);
     });
 
+    it("keeps saving to the link being edited after it is moved", () => {
+        const onChange = vi.fn();
+        const initial: VideoLink[] = [
+            { url: "https://example.org/a", provider: "link", title: "First" },
+            { url: "https://example.org/b", provider: "link", title: "Second" },
+            { url: "https://example.org/c", provider: "link", title: "Third" },
+        ];
+        themed(<Harness initial={initial} onChange={onChange} />);
+        fireEvent.click(screen.getByRole("button", { name: "Edit First" }));
+        fireEvent.click(screen.getByRole("button", { name: "Move First down" }));
+        // Moving a neighbour across the edited link shifts it too.
+        fireEvent.click(screen.getByRole("button", { name: "Move Third up" }));
+        expect(onChange).toHaveBeenLastCalledWith([initial[1], initial[2], initial[0]]);
+        fireEvent.change(titleInput(), { target: { value: "First, renamed" } });
+        fireEvent.click(screen.getByRole("button", { name: "Save video" }));
+        expect(onChange).toHaveBeenLastCalledWith([initial[1], initial[2], { ...initial[0], title: "First, renamed" }]);
+    });
+
     it("renders no player or remote image in the editor", () => {
         const { container } = themed(<Harness initial={[{ url: `https://www.youtube.com/watch?v=${YT}`, provider: "youtube" }]} />);
         expect(container.querySelectorAll("iframe, img, video")).toHaveLength(0);

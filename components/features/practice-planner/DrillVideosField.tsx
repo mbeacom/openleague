@@ -102,6 +102,9 @@ export function DrillVideosField({ videos, onChange, disabled = false }: DrillVi
     const move = (index: number, by: -1 | 1) => {
         const next = [...videos];
         [next[index], next[index + by]] = [next[index + by], next[index]];
+        // The open edit follows its link, so Save replaces the link being edited.
+        if (editing === index) setEditing(index + by);
+        else if (editing === index + by) setEditing(index);
         onChange(next);
     };
 

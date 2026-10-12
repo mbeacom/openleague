@@ -316,7 +316,7 @@ Inside each drill's `playData` (`PlayData.version` stays 2), the document gains 
 
 **Compatibility:**
 - A reader built before this amendment strips the key (its diagram schema is a plain object) and opens the file without the links. A round trip through an older build drops them and nothing else.
-- No IndexedDB version change: the links live inside `playData`, which an older static build already reads leniently. An older static tab that saves over such a drill drops its links.
+- The static planner's IndexedDB goes from version 7 to 8 with no data change. The links live inside `playData`, which an older static build reads leniently but saves through its own schema, so the bump is what makes a tab still running an older build reload before it can save a drill without its links.
 - A hosted tab opened before the deploy reads plays through the updated server and receives the links inside `playData` without showing them; a save from it sends them back, and the updated server validates them as any other write.
 
 Practice-level videos, the inline player and bench-sheet lines are later phases of the same spec. Spec: `docs/superpowers/specs/2026-10-11-practice-video-links-design.md`.

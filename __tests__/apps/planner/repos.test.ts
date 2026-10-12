@@ -218,7 +218,7 @@ describe("IndexedDB schema versions (practice timing rows, practice staff)", () 
         });
     }
 
-    it("is version 7", () => expect(DB_VERSION).toBe(7));
+    it("is version 8", () => expect(DB_VERSION).toBe(8));
 
     it("opens a version 1 database at the current version with every store, index and record intact", async () => {
         const factory = new IDBFactory();
@@ -351,6 +351,23 @@ describe("IndexedDB schema versions (practice timing rows, practice staff)", () 
         expect(await versionOf(factory, "v6-open-tab")).toBe(DB_VERSION);
         repo.close();
     });
+
+    it("makes a tab still open at version 7 (before drill video links) reload before this build writes, keeping its data", async () => {
+        const factory = new IDBFactory();
+        const v7 = await openAt(factory, "v7-open-tab", 7);
+        await seed(v7);
+        // A build without video links would parse a drill through its old schema and save it without them.
+        const reload = vi.fn();
+        v7.onversionchange = () => {
+            v7.close();
+            reload();
+        };
+        const repo = await openIdbRepo({ factory, name: "v7-open-tab" });
+        expect(reload).toHaveBeenCalledTimes(1);
+        expect(await repo.read((tx) => tx.getSession("s1"))).toEqual(v1Session);
+        expect(await versionOf(factory, "v7-open-tab")).toBe(DB_VERSION);
+        repo.close();
+    });
 });
 
 describe("IndexedDB version 7 (storage connectors: links, and rankings keyed by id)", () => {
@@ -448,7 +465,7 @@ describe("IndexedDB version 7 (storage connectors: links, and rankings keyed by 
             request.onsuccess = () => resolve(request.result);
             request.onerror = () => reject(request.error);
         });
-        expect(db.version).toBe(7);
+        expect(db.version).toBe(DB_VERSION);
         expect([...db.objectStoreNames].sort()).toEqual(["links", "meta", "plays", "rankings", "sessions"]);
         const tx = db.transaction(["rankings", "links"], "readonly");
         expect(tx.objectStore("rankings").keyPath).toBe("id");

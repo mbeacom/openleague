@@ -20,7 +20,7 @@ document: the hosted app and the static planner at `openleague.dev/planner/`
 - **Drill data.** `PlayData` (`types/practice-planner.ts:283-293`) is the drill's
   diagram plus advisory extras: `area?` and `equipmentNeeds?`. Hosted stores it
   as `Play.playData Json` (`prisma/schema.prisma:1820`); the static app stores
-  it in IndexedDB (`apps/planner/src/store/idb-repo.ts:24`, `DB_VERSION = 6`).
+  it in IndexedDB (`apps/planner/src/store/idb-repo.ts:27`, `DB_VERSION = 7`).
   The practice equipment work put `equipmentNeeds` inside `PlayData` precisely
   "so it rides every drill save, copy and plan file" (`types/practice-planner.ts`,
   `EquipmentNeeds` doc comment), with a lenient read that drops an unreadable

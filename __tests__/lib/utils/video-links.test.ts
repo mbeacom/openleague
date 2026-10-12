@@ -193,6 +193,15 @@ describe("normalizeVideoLink", () => {
         expect(drive.ok && drive.link.startSec).toBeUndefined();
     });
 
+    it("keeps the start when a stored link is normalized again (its URL no longer carries t=)", () => {
+        const first = normalizeVideoLink({ url: `https://youtu.be/${YT}?t=90`, provider: "link" });
+        expect(first).toMatchObject({ ok: true, link: { url: `https://www.youtube.com/watch?v=${YT}`, startSec: 90 } });
+        const again = first.ok ? normalizeVideoLink(first.link) : first;
+        expect(again).toEqual(first);
+        const vimeo = normalizeVideoLink({ url: `https://vimeo.com/${VIMEO}#t=20s`, provider: "vimeo" });
+        expect(vimeo.ok && normalizeVideoLink(vimeo.link)).toEqual(vimeo);
+    });
+
     it("refuses a start outside 0 to 86 399 or not a whole number", () => {
         expect(normalizeVideoLink({ url: `https://youtu.be/${YT}`, provider: "youtube", startSec: 86_400 }).ok).toBe(false);
         expect(normalizeVideoLink({ url: `https://youtu.be/${YT}`, provider: "youtube", startSec: 1.5 }).ok).toBe(false);
@@ -258,6 +267,18 @@ describe("the lenient read", () => {
         expect(read).toHaveLength(5);
         expect(read?.[0]).toEqual({ url: "https://example.org/1", provider: "link", title: "x".repeat(80) });
         expect(errors).toHaveBeenCalled();
+        errors.mockRestore();
+    });
+
+    it("logs that an entry or list was dropped without logging the value, which may hold a private share token", () => {
+        const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+        const secret = "https://user:hunter2@example.org/clip?token=PRIVATE-SHARE";
+        readVideoLinks([{ url: secret, provider: "link" }], MAX_DRILL_VIDEOS);
+        readVideoLinks({ url: secret }, MAX_DRILL_VIDEOS);
+        expect(errors).toHaveBeenCalledTimes(2);
+        const logged = JSON.stringify(errors.mock.calls);
+        expect(logged).not.toContain("hunter2");
+        expect(logged).not.toContain("PRIVATE-SHARE");
         errors.mockRestore();
     });
 

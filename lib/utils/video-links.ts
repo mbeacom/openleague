@@ -318,19 +318,21 @@ export function normalizeVideoLinks(list: readonly unknown[] | undefined): Video
 /**
  * Read path (spec R3): videos are advisory and never make a drill or plan
  * unreadable. An unparseable entry is dropped and logged, the rest are kept
- * normalized, and only the first `max` are kept. `undefined` = none.
+ * normalized, and only the first `max` are kept. `undefined` = none. The log
+ * names the reason, never the value: a refused link may carry credentials or
+ * a private share token.
  */
 export function readVideoLinks(raw: unknown, max: number): VideoLink[] | undefined {
     if (raw === undefined || raw === null) return undefined;
     if (!Array.isArray(raw)) {
-        console.error("Dropping an unreadable video list:", raw);
+        console.error(`Dropping an unreadable video list (${typeof raw}).`);
         return undefined;
     }
     const links: VideoLink[] = [];
     for (const entry of raw) {
         const result = normalizeVideoLink(entry, { lenientTitle: true });
         if (result.ok) links.push(result.link);
-        else console.error("Dropping an unreadable video link:", entry);
+        else console.error(`Dropping an unreadable video link: ${result.message}${result.path ? ` (${result.path.join(".")})` : ""}`);
     }
     return links.length > 0 ? links.slice(0, max) : undefined;
 }

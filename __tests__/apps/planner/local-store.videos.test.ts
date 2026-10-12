@@ -1,4 +1,4 @@
-/** Drill video links in the static store (practice video links spec R6): they ride inside playData, with no DB_VERSION change. */
+/** Drill video links in the static store (practice video links spec R6): they ride inside playData; DB_VERSION 7 only makes an older tab reload, with no migration. */
 import { describe, expect, it } from "vitest";
 import { REPOS, openHarness } from "./store-harness";
 import { createLocalPlannerStore } from "@/apps/planner/src/store/local-store";
