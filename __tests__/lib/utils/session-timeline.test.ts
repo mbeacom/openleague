@@ -26,6 +26,8 @@ import {
     groupRange,
     groupStations,
     moveItem,
+    moveStationTo,
+    moveUnitTo,
     normalizeGroups,
     removeItem,
     rotatesEveryLabel,
@@ -287,6 +289,117 @@ describe("moveItem", () => {
         expect(moveItem(plays, 2, 1)).toBe(plays);
         expect(moveItem(plays, 9, 1)).toBe(plays);
         expect(canMove(plays, 0, 1)).toBe(true);
+    });
+});
+
+describe("moveUnitTo", () => {
+    it("moves a standalone drill to another drill's place, down or up", () => {
+        const down = moveUnitTo(cards("a b c d"), 0, 2);
+        expect(show(down)).toBe("b c a d");
+        expectNormalized(down);
+        expect(show(moveUnitTo(cards("a b c d"), 3, 1))).toBe("a d b c");
+    });
+
+    it("moves a whole station block when dragged by any of its rows", () => {
+        expect(show(moveUnitTo(cards("a b+ c+ x y"), 0, 4))).toBe("x y a b+ c+");
+        expect(show(moveUnitTo(cards("a b+ c+ x y"), 2, 3))).toBe("x a b+ c+ y");
+    });
+
+    it("drops a unit onto a block's place, past the whole block", () => {
+        expect(show(moveUnitTo(cards("s a b+ x"), 0, 2))).toBe("a b+ s x");
+        expect(show(moveUnitTo(cards("x a b+ s"), 3, 2))).toBe("x s a b+");
+        expect(show(moveUnitTo(cards("a b+ c d+ e+ f"), 0, 4))).toBe("c d+ e+ a b+ f");
+    });
+
+    it("never splits a block or lets a moved drill join one", () => {
+        const moved = moveUnitTo(cards("s a b+ c+ t"), 4, 0);
+        expect(show(moved)).toBe("t s a b+ c+");
+        expect(groupStations(moved).map((group) => group.stations.map((row) => row.id))).toEqual([["t"], ["s"], ["a", "b", "c"]]);
+    });
+
+    it("matches a one-step moveItem when the target is the neighboring unit", () => {
+        for (const spec of ["a b c", "s a b+", "a b+ s", "a b+ c d+ e+", "x a b+ y"]) {
+            const plays = cards(spec);
+            const heads = groupStations(plays).map((group) => plays.indexOf(group.stations[0]));
+            heads.forEach((head, unit) => {
+                if (unit > 0) expect(show(moveUnitTo(plays, head, heads[unit - 1]))).toBe(show(moveItem(plays, head, -1)));
+                if (unit < heads.length - 1) expect(show(moveUnitTo(plays, head, heads[unit + 1]))).toBe(show(moveItem(plays, head, 1)));
+            });
+        }
+    });
+
+    it("returns the input when nothing moves", () => {
+        const plays = cards("a b+ c");
+        expect(moveUnitTo(plays, 0, 1)).toBe(plays);
+        expect(moveUnitTo(plays, 2, 2)).toBe(plays);
+        expect(moveUnitTo(plays, -1, 0)).toBe(plays);
+        expect(moveUnitTo(plays, 0, 3)).toBe(plays);
+        expect(moveUnitTo(plays, 0.5, 2)).toBe(plays);
+    });
+
+    it("moves a block row as its own unit, and the drill after it never joins it", () => {
+        const rows = [block("w", 0, "warmup", 8), ...stations(1, [{ id: "a" }, { id: "b" }]), solo("c", 3)];
+        const moved = moveUnitTo(rows, 0, 3);
+        expect(moved.map((row) => `${row.id}${row.runsWithPrevious ? "+" : ""}`)).toEqual(["a", "b+", "c", "w"]);
+        expect(moved.map((row) => row.sequence)).toEqual([0, 1, 2, 3]);
+    });
+
+    it("keeps a block's rotation and stays ticks when the block moves", () => {
+        const rows = normalizeGroups([solo("x", 0), ...stations(1, [{ id: "g", stays: true }, { id: "a" }, { id: "b" }], 5)]);
+        const moved = moveUnitTo(rows, 2, 0);
+        expect(moved.map((row) => [row.id, row.runsWithPrevious, row.rotateEveryMinutes ?? null, Boolean(row.stays)])).toEqual([
+            ["g", false, 5, true],
+            ["a", true, null, false],
+            ["b", true, null, false],
+            ["x", false, null, false],
+        ]);
+    });
+
+    it("starts a stored flagged first row as its own block head when moved", () => {
+        const moved = moveUnitTo(cards("a+ b+ c"), 0, 2);
+        expect(show(moved)).toBe("c a b+");
+    });
+});
+
+describe("moveStationTo", () => {
+    it("reorders a station anywhere within its block", () => {
+        const moved = moveStationTo(cards("x a b+ c+ d+ y"), 4, 2);
+        expect(show(moved)).toBe("x a d+ b+ c+ y");
+        expectNormalized(moved);
+        expect(show(moveStationTo(cards("x a b+ c+ d+ y"), 2, 4))).toBe("x a c+ d+ b+ y");
+    });
+
+    it("makes the dropped station the block's first drill when it takes the top", () => {
+        expect(show(moveStationTo(cards("x a b+ c+"), 3, 1))).toBe("x c a+ b+");
+        expect(show(moveStationTo(cards("a b+ c+"), 0, 2))).toBe("b c+ a+");
+    });
+
+    it("matches a one-step moveItem for a station after the first", () => {
+        for (const [spec, index, dir] of [["a b+ c+", 2, -1], ["a b+ c+", 1, 1], ["x a b+", 2, -1]] as Array<[string, number, -1 | 1]>) {
+            expect(show(moveStationTo(cards(spec), index, index + dir))).toBe(show(moveItem(cards(spec), index, dir)));
+        }
+    });
+
+    it("refuses a move out of the block, onto itself, or out of range", () => {
+        const plays = cards("a b+ c d+");
+        expect(moveStationTo(plays, 1, 2)).toBe(plays);
+        expect(moveStationTo(plays, 3, 1)).toBe(plays);
+        expect(moveStationTo(plays, 1, 1)).toBe(plays);
+        expect(moveStationTo(plays, -1, 0)).toBe(plays);
+        expect(moveStationTo(plays, 1, 9)).toBe(plays);
+        const solos = cards("a b");
+        expect(moveStationTo(solos, 0, 1)).toBe(solos);
+    });
+
+    it("hands the rotation to the new first drill and keeps every stays tick", () => {
+        const rows = normalizeGroups(stations(0, [{ id: "g", stays: true }, { id: "a" }, { id: "b" }], 5));
+        const moved = moveStationTo(rows, 0, 2);
+        expect(moved.map((row) => [row.id, row.runsWithPrevious, row.rotateEveryMinutes ?? null, Boolean(row.stays)])).toEqual([
+            ["a", false, 5, false],
+            ["b", true, null, false],
+            ["g", true, null, true],
+        ]);
+        expect(sessionRowsError(moved)).toBeNull();
     });
 });
 

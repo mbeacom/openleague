@@ -1,15 +1,15 @@
 "use client";
 
 /**
- * The session editor's list edits (2b, practice timing): delete, move, the
- * station toggle, Add block, and a station block's rotation and Stays ticks,
- * through the shared timeline rules. A refused edit (the helpers return the
+ * The session editor's list edits (2b, practice timing): delete, move (the
+ * arrows and drag and drop), the station toggle, Add block, and a station
+ * block's rotation and Stays ticks, through the shared timeline rules. A refused edit (the helpers return the
  * list itself) changes nothing and never marks the editor dirty. Kept out of
  * PracticeSessionEditor for its line budget.
  */
 import { useCallback, useRef, type Dispatch, type SetStateAction } from "react";
 import type { BlockKind, SessionItem } from "@/types/practice-planner";
-import { groupRange, moveItem, normalizeGroups, removeItem, toggleRunsWithPrevious } from "@/lib/utils/session-timeline";
+import { groupRange, moveItem, moveStationTo, moveUnitTo, normalizeGroups, removeItem, toggleRunsWithPrevious } from "@/lib/utils/session-timeline";
 import { isDrillRow, newBlockItem } from "@/lib/utils/session-rows";
 
 export function useSessionRowEdits({
@@ -37,6 +37,9 @@ export function useSessionRowEdits({
     // Removing a block's first drill keeps its stations grouped (2b).
     const deleteRow = useCallback((id: string) => applyListEdit(removeItem(plays, plays.findIndex((p) => p.id === id))), [applyListEdit, plays]);
     const moveRow = useCallback((index: number, dir: -1 | 1) => applyListEdit(moveItem(plays, index, dir)), [applyListEdit, plays]);
+    // Drag and drop: a whole unit among the units, or a station within its block.
+    const moveUnit = useCallback((from: number, to: number) => applyListEdit(moveUnitTo(plays, from, to)), [applyListEdit, plays]);
+    const moveStation = useCallback((from: number, to: number) => applyListEdit(moveStationTo(plays, from, to)), [applyListEdit, plays]);
     const toggleStation = useCallback((index: number) => applyListEdit(toggleRunsWithPrevious(plays, index)), [applyListEdit, plays]);
 
     const addBlock = useCallback(
@@ -87,5 +90,5 @@ export function useSessionRowEdits({
         [applyListEdit, plays],
     );
 
-    return { deleteRow, moveRow, toggleStation, addBlock, setRotation, setStays };
+    return { deleteRow, moveRow, moveUnitTo: moveUnit, moveStationTo: moveStation, toggleStation, addBlock, setRotation, setStays };
 }

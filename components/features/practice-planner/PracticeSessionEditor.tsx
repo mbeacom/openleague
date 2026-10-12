@@ -699,6 +699,8 @@ export function PracticeSessionEditor({
                 onCancelEdit={handleCancelEdit}
                 onMoveUp={(index) => rowEdits.moveRow(index, -1)}
                 onMoveDown={(index) => rowEdits.moveRow(index, 1)}
+                onMoveUnitTo={rowEdits.moveUnitTo}
+                onMoveStationTo={rowEdits.moveStationTo}
                 onToggleStation={rowEdits.toggleStation}
                 canEditDiagram={Boolean(sessionId)}
                 onEditDiagram={drillDialog.editDiagram}

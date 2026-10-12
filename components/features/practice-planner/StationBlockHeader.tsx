@@ -1,6 +1,6 @@
 "use client";
 
-import { useId, useState } from "react";
+import { useId, useState, type ReactNode } from "react";
 import { Alert, Box, Button, Collapse, FormControlLabel, MenuItem, Stack, Switch, TextField, Typography } from "@mui/material";
 import { GridOnOutlined as GridIcon } from "@mui/icons-material";
 import { MAX_ROTATE_MINUTES } from "@/types/practice-planner";
@@ -33,7 +33,20 @@ export interface StationRotationControls {
  * card. The summary is shown only while at least 2 stations rotate; with fewer
  * the "can't rotate" note explains why instead.
  */
-export function StationBlockHeader({ id, label, warnings, rotation }: { id: string; label: string; warnings: string[]; rotation: StationRotationControls }) {
+export function StationBlockHeader({
+    id,
+    label,
+    warnings,
+    rotation,
+    dragHandle = null,
+}: {
+    id: string;
+    label: string;
+    warnings: string[];
+    rotation: StationRotationControls;
+    /** Drags the whole block (SessionSortable); absent without drag and drop. */
+    dragHandle?: ReactNode;
+}) {
     const [showGrid, setShowGrid] = useState(false);
     const gridId = useId();
     const minutes = rotation.rotateEveryMinutes;
@@ -49,6 +62,8 @@ export function StationBlockHeader({ id, label, warnings, rotation }: { id: stri
                 {label}
             </Typography>
             <Stack direction="row" spacing={2} alignItems="center" useFlexGap flexWrap="wrap" sx={{ mt: 0.5 }}>
+                {/* Drags the whole block; the heading stays a direct child of the header. */}
+                {dragHandle}
                 <FormControlLabel
                     control={
                         <Switch

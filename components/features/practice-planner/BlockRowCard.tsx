@@ -6,7 +6,7 @@
  * stepper, an optional note, and the move / delete controls. No diagram, no
  * station switch and no goalie badge. Edits apply as they are made.
  */
-import { useId } from "react";
+import { useId, type ReactNode } from "react";
 import { Box, Card, IconButton, Stack, TextField, Typography } from "@mui/material";
 import {
     AcUnitOutlined,
@@ -48,9 +48,11 @@ export interface BlockRowCardProps {
     onDelete: (id: string) => void;
     onMoveUp: (index: number) => void;
     onMoveDown: (index: number) => void;
+    /** The drag handle (SessionSortable), placed before the arrows; absent without drag and drop. */
+    dragHandle?: ReactNode;
 }
 
-export function BlockRowCard({ item, index, canMoveUp, canMoveDown, locked = false, runBy = null, onUpdate, onDelete, onMoveUp, onMoveDown }: BlockRowCardProps) {
+export function BlockRowCard({ item, index, canMoveUp, canMoveDown, locked = false, runBy = null, onUpdate, onDelete, onMoveUp, onMoveDown, dragHandle = null }: BlockRowCardProps) {
     const titleId = useId();
     const Icon = BLOCK_ICONS[item.kind];
     const title = blockTitle(item.kind, item.label);
@@ -122,6 +124,7 @@ export function BlockRowCard({ item, index, canMoveUp, canMoveDown, locked = fal
                 </Stack>
 
                 <Stack direction="row" justifyContent={{ xs: "space-between", sm: "flex-end" }}>
+                    {dragHandle}
                     <IconButton aria-label={`Move ${title} up`} onClick={() => onMoveUp(index)} disabled={locked || !canMoveUp} sx={TARGET}>
                         <ArrowUpwardIcon />
                     </IconButton>
