@@ -226,6 +226,7 @@ interface CachedPolicy {
 export class RobotsGate {
     private readonly cache = new Map<string, CachedPolicy>();
     private readonly lastRequestAt = new Map<string, number>();
+    private readonly loading = new Map<string, Promise<RobotsPolicy>>();
     private readonly permitted: Set<string>;
     private readonly ttlMs: number;
     readonly now: () => number;
@@ -262,6 +263,28 @@ export class RobotsGate {
         this.cache.set(host, { policy, expiresAt: this.now() + ttl });
     }
 
+    /**
+     * The host's cached policy, or the result of `load` stored as it would be
+     * by `store`. Concurrent misses for one host share a single load, so a burst
+     * of first requests sends one robots.txt request; a failed load is shared by
+     * its waiters and not cached, so the next request asks again.
+     */
+    policyFor(host: string, load: () => Promise<{ policy: RobotsPolicy; maxAgeMs: number | null }>): Promise<RobotsPolicy> {
+        const hit = this.cached(host);
+        if (hit) return Promise.resolve(hit);
+        let pending = this.loading.get(host);
+        if (!pending) {
+            pending = load()
+                .then(({ policy, maxAgeMs }) => {
+                    this.store(host, policy, maxAgeMs);
+                    return policy;
+                })
+                .finally(() => this.loading.delete(host));
+            this.loading.set(host, pending);
+        }
+        return pending;
+    }
+
     /** Records a request to the host now (a robots.txt fetch counts). */
     noteRequest(host: string): void {
         const now = this.now();
@@ -290,5 +313,6 @@ export class RobotsGate {
     clear(): void {
         this.cache.clear();
         this.lastRequestAt.clear();
+        this.loading.clear();
     }
 }

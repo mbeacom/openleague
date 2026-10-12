@@ -214,6 +214,33 @@ describe("robots.txt cache", () => {
         expect(await kindOf(t.run())).toBe("ok");
     });
 
+    it("fetches robots.txt once for concurrent first requests to a host", async () => {
+        let answer: (r: Response) => void = () => {};
+        const slow = () => new Promise<Response>((resolve) => (answer = resolve));
+        const t = setup({ robotsReplies: [slow, robots("User-agent: *\nAllow: /")], pageReplies: [html(), html()] });
+        const first = kindOf(t.run());
+        const second = kindOf(t.run());
+        await vi.waitFor(() => expect(t.urls()).toEqual([ROBOTS_URL]));
+        answer(robots("User-agent: *\nAllow: /"));
+        expect(await first).toBe("ok");
+        expect(await second).toBe("ok");
+        expect(t.urls()).toEqual([ROBOTS_URL, PAGE, PAGE]);
+    });
+
+    it("shares a failed robots.txt read with the requests waiting on it, then asks again", async () => {
+        let answer: (r: Response) => void = () => {};
+        const slow = () => new Promise<Response>((resolve) => (answer = resolve));
+        const t = setup({ robotsReplies: [slow, status(404)], pageReplies: [html()] });
+        const first = kindOf(t.run());
+        const second = kindOf(t.run());
+        await vi.waitFor(() => expect(t.urls()).toEqual([ROBOTS_URL]));
+        answer(status(503));
+        expect(await first).toBe("robots-unavailable");
+        expect(await second).toBe("robots-unavailable");
+        expect(await kindOf(t.run())).toBe("ok");
+        expect(t.urls()).toEqual([ROBOTS_URL, ROBOTS_URL, PAGE]);
+    });
+
     it("honours a shorter Cache-Control max-age", async () => {
         vi.useFakeTimers();
         const t = setup({
@@ -236,6 +263,28 @@ describe("Crawl-delay", () => {
         expect(t.urls()).toEqual([ROBOTS_URL]);
         await vi.advanceTimersByTimeAsync(200);
         expect(await pending).toBe("ok");
+        expect(t.urls()).toEqual([ROBOTS_URL, PAGE]);
+    });
+
+    it("waits the delay again before following a same-host page redirect", async () => {
+        vi.useFakeTimers();
+        const t = setup({ robotsReplies: [robots("User-agent: *\nCrawl-delay: 3")], pageReplies: [redirect("/schedule/9u"), html()] });
+        const pending = kindOf(t.run());
+        await vi.advanceTimersByTimeAsync(3_000);
+        expect(t.urls()).toEqual([ROBOTS_URL, PAGE]);
+        await vi.advanceTimersByTimeAsync(2_900);
+        expect(t.urls()).toEqual([ROBOTS_URL, PAGE]);
+        await vi.advanceTimersByTimeAsync(200);
+        expect(await pending).toBe("ok");
+        expect(t.urls()).toEqual([ROBOTS_URL, PAGE, `https://${HOST}/schedule/9u`]);
+    });
+
+    it("refuses a redirect whose delay wouldn't leave the page enough of the deadline", async () => {
+        vi.useFakeTimers();
+        const t = setup({ robotsReplies: [robots("User-agent: *\nCrawl-delay: 6")], pageReplies: [redirect("/schedule/9u")] });
+        const pending = t.run(PAGE, { timeoutMs: 15_000 }).catch((e: unknown) => e);
+        await vi.advanceTimersByTimeAsync(6_000);
+        expect(await pending).toMatchObject({ kind: "crawl-delay", retryAfterSec: 6 });
         expect(t.urls()).toEqual([ROBOTS_URL, PAGE]);
     });
 

@@ -188,11 +188,12 @@ Failing closed refuses the fetch with "couldn't check the site's rules" and
 is not cached, so the next try asks again.
 
 **Crawl-delay.** A Crawl-delay in our group is kept as a minimum gap between
-our requests to that host (the robots.txt request counts). A gap of up to
-10 s that still leaves 5 s of the deadline is waited out; a longer one is
-refused with the time to try again. The spacing and the robots.txt cache
-(at most 24 hours, shorter when Cache-Control says so) live in the server
-instance's memory. Serverless instances don't share them, so each instance
+our requests to that host (the robots.txt request counts, and so does each
+followed redirect). A gap of up to 10 s that still leaves 5 s of the deadline
+is waited out; a longer one is refused with the time to try again. The
+spacing and the robots.txt cache (at most 24 hours, shorter when
+Cache-Control says so) live in the server instance's memory, and concurrent
+first requests to a host share one robots.txt read. Serverless instances don't share them, so each instance
 reads robots.txt for itself and spaces only its own requests; the durable
 per-user rate limit (10 per hour) still bounds the total.
 

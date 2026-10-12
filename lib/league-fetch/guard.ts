@@ -15,7 +15,8 @@
  * - when a RobotsGate is passed (the action always passes one), the host's
  *   robots.txt is fetched first under these same rules (with up to 5
  *   redirects, as RFC 9309 allows) and the same deadline,
- *   and a disallowed page is refused; Crawl-delay spaces our requests, and a
+ *   and a disallowed page is refused; Crawl-delay spaces our requests
+ *   (redirect hops included), and a
  *   robots.txt that can't be read fails closed (see robots.ts);
  * - logs carry the host, the status and an error kind, never the path,
  *   query or page content.
@@ -431,22 +432,30 @@ export async function fetchLeaguePage(raw: string, options: LeagueFetchOptions):
         const assertRobotsAllow = (url: URL) => {
             if (policy && !permitted && !isAllowedByRobots(policy, url.pathname + url.search)) throw new LeagueFetchError("robots-disallowed");
         };
-        if (robots) {
-            policy = robots.cached(host);
-            if (!policy) {
-                const read = await readRobots(host, robots, ctx);
-                policy = read.policy;
-                robots.store(host, policy, read.maxAgeMs);
-            }
-            assertRobotsAllow(start);
-            // Crawl-delay: wait for a short gap that fits the deadline, refuse a longer one.
+        // Crawl-delay, before every page request (a redirected one too): wait
+        // for a short gap that fits the deadline, refuse a longer one.
+        const awaitSlot = async () => {
+            if (!robots || !policy) return;
             const maxWaitMs = Math.max(0, Math.min(ROBOTS_MAX_WAIT_MS, deadlineAt - Date.now() - ROBOTS_PAGE_RESERVE_MS));
             const slot = robots.reserve(host, policy.crawlDelaySec, maxWaitMs);
             if ("refusedMs" in slot) throw new LeagueFetchError("crawl-delay", undefined, Math.max(1, Math.ceil(slot.refusedMs / 1000)));
             if (slot.waitMs > 0) await Promise.race([sleep(slot.waitMs), deadline]);
+        };
+        if (robots) {
+            // Concurrent first requests to a host share one robots.txt read; a
+            // deadline that passes while waiting on it means robots.txt went unchecked.
+            const robotsDeadline = deadline.catch(() => {
+                throw new LeagueFetchError("robots-unavailable");
+            });
+            policy = await Promise.race([robots.policyFor(host, () => readRobots(host, robots, ctx)), robotsDeadline]);
+            assertRobotsAllow(start);
+            await awaitSlot();
         }
 
-        const { response, url } = await guardedGet(start, "text/html", maxRedirects, ctx, assertRobotsAllow);
+        const { response, url } = await guardedGet(start, "text/html", maxRedirects, ctx, async (next) => {
+            assertRobotsAllow(next);
+            await awaitSlot();
+        });
         if (response.status !== 200) {
             await response.body?.cancel().catch(() => {});
             throw new LeagueFetchError("http-status", response.status);
