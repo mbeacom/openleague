@@ -1,6 +1,6 @@
 /** Ratings are estimates (team directory spec, R10; phase 0): the label and the note on every screen that shows a computed rating or rank. */
 import { describe, expect, it } from "vitest";
-import { render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import { ThemeProvider } from "@mui/material/styles";
 import theme from "@/lib/theme";
 import { composite } from "@/lib/ratings";
@@ -57,8 +57,12 @@ describe("estimate labels on the rankings screens", () => {
         await store.saveRankings(sampleRankingsDoc());
         renderScreen(<RankingsScreen store={store} />, store);
         await screen.findByText("CSHL-compatible RPI");
-        // The rating, the rank and the suggested level each carry the label; the chart adds one more.
-        expect(screen.getAllByText(ESTIMATE_LABEL).length).toBeGreaterThanOrEqual(4);
+        // The rating, the rank and the suggested level each carry the label in their own tile.
+        for (const tile of ["CSHL-compatible RPI", "Rank", "Suggested level"]) {
+            const heading = screen.getByText(tile, { selector: ".MuiTypography-overline" });
+            const card = heading.closest(".MuiPaper-root") as HTMLElement;
+            expect(within(card).getByText(ESTIMATE_LABEL)).toBeInTheDocument();
+        }
         expect(screen.getAllByRole("note").some((note) => note.textContent?.includes(ESTIMATE_NOTE))).toBe(true);
     });
 
@@ -89,7 +93,16 @@ describe("estimate labels on the rankings screens", () => {
         renderScreen(<RankingsWhatIfScreen store={store} />, store);
         await screen.findByRole("heading", { name: "What-if" });
         expect(screen.getByText(ESTIMATE_NOTE)).toBeInTheDocument();
-        expect(screen.getAllByText(ESTIMATE_LABEL).length).toBeGreaterThan(0);
+    });
+
+    it("labels my team's before → after rank on What-if", async () => {
+        const { store } = memoryStore();
+        await store.saveRankings(sampleRankingsDoc());
+        renderScreen(<RankingsWhatIfScreen store={store} />, store);
+        fireEvent.change(await screen.findByLabelText("Hilltop M1 goals"), { target: { value: "8" } });
+        fireEvent.change(screen.getByLabelText("Brookside M1 goals"), { target: { value: "0" } });
+        const change = await screen.findByText(/Rank \d+ → \d+/);
+        expect(within(change).getByText(ESTIMATE_LABEL)).toBeInTheDocument();
     });
 });
 
