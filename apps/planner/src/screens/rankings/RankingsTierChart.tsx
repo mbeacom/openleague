@@ -15,6 +15,7 @@ import { alpha, keyframes, type Theme } from "@mui/material/styles";
 import type { TeamRating } from "@/lib/ratings";
 import { useRankingsPlatform } from "./rankings-platform";
 import { BELOW_LAST_LEVEL, levelBandAlpha, formatRating } from "./display";
+import { EstimateLabel } from "./EstimateLabel";
 import {
     DOT_COLORS,
     RPI_MAX,
@@ -259,9 +260,12 @@ export function RankingsTierChart({ teams, levels, myTeam, logos, onShowTable }:
                 ...chartVarsSx(theme, levelCount),
             })}
         >
-            <Typography id={titleId} component="h2" variant="h6" sx={{ fontWeight: 800 }}>
-                {TIER_CHART_TITLE}
-            </Typography>
+            <Box sx={{ display: "flex", alignItems: "center", flexWrap: "wrap", columnGap: 1 }}>
+                <Typography id={titleId} component="h2" variant="h6" sx={{ fontWeight: 800 }}>
+                    {TIER_CHART_TITLE}
+                </Typography>
+                <EstimateLabel />
+            </Box>
             <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
                 Every ranked team on the 0–20 RPI scale, one lane per level. Lines mark the cut between levels.
             </Typography>

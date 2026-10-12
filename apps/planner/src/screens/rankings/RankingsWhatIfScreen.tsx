@@ -11,6 +11,7 @@ import type { ActionResult } from "@/lib/planner-store";
 import { toRatingInputs, type RankingsDocument, type RankingsGame } from "@/lib/rankings-document";
 import type { RankingsOps } from "../../store/rankings";
 import { RankingsStatus, formatRating } from "./display";
+import { EstimateLabel, EstimateNote } from "./EstimateLabel";
 import { useRankingsDoc } from "./useRankingsDoc";
 
 export const RECORD_FINAL_LABEL = "Record as final";
@@ -119,6 +120,7 @@ function WhatIf({ doc, save }: { doc: RankingsDocument; save: (doc: RankingsDocu
             <Typography component="h1" variant="h5" sx={{ fontWeight: 800 }}>
                 What-if
             </Typography>
+            <EstimateNote />
             <TextField select label="Team" value={team} onChange={(e) => setTeam(e.target.value)} sx={{ maxWidth: 360 }}>
                 {doc.teams.map((t) => (
                     <MenuItem key={t.number} value={t.number}>
@@ -190,7 +192,7 @@ function WhatIf({ doc, save }: { doc: RankingsDocument; save: (doc: RankingsDocu
 
             {mineBefore && mineAfter && hypotheticals.length > 0 && (
                 <Paper variant="outlined" sx={{ p: 2 }}>
-                    <Typography sx={{ fontWeight: 800 }}>{`Rank ${mineBefore.rank ?? "—"} → ${mineAfter.rank ?? "—"}`}</Typography>
+                    <Typography sx={{ fontWeight: 800 }}>{`Rank ${mineBefore.rank ?? "—"} → ${mineAfter.rank ?? "—"}`} <EstimateLabel sx={{ ml: 0.5 }} /></Typography>
                     <Typography>{`RPI ${formatRating(mineBefore.rpi)} → ${formatRating(mineAfter.rpi)} · Level ${mineBefore.level ?? "—"} → ${mineAfter.level ?? "—"}`}</Typography>
                 </Paper>
             )}
