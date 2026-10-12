@@ -82,7 +82,7 @@ interface PlaybackFrame {
 }
 ```
 
-- `compilePlayback` runs once per diagram (memoized on the `PlayData` reference). It resolves actors and pucks (R4), schedules every stroke (R3, R5), and precomputes each stroke's centerline in feet resampled at 0.5 ft with a cumulative arc-length table.
+- `compilePlayback` runs once per diagram (memoized on the `PlayData` reference). It resolves actors and pucks (R4), schedules every stroke (R3, R5), and precomputes each stroke's centerline in feet resampled at 0.5 ft with a cumulative arc-length table. The table is capped at `MAX_ARC_SAMPLES` (4,000): spacing is 0.5 ft or length ÷ 4,000, whichever is larger. Every stroke shorter than 2,000 ft keeps 0.5 ft, and the longest valid stroke (1,000 points zig-zagging corner to corner, about 217,000 ft) stays at 4,000 samples instead of about 434,000. On that extreme input the animation cuts corners; ordinary strokes are unaffected.
 - `poseAt` is cheap per frame: it clamps `t` to `[0, durationMs]`, and for each active stroke binary-searches its arc-length table. It is deterministic: the same `Playback` and `t` give the same frame.
 - **The frame is ordinary `PlayData`,** so `drawBoardScene` draws it unchanged:
   - players and pucks at their posed positions;
@@ -99,8 +99,10 @@ With no `step` on any stroke, strokes are scheduled from the drawing itself. Rul
 A stroke starts at time 0 unless one of these makes it wait (the latest wins):
 
 1. **Same actor, one route at a time.** It waits for the end of the actor's previous stroke. A route drawn as several strokes (each starting within `SNAP_RADIUS_FT` of the previous one's end) is one skater's continuous route.
-2. **Receive before you go.** A movement stroke waits for the end of an earlier pass whose last point is within `ATTACH_RADIUS_FT` of its actor (the actor's position at that time).
-3. **Pass on the move.** A pass or shot that doesn't start at a resting player, but starts within `ATTACH_RADIUS_FT` of an earlier movement stroke's centerline, starts when that skater reaches the nearest point on it. (Breakout: LW skates up the wall and passes at (58, 14).)
+2. **Receive before you go.** A movement stroke waits for the end of an earlier pass whose `toId` names its actor. Failing that, it waits for an earlier pass whose last point is within `ATTACH_RADIUS_FT` of its actor (the actor's position at that time).
+3. **Pass on the move.** A pass or shot whose `fromId` names an earlier movement stroke starts when that skater reaches the point on it nearest the pass's first point. Failing that, a pass or shot that doesn't start at a resting player, but starts within `ATTACH_RADIUS_FT` of an earlier movement stroke's centerline, starts when that skater reaches the nearest point on it. (Breakout: LW skates up the wall and passes at (58, 14).)
+
+**Recorded attachments come first.** In rules 2 and 3, a valid `toId` or `fromId` (R6, R7) decides the dependency, so a rearranged diagram keeps the pass the coach drew to that skater. Proximity is the fallback when the id is absent, names no element, or names a stroke drawn later; the later-drawn case is ignored rather than followed, so the schedule stays acyclic. Without ids (phase 1, or Alt/Option strokes) the rules are proximity only.
 
 Constants: `ATTACH_RADIUS_FT = PLAYER_RADIUS_FT + SNAP_RADIUS_FT` (6 + 3 = 9 ft; `glyph-metrics.ts:4`, `line-editing.ts:22`). This catches strokes drawn from the edge of a marker (the starter drills start 4–7 ft out) without reaching the next player in a typical lane (12–15 ft apart).
 
@@ -126,7 +128,7 @@ If the actor isn't exactly at the stroke's first point (up to 9 ft away, or anyw
 2. The `puck` (including a synthetic one already created) nearest the first point, by posed position, within `ATTACH_RADIUS_FT`.
 3. Otherwise a synthetic puck appears at the first point when the stroke starts.
 
-After the stroke the puck stays at its last point, where a later stroke can pick it up by rule 2. A carried puck rides 2 ft ahead of the actor along the path's tangent and is left at the end of the carry.
+After the stroke the puck stays at its last point, where a later stroke can pick it up by rule 2. A carried puck rides 2 ft ahead of the actor along the path's tangent and is left at the end of the carry, unless a pass or shot on the move (R3 rule 3) branches from the carry first: that stroke takes the carried puck at the release point, at the time the skater reaches it.
 
 **Hidden goalies.** The session viewer plays `displayPlayData`. A stroke whose actor was a hidden goalie has no actor and draws itself (rule 5).
 
@@ -166,7 +168,7 @@ interface DrawingElement {
 ```
 
 - **`speed` instead of `durationMs`.** A duration goes wrong as soon as the line is reshaped; a relative pace survives line edits, is smaller, and is the choice a coach actually makes. Rejected: `durationMs`.
-- **Authored steps are barriers.** When any stroke has a `step`, all strokes of step *n* start after every stroke of step *n − 1* has finished (plus the beat). **Within a step the R3 rules still apply**, so a pass on the move or a chained route behaves the same as in automatic order. Consequently "everything in step 1" plays exactly like automatic order.
+- **Authored steps are barriers.** When any stroke has a `step`, all strokes of an authored step start after every stroke of the previous authored step has finished (plus the beat). "Previous" means the next lower step number that has strokes, so with steps 1, 3 and 7, step 3 waits for step 1 and step 7 for step 3. **Within a step the R3 rules still apply**, so a pass on the move or a chained route behaves the same as in automatic order. Consequently "everything in step 1" plays exactly like automatic order.
 - **Strokes without a step in a drill that has steps** (drawn after the order was set) run after the last authored step, in automatic order. The Steps mode flags them (R8).
 - Step numbers are stored as given; gaps are shown compacted (steps 1, 3, 7 display as 1, 2, 3).
 - **Reading is advisory**, like `area` and `equipmentNeeds`: a new pre-filter in `upgradePlayData` drops an invalid `step` (not an integer 1–100), `fromId`/`toId` (not a valid id string) or `speed` (not `slow`/`fast`) from that drawing and logs it. It never makes the diagram unreadable. An id that names no element, or the stroke itself, is ignored at compile time.
@@ -195,7 +197,7 @@ interface DrawingElement {
 
 - **Layout (mobile first).** Under the board: row 1 is the scrubber, full width, with a tick per step; row 2 is **Step back**, **Play/Pause**, **Step forward**, then **Speed** (a 3-way toggle 0.5× / 1× / 2×) and **Loop**. At ≥ 600 px both rows merge into one. All targets are ≥ 44 × 44 px; the slider thumb has a 44 px hit area.
 - **Step back/forward** jump to the start of the previous or next step and pause.
-- **Caption.** Under the controls: "Step 2 of 4 · LW: Puck carry · D1: Pass", from the active strokes' actor labels (`label`, else `ROLE_LABELS`) and `ACTION_LABELS`. It is also an `aria-live="polite"` region, updated on step changes only, never per frame.
+- **Caption.** Under the controls: "Step 2 of 4 · LW: Puck carry · D1: Pass", from the actor labels (`label`, else `ROLE_LABELS`) and `ACTION_LABELS` of every stroke assigned to the current playback step, in start order. That includes a stroke that starts partway through the step (a pass on the move), so the one announcement covers it. It is also an `aria-live="polite"` region, updated on step changes only, never per frame.
 - **Keyboard** (when the board has focus): Space play/pause, ←/→ step, Home/End first/last frame.
 - **No autoplay**, anywhere, and loop is off by default. Moving content starts only on a tap (WCAG 2.2.2).
 - **Reduced motion.** With `prefers-reduced-motion: reduce` (read with MUI `useMediaQuery`), Play is replaced by **Next step**, which shows the end state of the next step with no tweening, and the scrubber snaps to steps. An **Animate** switch beside it turns tweening on for that viewer on request.
@@ -217,7 +219,7 @@ New client component `PlaybackBoard` (separate from `RinkBoard`, which is the ed
 - **Draw only while playing.** The component's own `requestAnimationFrame` loop runs while playing and stops on pause, at the end, when the document is hidden, or when an `IntersectionObserver` reports the board off screen. The clock comes from `performance.now()`, so a slow device drops frames instead of slowing the drill.
 - **Two layers.** A static layer canvas holds the rink plus every completed and ghosted stroke. It is redrawn only when a stroke changes state (each stroke does so at most twice per run). Each frame blits it, then draws the active strokes, equipment, players, annotations and the area mask, which keeps `drawAllElements`' z-order (drawings below everything). The board keeps its own layer rather than the module-level rink cache, which would thrash against other diagrams on the page.
 - **Pixel ratio capped at 2** while playing.
-- **Budgets** (checked on a mid-range Android profile in the browser pass): `compilePlayback` < 5 ms for a 100-stroke drill; per-frame script < 4 ms; ≥ 30 fps for 100 strokes.
+- **Budgets** (checked on a mid-range Android profile in the browser pass): `compilePlayback` < 5 ms for a 100-stroke drill; per-frame script < 4 ms; ≥ 30 fps for 100 strokes. Input size is bounded too: no stroke's arc-length table exceeds `MAX_ARC_SAMPLES` (R2), whatever its length.
 
 ### R12. Video export (no dependency)
 
@@ -268,16 +270,17 @@ Each PR ships on its own and leaves main releasable.
 
 - **`playback.ts` (node project, pure):** small hand-built fixtures, one rule per test:
   - actor inference: nearest within 9 ft, the tie rule, none beyond 9 ft, `fromId` beats proximity, a chained route keeps its actor;
-  - scheduling: concurrent independent skaters, receive-before-go, pass on the move starting at the nearest arc point, same-actor queueing, only earlier-drawn strokes are waited on;
+  - scheduling: concurrent independent skaters, receive-before-go, pass on the move starting at the nearest arc point, same-actor queueing, only earlier-drawn strokes are waited on; with ids, `toId` picks the receiver and `fromId` the carrier route over a nearer stroke, and a dangling or later-drawn id falls back to proximity;
   - pucks: existing puck picked up, synthetic puck created and later picked up, carry moves both, `puckPile` never moves;
-  - authored steps as barriers, the R3 rules within a step, unstepped strokes after the last step, gaps compacted, dangling and self ids ignored;
+  - authored steps as barriers, including gaps (steps 1, 3, 7 each wait for the previous existing step), the R3 rules within a step, unstepped strokes after the last step, gaps compacted, dangling and self ids ignored;
+  - size: the longest valid stroke (1,000 points, corner to corner) compiles with a table of at most `MAX_ARC_SAMPLES` samples and ends at its last point; an ordinary stroke keeps 0.5 ft spacing;
   - timing: speed table, 600 ms floor, 10 s cap, `slow`/`fast`, the 400 ms beat, the playback-speed multiplier leaves the schedule alone;
   - frames: `t` clamped; the first frame equals the diagram with every non-`line` stroke ghosted; the last frame's strokes equal the stored strokes; `line` strokes never ghost; the truncated stroke's last point lies on the centerline; same input, same frame; no synthetic id survives `sanitizePlayDataForWrite`.
 - **Golden schedules.** For every starter play, a snapshot of each stroke's actor, puck, start and end (ms), and the poses at each step boundary rounded to 0.1 ft. Reviewed by eye once when phase 1 lands; afterwards a change to the rules shows as a snapshot diff.
 - **Schema (phase 2):** the fields round-trip; each invalid value is dropped with the rest of the diagram intact; an older-reader schema (today's `drawingSchema`) strips them; the plan document round-trips them; the link fallback drops only `fromId`/`toId`/`speed`.
 - **Snapping (phase 2):** `findSnapTarget` returns the hit element's id for player, equipment and line-end targets; `finishStroke` stores `fromId`/`toId`; an end dragged off a target clears its id; a whole-line move clears both.
 - **Components (jsdom):**
-  - `PlaybackBoard`: controls and keyboard, step ticks, the caption's live region updates per step only, no autoplay;
+  - `PlaybackBoard`: controls and keyboard, step ticks, the caption's live region updates per step only and names every stroke in the step (including one that starts partway through), no autoplay;
   - reduced motion via a `matchMedia` stub: Next step replaces Play, Animate opts in;
   - the rAF loop stops on pause, end and hidden, using fake timers and a rAF stub;
   - Steps mode: assign, same/new step, remove, both shortcuts, one undo entry each.
