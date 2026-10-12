@@ -7,9 +7,12 @@
  * - Scope: Files.ReadWrite.AppFolder (plus User.Read for sign-in). The app sees
  *   only `Apps/<app name>/`, created on first use at /me/drive/special/approot.
  *   No picker: the app lists its folder itself.
- * - Accounts: personal and work or school (the /common authority). Microsoft's
- *   documentation disagrees on whether the app folder works for work or school
- *   accounts, so a failure there is reported as its own error, not a generic one.
+ * - Accounts: personal Microsoft accounts only (the /consumers authority) by
+ *   default; personal and work or school (/common) when the build sets
+ *   OPENLEAGUE_MICROSOFT_ACCOUNTS=any. Microsoft's documentation disagrees on
+ *   whether the app folder works for work or school accounts, so a failure
+ *   there is reported as its own error, not a generic one. Under /consumers a
+ *   work or school account can't sign in, so that error can't arise.
  * - Tokens: authorization code with PKCE, no client secret. MSAL's cache is in
  *   sessionStorage (cleared with the tab). Popups and the silent-renewal iframe
  *   end on auth/redirect.html, which runs only MSAL's redirect bridge.
@@ -28,13 +31,16 @@ import { PublicClientApplication, type AccountInfo, type AuthenticationResult, t
 import { DOCUMENT_KINDS, ENVELOPE_OVERHEAD_BYTES } from "@/lib/document-envelope";
 import { PLAN_FORMAT } from "@/lib/plan-document/document";
 import { RANKINGS_FORMAT } from "@/lib/rankings-document/document";
+import { MICROSOFT_AUTHORITIES, type MicrosoftAccounts } from "../../cloud-config";
 import { connectorFail, connectorOk, type ConnectorError, type ConnectorStatus, type RemoteFile, type RemoteRef, type Result, type SaveInput, type StorageConnector } from "./connector";
 
 /** Delegated Graph permissions (spec R6): the app folder only, and sign-in. */
 export const ONEDRIVE_SCOPES = ["Files.ReadWrite.AppFolder", "User.Read"] as const;
 
-/** Personal and work or school accounts (open question 4, resolved). */
-export const MICROSOFT_AUTHORITY = "https://login.microsoftonline.com/common";
+/** The sign-in authority for the build's audience (open question 4): /consumers for personal, /common for any. */
+export function microsoftAuthority(accounts: MicrosoftAccounts): string {
+    return MICROSOFT_AUTHORITIES[accounts];
+}
 
 export const GRAPH_ROOT = "https://graph.microsoft.com/v1.0";
 
@@ -68,6 +74,8 @@ export type MsalClient = Pick<
 
 export interface MsalAuthOptions {
     clientId: string;
+    /** Which accounts may sign in (the build's OPENLEAGUE_MICROSOFT_ACCOUNTS); personal when omitted. */
+    accounts?: MicrosoftAccounts;
     /** auth/redirect.html, beside the planner's index.html. */
     redirectUri: string;
     /** MSAL itself when omitted; tests pass a fake. */
@@ -106,17 +114,17 @@ export function authErrorOf(error: unknown): ConnectorError {
     }
 }
 
-/** MSAL's configuration: both account types, the redirect bridge, and a cache that ends with the tab. */
-export function msalConfiguration(clientId: string, redirectUri: string): Configuration {
+/** MSAL's configuration: the build's audience, the redirect bridge, and a cache that ends with the tab. */
+export function msalConfiguration(clientId: string, redirectUri: string, accounts: MicrosoftAccounts = "personal"): Configuration {
     return {
-        auth: { clientId, authority: MICROSOFT_AUTHORITY, redirectUri, postLogoutRedirectUri: redirectUri },
+        auth: { clientId, authority: microsoftAuthority(accounts), redirectUri, postLogoutRedirectUri: redirectUri },
         // Not localStorage: a 24-hour refresh token at rest would outlive the tab (spec R6).
         cache: { cacheLocation: "sessionStorage" },
     };
 }
 
-export function createMsalAuth({ clientId, redirectUri, client, interactive = browserActivation }: MsalAuthOptions): OneDriveAuth {
-    const pca: MsalClient = client ?? new PublicClientApplication(msalConfiguration(clientId, redirectUri));
+export function createMsalAuth({ clientId, accounts = "personal", redirectUri, client, interactive = browserActivation }: MsalAuthOptions): OneDriveAuth {
+    const pca: MsalClient = client ?? new PublicClientApplication(msalConfiguration(clientId, redirectUri, accounts));
     let initialized = false;
     let initializing: Promise<void> | null = null;
     const ready = () =>
@@ -261,7 +269,11 @@ export interface OneDriveConnectorOptions {
 type Where = "item" | "folder";
 
 export function createOneDriveConnector({ auth, fetch: fetchImpl = (input, init) => globalThis.fetch(input, init) }: OneDriveConnectorOptions): OneDriveConnector {
-    /** A Graph error status as a code. "folder" calls tell a work or school account's app-folder failure apart. */
+    /**
+     * A Graph error status as a code. "folder" calls tell a work or school
+     * account's app-folder failure apart (reachable only in an `any` build:
+     * /consumers signs in no work or school account).
+     */
     function statusError(response: Response, where: Where): ConnectorError {
         const { status } = response;
         if (where === "folder" && auth.accountType() === "work" && (status === 400 || status === 403 || status === 404 || status === 501)) {
@@ -487,6 +499,6 @@ export function createOneDriveConnector({ auth, fetch: fetchImpl = (input, init)
 }
 
 /** The connector as the app builds it: MSAL with the build's client id. */
-export function createOneDriveFromConfig({ clientId, redirectUri }: { clientId: string; redirectUri: string }): OneDriveConnector {
-    return createOneDriveConnector({ auth: createMsalAuth({ clientId, redirectUri }) });
+export function createOneDriveFromConfig({ clientId, accounts, redirectUri }: { clientId: string; accounts: MicrosoftAccounts; redirectUri: string }): OneDriveConnector {
+    return createOneDriveConnector({ auth: createMsalAuth({ clientId, accounts, redirectUri }) });
 }

@@ -224,7 +224,7 @@ The static planner at `/planner/` can save practice plans and rankings to a coac
 
 OAuth registrations are tied to an origin (Google) or an exact URL (Microsoft), so **a fork registers its own apps** and never reuses openleague.dev's client ids. A fork's Pages site usually lives at `https://<owner>.github.io/<repo>/`, with the planner at `https://<owner>.github.io/<repo>/planner/`.
 
-The four values, all optional:
+The values, all optional:
 
 | Name | Kind | Value |
 |---|---|---|
@@ -232,6 +232,7 @@ The four values, all optional:
 | `OPENLEAGUE_GOOGLE_APP_ID` | variable | The Google Cloud **project number** (digits), used by the Picker |
 | `OPENLEAGUE_GOOGLE_API_KEY` | secret | A browser API key restricted as below |
 | `OPENLEAGUE_MICROSOFT_CLIENT_ID` | variable | The Entra application (client) id, a GUID |
+| `OPENLEAGUE_MICROSOFT_ACCOUNTS` | variable | `personal` (the default when unset) or `any`; must match the registration's supported account types |
 
 Google Drive needs all three Google values; setting only some fails the build with the names of the missing ones. Every value ships in the page, so none of them is a credential. The API key is stored as a secret only to keep it out of workflow logs.
 
@@ -245,14 +246,18 @@ Google Drive needs all three Google values; setting only some fails the build wi
 
 **OneDrive**
 
-1. Register an application in Microsoft Entra. Choose the account types you want to support: **personal Microsoft accounts** only, or **any organizational directory and personal Microsoft accounts** (the planner signs in through the `/common` authority, which accepts both).
+1. Register an application in Microsoft Entra and choose its supported account types, then set `OPENLEAGUE_MICROSOFT_ACCOUNTS` to match:
+   - **Personal Microsoft accounts only**: leave `OPENLEAGUE_MICROSOFT_ACCOUNTS` unset or set it to `personal`. The planner signs in through the `/consumers` authority and never mentions work or school accounts. openleague.dev's registration is personal accounts only (2026-10-11, revised again).
+   - **Any organizational directory and personal Microsoft accounts**: set `OPENLEAGUE_MICROSOFT_ACCOUNTS=any`. The planner signs in through the `/common` authority, which accepts both, and its CSP adds work or school accounts' `*.sharepoint.com` download host.
+
+   Microsoft requires the authority to be consistent with the registration ([Application configuration options](https://learn.microsoft.com/entra/identity-platform/msal-client-application-configuration#authority)): a personal-only registration rejects work or school sign-in through `/common`. Any other value fails the build.
 2. Add the **Single-page application** platform with the redirect URI `https://<owner>.github.io/<repo>/planner/auth/redirect.html` (and `http://localhost:5173/planner/auth/redirect.html` for `bun run planner:dev`, which serves the planner at `/planner/`). Microsoft compares redirect URIs exactly, path included. This page ships with the planner and runs only Microsoft's sign-in bridge; serve it without a `Cross-Origin-Opener-Policy` header and without `X-Frame-Options` stricter than `SAMEORIGIN` (GitHub Pages sets neither). Do not create a client secret.
 3. Add the delegated Microsoft Graph permissions `Files.ReadWrite.AppFolder` and `User.Read`. The planner reads and writes only its own folder, `Apps/<app name>/` in the coach's OneDrive.
-4. **Work or school accounts.** Many organizations let users consent only to apps from a verified publisher, and some require an administrator's approval. Microsoft's documentation also disagrees on whether `Files.ReadWrite.AppFolder` works for work or school accounts, so test with one before you promise it; when the folder can't be opened, the planner says so and suggests a local file or a personal account. Personal accounts need no publisher verification.
+4. **Work or school accounts** (`OPENLEAGUE_MICROSOFT_ACCOUNTS=any` only). Many organizations let users consent only to apps from a verified publisher, so most tenants need publisher verification, and some require an administrator's approval. Microsoft's documentation also disagrees on whether `Files.ReadWrite.AppFolder` works for work or school accounts, and the app folder on a work or school account still needs a live check; test with one before you promise it. When the folder can't be opened, the planner says so and suggests a local file or a personal account. Personal accounts need no publisher verification.
 
 **Setting the values**
 
-In your fork's **Settings** → **Environments** → **github-pages**, add the three ids as **environment variables** and the API key as an **environment secret**. The Pages workflow's build job names that environment (with `deployment: false`, so it records no extra deployment) because environment variables and secrets are readable only by jobs that name the environment, and it passes the values to the planner's build and bundle check steps only. If the environment restricts deployments to certain branches, the build job follows the same rule.
+In your fork's **Settings** → **Environments** → **github-pages**, add the ids (and `OPENLEAGUE_MICROSOFT_ACCOUNTS`, if you set it) as **environment variables** and the API key as an **environment secret**. The Pages workflow's build job names that environment (with `deployment: false`, so it records no extra deployment) because environment variables and secrets are readable only by jobs that name the environment, and it passes the values to the planner's build and bundle check steps only. If the environment restricts deployments to certain branches, the build job follows the same rule.
 
 After the next Pages deploy, the planner's **Save to…** and **Open from…** menus offer the configured providers, and **Saved files** shows Connect and Disconnect for each. To check a build locally, set the same variables when running `bun run planner:build && bun run planner:check`; the check verifies that the CSP lists exactly the configured providers' hosts, that the Google code and Microsoft's sign-in library (MSAL) load only on demand, and that `auth/redirect.html` loads only the sign-in bridge.
 

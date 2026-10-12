@@ -9,12 +9,15 @@
  * taps "OneDrive…", the chunk is loaded and MSAL has read its cache.
  */
 import { connectorFail, type ConnectorStatus, type Result, type StorageConnector } from "./connector";
+import type { MicrosoftAccounts } from "../../cloud-config";
 import type { MicrosoftAccountType, OneDriveConnector } from "./onedrive";
 
 type OneDriveModule = Pick<typeof import("./onedrive"), "createOneDriveFromConfig">;
 
 export interface LazyOneDriveOptions {
     clientId: string;
+    /** Which accounts may sign in (the build's OPENLEAGUE_MICROSOFT_ACCOUNTS); personal when omitted. */
+    accounts?: MicrosoftAccounts;
     /** auth/redirect.html beside the planner's page; computed from the page's address when omitted. */
     redirectUri?: string;
     /** The real connector's module (tests pass their own). */
@@ -29,6 +32,8 @@ export interface LazyOneDriveConnector extends StorageConnector {
     /** True once prepare() has loaded the real connector, so connect() opens its popup straight from the tap. */
     prepared: () => boolean;
     accountType: () => MicrosoftAccountType | null;
+    /** The build's audience: the screens mention work or school accounts only when it is `any`. */
+    readonly accounts: MicrosoftAccounts;
 }
 
 /**
@@ -43,7 +48,7 @@ export function isOneDriveConnector(connector: StorageConnector): connector is L
     return connector.id === "onedrive" && typeof (connector as Partial<LazyOneDriveConnector>).accountType === "function";
 }
 
-export function createLazyOneDriveConnector({ clientId, redirectUri, load = () => import("./onedrive") }: LazyOneDriveOptions): LazyOneDriveConnector {
+export function createLazyOneDriveConnector({ clientId, accounts = "personal", redirectUri, load = () => import("./onedrive") }: LazyOneDriveOptions): LazyOneDriveConnector {
     let real: OneDriveConnector | null = null;
     let loading: Promise<OneDriveConnector | null> | null = null;
 
@@ -51,7 +56,7 @@ export function createLazyOneDriveConnector({ clientId, redirectUri, load = () =
         (loading ??= (async () => {
             try {
                 const loaded = await load();
-                const connector = loaded.createOneDriveFromConfig({ clientId, redirectUri: redirectUri ?? redirectUriFor(globalThis.location.href) });
+                const connector = loaded.createOneDriveFromConfig({ clientId, accounts, redirectUri: redirectUri ?? redirectUriFor(globalThis.location.href) });
                 await connector.ready();
                 real = connector;
                 return connector;
@@ -70,6 +75,7 @@ export function createLazyOneDriveConnector({ clientId, redirectUri, load = () =
 
     return {
         id: "onedrive",
+        accounts,
         capabilities: { list: true, pick: false, delete: false, conditionalWrite: "atomic" },
         // Configured: "disconnected" until the real connector has read MSAL's cache.
         status: (): ConnectorStatus => real?.status() ?? "disconnected",

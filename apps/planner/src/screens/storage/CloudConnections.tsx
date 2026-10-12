@@ -16,11 +16,11 @@ import { CONNECTOR_NAMES, connectErrorText } from "./messages";
 /** Where a coach removes the app's access to their account. */
 export const CONNECTOR_ACCOUNT_PAGES: Partial<Record<ConnectorId, { href: string; label: string }>> = {
     "google-drive": { href: "https://myaccount.google.com/connections", label: "Your Google Account's third-party connections" },
-    // A personal Microsoft account; a work or school account uses ONEDRIVE_WORK_ACCOUNT_PAGE.
+    // A personal Microsoft account; a work or school account (an `any` build only) uses ONEDRIVE_WORK_ACCOUNT_PAGE.
     onedrive: { href: "https://account.live.com/consent/Manage", label: "your Microsoft account's app permissions" },
 };
 
-/** OneDrive with a work or school account: My Apps, where a user removes an app they consented to. */
+/** OneDrive with a work or school account (an `any` build only): My Apps, where a user removes an app they consented to. */
 export const ONEDRIVE_WORK_ACCOUNT_PAGE = { href: "https://myapps.microsoft.com/", label: "My Apps (work or school accounts)" };
 
 /** Spec R8: in phase 4a the planner reaches only its own folder, so sharing is download-and-open. */
@@ -29,10 +29,14 @@ export const ONEDRIVE_SHARING_NOTE =
 
 type AccountType = "personal" | "work" | null;
 
-/** Where to remove access, by the account that was signed in (both when unknown). */
-function accountPages(connector: ConnectorId, account: AccountType): Array<{ href: string; label: string }> {
+/**
+ * Where to remove access, by the account that was signed in. A build for
+ * personal accounts only never mentions work or school accounts; an `any`
+ * build offers both pages when the account is unknown.
+ */
+function accountPages(connector: ConnectorId, account: AccountType, workAccounts: boolean): Array<{ href: string; label: string }> {
     const page = CONNECTOR_ACCOUNT_PAGES[connector];
-    if (connector !== "onedrive") return page ? [page] : [];
+    if (connector !== "onedrive" || !workAccounts) return page ? [page] : [];
     if (account === "work") return [ONEDRIVE_WORK_ACCOUNT_PAGE];
     if (account === "personal") return page ? [page] : [];
     return [...(page ? [page] : []), ONEDRIVE_WORK_ACCOUNT_PAGE];
@@ -104,7 +108,8 @@ export function CloudConnections({ connectors }: { connectors: readonly StorageC
             {cloud.map((connector) => {
                 const isConnected = connector.status() === "connected";
                 const signedIn = isOneDriveConnector(connector) ? connector.accountType() : null;
-                const pages = disconnected?.id === connector.id ? accountPages(connector.id, disconnected.account) : [];
+                const workAccounts = isOneDriveConnector(connector) && connector.accounts === "any";
+                const pages = disconnected?.id === connector.id ? accountPages(connector.id, disconnected.account, workAccounts) : [];
                 return (
                     <Box key={connector.id}>
                         <Stack direction={{ xs: "column", sm: "row" }} spacing={1} sx={{ alignItems: { sm: "center" } }}>

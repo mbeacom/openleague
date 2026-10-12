@@ -109,6 +109,7 @@ describe('deployment configuration', () => {
       'vars.OPENLEAGUE_GOOGLE_APP_ID',
       'secrets.OPENLEAGUE_GOOGLE_API_KEY',
       'vars.OPENLEAGUE_MICROSOFT_CLIENT_ID',
+      'vars.OPENLEAGUE_MICROSOFT_ACCOUNTS',
     ]);
 
     // The build job must read the environment without recording a deployment.
@@ -122,6 +123,8 @@ describe('deployment configuration', () => {
     expect(docsWorkflowCloudProblems(keyFromVars).join('\n')).toMatch(/must set OPENLEAGUE_GOOGLE_API_KEY from secrets\.OPENLEAGUE_GOOGLE_API_KEY/);
     const noMicrosoft = docsWorkflow.replace(/\n\s+OPENLEAGUE_MICROSOFT_CLIENT_ID: .*/g, '');
     expect(docsWorkflowCloudProblems(noMicrosoft).join('\n')).toMatch(/"Build the static planner" step must set OPENLEAGUE_MICROSOFT_CLIENT_ID/);
+    const noAccounts = docsWorkflow.replace(/\n\s+OPENLEAGUE_MICROSOFT_ACCOUNTS: .*/, '');
+    expect(docsWorkflowCloudProblems(noAccounts).join('\n')).toMatch(/"Build the static planner" step must set OPENLEAGUE_MICROSOFT_ACCOUNTS from vars\.OPENLEAGUE_MICROSOFT_ACCOUNTS/);
 
     // The secret reaching the whole job, or another step.
     const jobWide = docsWorkflow.replace('    env:\n', '    env:\n      OPENLEAGUE_GOOGLE_API_KEY: ${{ secrets.OPENLEAGUE_GOOGLE_API_KEY }}\n');

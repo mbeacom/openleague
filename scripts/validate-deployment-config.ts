@@ -82,6 +82,7 @@ export const PLANNER_CLOUD_ENV: ReadonlyArray<{ name: string; source: 'vars' | '
   { name: 'OPENLEAGUE_GOOGLE_APP_ID', source: 'vars' },
   { name: 'OPENLEAGUE_GOOGLE_API_KEY', source: 'secrets' },
   { name: 'OPENLEAGUE_MICROSOFT_CLIENT_ID', source: 'vars' },
+  { name: 'OPENLEAGUE_MICROSOFT_ACCOUNTS', source: 'vars' },
 ];
 
 const PLANNER_CLOUD_STEPS = ['Build the static planner', 'Check the static planner bundle'];

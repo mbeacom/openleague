@@ -49,6 +49,7 @@ export default defineConfig(({ mode, command, isPreview }) => ({
         __OPENLEAGUE_GOOGLE_API_KEY__: JSON.stringify(CLOUD.google?.apiKey ?? ""),
         __OPENLEAGUE_GOOGLE_APP_ID__: JSON.stringify(CLOUD.google?.appId ?? ""),
         __OPENLEAGUE_MICROSOFT_CLIENT_ID__: JSON.stringify(CLOUD.microsoft?.clientId ?? ""),
+        __OPENLEAGUE_MICROSOFT_ACCOUNTS__: JSON.stringify(CLOUD.microsoft?.accounts ?? ""),
         "process.env.NODE_ENV": JSON.stringify(mode === "production" ? "production" : "development"),
     },
     server: { fs: { allow: [ROOT] } },

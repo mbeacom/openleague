@@ -39,7 +39,7 @@ export interface StorageServiceOptions {
 export function createStorageService(store: LocalPlannerStore, { pickers = fileSystemAccess(globalThis), handles = store.fileHandles, extra = [], now }: StorageServiceOptions = {}): StorageService {
     // Written against the build constants themselves: unset, a branch folds away and so do that connector's chunks.
     const google = GOOGLE_DRIVE_SETTINGS ? [createLazyGoogleDriveConnector(GOOGLE_DRIVE_SETTINGS)] : [];
-    const oneDrive = ONEDRIVE_SETTINGS ? [createLazyOneDriveConnector({ clientId: ONEDRIVE_SETTINGS.clientId })] : [];
+    const oneDrive = ONEDRIVE_SETTINGS ? [createLazyOneDriveConnector({ clientId: ONEDRIVE_SETTINGS.clientId, accounts: ONEDRIVE_SETTINGS.accounts })] : [];
     const all = [createLocalFileConnector({ pickers, handles }), ...google, ...oneDrive, ...extra];
     const connectors = all.filter((connector) => connector.status() !== "unconfigured");
     const documents = createStoreDocuments(store);

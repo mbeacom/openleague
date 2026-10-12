@@ -6,7 +6,7 @@ import { describe, expect, it } from "vitest";
 import { DOCUMENT_KINDS, ENVELOPE_OVERHEAD_BYTES } from "@/lib/document-envelope";
 import {
     GRAPH_ROOT,
-    MICROSOFT_AUTHORITY,
+    microsoftAuthority,
     ONEDRIVE_SCOPES,
     authErrorOf,
     candidateNames,
@@ -27,7 +27,9 @@ const DOC = "0b7c1f0e-5a3e-4c1e-9a47-6f0d7b2f8a11";
 function subject({ signedIn = true, tenantId, interactive = false }: { signedIn?: boolean; tenantId?: string; interactive?: boolean } = {}) {
     const graph = createFakeGraph();
     const msal = createFakeMsal(graph, { signedIn, ...(tenantId ? { tenantId } : {}) });
-    const auth = createMsalAuth({ clientId: "00000000-0000-4000-8000-000000000001", redirectUri: REDIRECT, client: msal, interactive: () => interactive });
+    // A work or school tenant signs in only through an `any` build's /common authority.
+    const accounts = tenantId ? "any" : "personal";
+    const auth = createMsalAuth({ clientId: "00000000-0000-4000-8000-000000000001", accounts, redirectUri: REDIRECT, client: msal, interactive: () => interactive });
     const connector = createOneDriveConnector({ auth, fetch: graph.fetch });
     return { graph, msal, auth, connector };
 }
@@ -272,7 +274,11 @@ describe("OneDrive connector", () => {
 describe("OneDrive sign-in (MSAL)", () => {
     it("asks for the app folder and sign-in only", () => {
         expect(ONEDRIVE_SCOPES).toEqual(["Files.ReadWrite.AppFolder", "User.Read"]);
-        expect(MICROSOFT_AUTHORITY).toBe("https://login.microsoftonline.com/common");
+    });
+
+    it("signs in through /consumers for personal accounts only, and /common for any account", () => {
+        expect(microsoftAuthority("personal")).toBe("https://login.microsoftonline.com/consumers");
+        expect(microsoftAuthority("any")).toBe("https://login.microsoftonline.com/common");
     });
 
     it("falls back to a popup only when the call comes from a tap", async () => {
@@ -299,9 +305,11 @@ describe("OneDrive sign-in (MSAL)", () => {
 
     it("keeps MSAL's cache in sessionStorage, with the redirect bridge for popups and renewal", () => {
         expect(msalConfiguration("00000000-0000-4000-8000-000000000001", REDIRECT)).toEqual({
-            auth: { clientId: "00000000-0000-4000-8000-000000000001", authority: "https://login.microsoftonline.com/common", redirectUri: REDIRECT, postLogoutRedirectUri: REDIRECT },
+            auth: { clientId: "00000000-0000-4000-8000-000000000001", authority: "https://login.microsoftonline.com/consumers", redirectUri: REDIRECT, postLogoutRedirectUri: REDIRECT },
             cache: { cacheLocation: "sessionStorage" },
         });
+        expect(msalConfiguration("00000000-0000-4000-8000-000000000001", REDIRECT, "personal").auth.authority).toBe("https://login.microsoftonline.com/consumers");
+        expect(msalConfiguration("00000000-0000-4000-8000-000000000001", REDIRECT, "any").auth.authority).toBe("https://login.microsoftonline.com/common");
     });
 });
 

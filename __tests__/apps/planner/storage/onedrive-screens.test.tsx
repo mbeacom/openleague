@@ -34,17 +34,19 @@ afterEach(() => {
 
 const FILE = "tuesday-skills.olplan.json";
 
-function setup({ signedIn = false, tenantId }: { signedIn?: boolean; tenantId?: string } = {}) {
+function setup({ signedIn = false, tenantId, accounts }: { signedIn?: boolean; tenantId?: string; accounts?: "personal" | "any" } = {}) {
     const store = createLocalPlannerStore(createMemoryRepo(), { newId: () => crypto.randomUUID() });
     const graph = createFakeGraph();
     const msal = createFakeMsal(graph, { signedIn, ...(tenantId ? { tenantId } : {}) });
     const oneDrive = createLazyOneDriveConnector({
         clientId: "00000000-0000-4000-8000-000000000001",
+        // A work or school tenant signs in only through an `any` build.
+        accounts: accounts ?? (tenantId ? "any" : "personal"),
         redirectUri: "https://planner.example/planner/auth/redirect.html",
         // A tap: the popup may open (the test's clicks stand in for the coach's).
         load: async () => ({
-            createOneDriveFromConfig: ({ clientId, redirectUri }) =>
-                createOneDriveConnector({ auth: createMsalAuth({ clientId, redirectUri, client: msal, interactive: () => true }), fetch: graph.fetch }),
+            createOneDriveFromConfig: ({ clientId, accounts: audience, redirectUri }) =>
+                createOneDriveConnector({ auth: createMsalAuth({ clientId, accounts: audience, redirectUri, client: msal, interactive: () => true }), fetch: graph.fetch }),
         }),
     });
     const service = createStorageService(store, { pickers: null, extra: [oneDrive] });
@@ -168,5 +170,28 @@ describe("OneDrive on Saved files", () => {
         expect(await screen.findByText(/^OneDrive: connected in this tab \(work or school account\)\./)).toBeInTheDocument();
         fireEvent.click(screen.getByRole("button", { name: "Disconnect OneDrive" }));
         expect(await screen.findByRole("link", { name: /My Apps/ })).toHaveAttribute("href", "https://myapps.microsoft.com/");
+    });
+
+    it("never mentions work or school accounts in a personal-only build, even when the account is unknown", async () => {
+        const { store, service, oneDrive } = setup({ signedIn: true });
+        expect(oneDrive.accounts).toBe("personal");
+        renderWithStorage(<StorageScreen />, store, service);
+        expect(await screen.findByText(/^OneDrive: connected in this tab \(personal Microsoft account\)\./)).toBeInTheDocument();
+        // The account is forgotten before Disconnect reads it, as when MSAL's cache was cleared elsewhere.
+        vi.spyOn(oneDrive, "accountType").mockReturnValue(null);
+        fireEvent.click(screen.getByRole("button", { name: "Disconnect OneDrive" }));
+        expect(await screen.findByRole("link", { name: /your Microsoft account's app permissions/ })).toHaveAttribute("href", "https://account.live.com/consent/Manage");
+        expect(screen.queryByRole("link", { name: /My Apps/ })).not.toBeInTheDocument();
+        expect(screen.queryByText(/work or school/)).not.toBeInTheDocument();
+    });
+
+    it("offers both pages in an any-account build when the account is unknown", async () => {
+        const { store, service, oneDrive } = setup({ signedIn: true, accounts: "any" });
+        renderWithStorage(<StorageScreen />, store, service);
+        expect(await screen.findByText(/^OneDrive: connected in this tab/)).toBeInTheDocument();
+        vi.spyOn(oneDrive, "accountType").mockReturnValue(null);
+        fireEvent.click(screen.getByRole("button", { name: "Disconnect OneDrive" }));
+        expect(await screen.findByRole("link", { name: /My Apps/ })).toHaveAttribute("href", "https://myapps.microsoft.com/");
+        expect(screen.getByRole("link", { name: /your Microsoft account's app permissions/ })).toBeInTheDocument();
     });
 });

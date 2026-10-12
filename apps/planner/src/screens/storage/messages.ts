@@ -87,7 +87,11 @@ export function statusText(state: SyncState | "unlinked" | "needs-permission" | 
     }
 }
 
-/** OneDrive with a work or school account whose app folder can't be reached (spec R6). */
+/**
+ * OneDrive with a work or school account whose app folder can't be reached
+ * (spec R6). Only a build with OPENLEAGUE_MICROSOFT_ACCOUNTS=any signs in such
+ * an account, so only that build can show this.
+ */
 export const ONEDRIVE_APP_FOLDER_UNAVAILABLE =
     "OneDrive couldn't open the planner's folder for this work or school account. Your organization may not allow it. " +
     "Save to a file on this computer, or connect OneDrive with a personal Microsoft account.";

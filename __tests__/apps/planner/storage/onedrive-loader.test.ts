@@ -18,8 +18,8 @@ const CLIENT_ID = "00000000-0000-4000-8000-000000000001";
 function fakeModule(options: { signedIn?: boolean } = {}) {
     const graph = createFakeGraph();
     const msal = createFakeMsal(graph, options);
-    const createOneDriveFromConfig = vi.fn(({ clientId, redirectUri }: { clientId: string; redirectUri: string }) =>
-        createOneDriveConnector({ auth: createMsalAuth({ clientId, redirectUri, client: msal, interactive: () => false }), fetch: graph.fetch }),
+    const createOneDriveFromConfig = vi.fn(({ clientId, accounts, redirectUri }: { clientId: string; accounts: "personal" | "any"; redirectUri: string }) =>
+        createOneDriveConnector({ auth: createMsalAuth({ clientId, accounts, redirectUri, client: msal, interactive: () => false }), fetch: graph.fetch }),
     );
     return { graph, msal, module: { createOneDriveFromConfig } };
 }
@@ -39,12 +39,22 @@ describe("lazy OneDrive connector", () => {
         // Loaded: a sign-in popup can open straight from the next tap.
         expect(connector.prepared()).toBe(true);
         expect(load).toHaveBeenCalledTimes(1);
-        expect(module.createOneDriveFromConfig).toHaveBeenCalledWith({ clientId: CLIENT_ID, redirectUri: "https://planner.example/planner/auth/redirect.html" });
+        // Personal accounts only unless the build says otherwise.
+        expect(connector.accounts).toBe("personal");
+        expect(module.createOneDriveFromConfig).toHaveBeenCalledWith({ clientId: CLIENT_ID, accounts: "personal", redirectUri: "https://planner.example/planner/auth/redirect.html" });
         // MSAL's cache held an account: connected once loaded.
         expect(connector.status()).toBe("connected");
         expect(connector.accountType()).toBe("personal");
         await connector.list();
         expect(load).toHaveBeenCalledTimes(1);
+    });
+
+    it("passes an any-account build's audience to the real connector", async () => {
+        const { module } = fakeModule();
+        const connector = createLazyOneDriveConnector({ clientId: CLIENT_ID, accounts: "any", redirectUri: "https://x.example/auth/redirect.html", load: async () => module });
+        expect(connector.accounts).toBe("any");
+        await connector.prepare();
+        expect(module.createOneDriveFromConfig).toHaveBeenCalledWith({ clientId: CLIENT_ID, accounts: "any", redirectUri: "https://x.example/auth/redirect.html" });
     });
 
     it("passes every call through to the real connector", async () => {
@@ -93,7 +103,7 @@ describe("storage service and OneDrive", () => {
         vi.resetModules();
         vi.doMock("@/apps/planner/src/config", async (importOriginal) => ({
             ...(await importOriginal<typeof import("@/apps/planner/src/config")>()),
-            ONEDRIVE_SETTINGS: { clientId: CLIENT_ID },
+            ONEDRIVE_SETTINGS: { clientId: CLIENT_ID, accounts: "personal" },
         }));
         try {
             const { createStorageService: create } = await import("@/apps/planner/src/storage/service");

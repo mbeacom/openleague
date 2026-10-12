@@ -259,6 +259,19 @@ describe("checkPlannerBuild with the OneDrive connector (storage connectors spec
         expect(await check(base(noSelf))).toMatch(/frame-src is "frame-src https:\/\/login/);
     });
 
+    it("checks the SharePoint download host against OPENLEAGUE_MICROSOFT_ACCOUNTS (personal by default, any)", async () => {
+        const ANY = resolveCloudSettings({ OPENLEAGUE_MICROSOFT_CLIENT_ID: CLIENT_ID, OPENLEAGUE_MICROSOFT_ACCOUNTS: "any" });
+        const ANY_CSP = plannerCsp(resolveAiOrigins(undefined), { cloud: ANY });
+        expect(ONEDRIVE.microsoft?.accounts).toBe("personal");
+        expect(ONEDRIVE_CSP).not.toContain("sharepoint.com");
+        expect(ANY_CSP).toContain("https://*.sharepoint.com");
+        const checkWith = async (files: Record<string, string>, cloud: typeof ANY) => (await checkPlannerBuild(await fixture(files), { cloud })).join("\n");
+        expect(await checkWith(base(ANY_CSP), ANY)).toBe("");
+        // A personal-only build must not carry work or school accounts' host, and an any build must.
+        expect(await checkWith(base(ANY_CSP), ONEDRIVE)).toMatch(/connect-src is ".*sharepoint\.com", but the AI origin allowlist and cloud connectors resolve to "[^"]*microsoftpersonalcontent\.com"/);
+        expect(await checkWith(base(ONEDRIVE_CSP), ANY)).toMatch(/resolve to ".*https:\/\/\*\.sharepoint\.com"/);
+    });
+
     it("fails when an unconfigured build carries the OneDrive hosts or a frame-src", async () => {
         const problems = await check({ ...base(), "auth/redirect.html": redirectHtml(PUBLIC_CSP) }, false);
         expect(problems).toMatch(/but the AI origin allowlist and cloud connectors resolve to/);

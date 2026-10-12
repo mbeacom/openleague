@@ -1,7 +1,7 @@
 /**
  * Cloud storage connectors' build-time settings (storage connectors spec R9;
  * ADR-0022). Pure, like ai-origins.ts and build-config.ts: the Vite config
- * reads the four OPENLEAGUE_* variables once, hands the result to the app as
+ * reads the OPENLEAGUE_* cloud variables once, hands the result to the app as
  * constants and to the CSP as host additions, so the page can never reach a
  * provider its policy doesn't name, or name one the app can't use.
  *
@@ -19,10 +19,31 @@ export interface GoogleCloudSettings {
     appId: string;
 }
 
+/**
+ * Which Microsoft accounts may sign in, matching the Entra registration's
+ * "Supported account types": `personal` (personal Microsoft accounts only, the
+ * /consumers authority) or `any` (work or school and personal, /common).
+ */
+export type MicrosoftAccounts = "personal" | "any";
+
 export interface MicrosoftCloudSettings {
     /** The Entra application (client) id of a single-page application registration. */
     clientId: string;
+    /** From OPENLEAGUE_MICROSOFT_ACCOUNTS; `personal` when unset. */
+    accounts: MicrosoftAccounts;
 }
+
+/**
+ * The sign-in authority for each audience. Microsoft's MSAL configuration
+ * guide ("Application configuration options", Authority) lists /consumers as
+ * personal Microsoft accounts only and /common as work or school or personal,
+ * and says the authority must be consistent with the registration's supported
+ * account types; a personal-only registration refuses work or school sign-in.
+ */
+export const MICROSOFT_AUTHORITIES: Readonly<Record<MicrosoftAccounts, string>> = {
+    personal: "https://login.microsoftonline.com/consumers",
+    any: "https://login.microsoftonline.com/common",
+};
 
 export interface CloudSettings {
     google: GoogleCloudSettings | null;
@@ -32,7 +53,7 @@ export interface CloudSettings {
 export const NO_CLOUD: CloudSettings = { google: null, microsoft: null };
 
 export const GOOGLE_VARIABLES = ["OPENLEAGUE_GOOGLE_CLIENT_ID", "OPENLEAGUE_GOOGLE_API_KEY", "OPENLEAGUE_GOOGLE_APP_ID"] as const;
-export const MICROSOFT_VARIABLES = ["OPENLEAGUE_MICROSOFT_CLIENT_ID"] as const;
+export const MICROSOFT_VARIABLES = ["OPENLEAGUE_MICROSOFT_CLIENT_ID", "OPENLEAGUE_MICROSOFT_ACCOUNTS"] as const;
 
 export type CloudVariable = (typeof GOOGLE_VARIABLES)[number] | (typeof MICROSOFT_VARIABLES)[number];
 export type CloudEnvironment = Readonly<Partial<Record<string, string | undefined>>>;
@@ -41,6 +62,7 @@ const GOOGLE_CLIENT_ID = /^[\w-]+\.apps\.googleusercontent\.com$/;
 const GOOGLE_API_KEY = /^[\w-]+$/;
 const GOOGLE_APP_ID = /^\d+$/;
 const MICROSOFT_CLIENT_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const MICROSOFT_ACCOUNTS = /^(?:personal|any)$/;
 
 const valueOf = (env: CloudEnvironment, name: CloudVariable): string => (env[name] ?? "").trim();
 
@@ -54,6 +76,8 @@ function checked(name: CloudVariable, value: string, shape: RegExp, expected: st
  * The providers this build carries. A provider with some but not all of its
  * variables set fails the build, as does a value of the wrong shape: a
  * half-configured connector would ship a button that can't work.
+ * OPENLEAGUE_MICROSOFT_ACCOUNTS has a default (`personal`), so it alone never
+ * builds OneDrive; a value other than `personal` or `any` fails either way.
  */
 export function resolveCloudSettings(env: CloudEnvironment): CloudSettings {
     const google = GOOGLE_VARIABLES.map((name) => valueOf(env, name));
@@ -63,6 +87,9 @@ export function resolveCloudSettings(env: CloudEnvironment): CloudSettings {
         throw new Error(`Google Drive needs all of ${GOOGLE_VARIABLES.join(", ")}; missing ${missing.join(", ")}.`);
     }
     const microsoft = valueOf(env, "OPENLEAGUE_MICROSOFT_CLIENT_ID");
+    const accountsValue = valueOf(env, "OPENLEAGUE_MICROSOFT_ACCOUNTS");
+    const accounts: MicrosoftAccounts =
+        accountsValue.length === 0 ? "personal" : (checked("OPENLEAGUE_MICROSOFT_ACCOUNTS", accountsValue, MICROSOFT_ACCOUNTS, "personal or any") as MicrosoftAccounts);
     return {
         google:
             setGoogle === 0
@@ -72,7 +99,10 @@ export function resolveCloudSettings(env: CloudEnvironment): CloudSettings {
                       apiKey: checked("OPENLEAGUE_GOOGLE_API_KEY", google[1], GOOGLE_API_KEY, "an API key (letters, digits, '-' and '_')"),
                       appId: checked("OPENLEAGUE_GOOGLE_APP_ID", google[2], GOOGLE_APP_ID, "the Cloud project number (digits only)"),
                   },
-        microsoft: microsoft.length === 0 ? null : { clientId: checked("OPENLEAGUE_MICROSOFT_CLIENT_ID", microsoft, MICROSOFT_CLIENT_ID, "an application (client) id, a GUID") },
+        microsoft:
+            microsoft.length === 0
+                ? null
+                : { clientId: checked("OPENLEAGUE_MICROSOFT_CLIENT_ID", microsoft, MICROSOFT_CLIENT_ID, "an application (client) id, a GUID"), accounts },
     };
 }
 
@@ -102,21 +132,22 @@ export const GOOGLE_CSP: CspAdditions = {
 
 /**
  * OneDrive (spec R6, Security and privacy), keyed on
- * OPENLEAGUE_MICROSOFT_CLIENT_ID. MSAL is bundled (no script host). Phase 4a's
- * findings:
+ * OPENLEAGUE_MICROSOFT_CLIENT_ID and OPENLEAGUE_MICROSOFT_ACCOUNTS. MSAL is
+ * bundled (no script host). Phase 4a's findings:
  * - connect-src: the sign-in authority (token and discovery requests), Graph,
  *   and the hosts Graph's pre-authenticated download URLs point to. A browser
  *   can't read a file through Graph's /content (a 302 after a CORS preflight is
  *   refused; Microsoft documents this), so the connector fetches the item's
  *   `@microsoft.graph.downloadUrl`: `*.files.1drv.com` or
- *   `my.microsoftpersonalcontent.com` for personal accounts, the tenant's
- *   `*.sharepoint.com` host for work or school accounts.
+ *   `my.microsoftpersonalcontent.com` for personal accounts, and the tenant's
+ *   `*.sharepoint.com` host for work or school accounts, listed only when the
+ *   build accepts them (`any`).
  * - frame-src: required. Once the 24-hour SPA refresh token expires, MSAL
  *   renews in a hidden iframe that loads the authority and ends on the
  *   planner's own auth/redirect.html ('self', added by plannerCsp whenever
- *   frame-src is set). A personal account's sign-in through /common hands off
- *   to login.live.com, so that hop is listed too; Microsoft publishes no CSP
- *   host list, so the manual checklist confirms it.
+ *   frame-src is set). A personal account's sign-in hands off to
+ *   login.live.com, so that hop is listed for both audiences; Microsoft
+ *   publishes no CSP host list, so the manual checklist confirms it.
  */
 export function microsoftCsp(settings: MicrosoftCloudSettings | null): CspAdditions {
     if (!settings) return {};
@@ -126,7 +157,7 @@ export function microsoftCsp(settings: MicrosoftCloudSettings | null): CspAdditi
             "https://graph.microsoft.com",
             "https://*.files.1drv.com",
             "https://my.microsoftpersonalcontent.com",
-            "https://*.sharepoint.com",
+            ...(settings.accounts === "any" ? ["https://*.sharepoint.com"] : []),
         ],
         "frame-src": ["https://login.microsoftonline.com", "https://login.live.com"],
     };

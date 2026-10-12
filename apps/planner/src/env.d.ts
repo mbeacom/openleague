@@ -7,3 +7,5 @@ declare const __OPENLEAGUE_GOOGLE_CLIENT_ID__: string;
 declare const __OPENLEAGUE_GOOGLE_API_KEY__: string;
 declare const __OPENLEAGUE_GOOGLE_APP_ID__: string;
 declare const __OPENLEAGUE_MICROSOFT_CLIENT_ID__: string;
+/** "personal" or "any" when OneDrive is built (OPENLEAGUE_MICROSOFT_ACCOUNTS, default personal); "" otherwise, undefined under Vitest. */
+declare const __OPENLEAGUE_MICROSOFT_ACCOUNTS__: string;
