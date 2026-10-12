@@ -190,7 +190,7 @@ describe("OneDrive connector", () => {
         graph.setForeignNextLink("https://elsewhere.example/steal");
         const listed = await connector.list();
         expect(listed.ok && listed.value).toHaveLength(1);
-        expect(graph.requests.some((request) => request.url.startsWith("https://elsewhere.example"))).toBe(false);
+        expect(graph.requests.some((request) => new URL(request.url).hostname === "elsewhere.example")).toBe(false);
     });
 
     it("renews the token once on a 401, then asks for sign-in", async () => {

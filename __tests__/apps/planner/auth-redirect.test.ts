@@ -18,9 +18,9 @@ vi.mock("@azure/msal-browser/redirect-bridge", () => bridge);
 describe("auth/redirect.html", () => {
     it("loads one script, the bridge module, and nothing of the app", async () => {
         const html = await read("apps/planner/auth/redirect.html");
-        const scripts = Array.from(html.matchAll(/<script\b[^>]*>/g), (match) => match[0]);
+        const scripts = Array.from(html.matchAll(/<script\b[^>]*>/gi), (match) => match[0]);
         expect(scripts).toEqual(['<script type="module" src="../src/auth/redirect.ts">']);
-        expect(html).not.toMatch(/main\.tsx|id="root"|<link\b[^>]*stylesheet/);
+        expect(html).not.toMatch(/main\.tsx|id="root"|<link\b[^>]*stylesheet/i);
         expect(html).toContain("<title>Signing in</title>");
     });
 
