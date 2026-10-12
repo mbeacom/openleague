@@ -13,6 +13,7 @@ import { Alert, AlertTitle, Box, Button, Card, CardActions, CardContent, Circula
 import { CloudDownloadOutlined as FetchIcon } from "@mui/icons-material";
 import { fetchLeagueSchedule } from "@/lib/actions/league-fetch";
 import { takeIncomingLeagueSource } from "@/lib/plan-document/pending";
+import { fetchNoticeRoute, isFetchNotice, type FetchNotice } from "@/lib/rankings-document/fetch-notice";
 
 export const FETCH_BUTTON_LABEL = "Fetch schedule";
 export const NO_SOURCE_MESSAGE =
@@ -21,6 +22,8 @@ export const SLOW_MESSAGE = "League sites can be slow — this can take up to a 
 /** How long a fetch runs before the slow-site line appears. */
 export const SLOW_NOTICE_AFTER_MS = 5_000;
 export const TRY_AGAIN_LABEL = "Try again";
+/** The robots.txt refusals' way forward: the planner's import, where the page can be pasted or uploaded. */
+export const PASTE_INSTEAD_LABEL = "Paste or upload the page";
 export const UNSUPPORTED_MESSAGE = "OpenLeague can't fetch pages from that site yet. Save the page and open it in the planner instead.";
 
 type Source = { kind: "none" } | { kind: "unsupported"; host: string | null } | { kind: "ready"; url: string; host: string };
@@ -56,6 +59,10 @@ export function LeagueFetchView({ allowedHosts, plannerUrl, navigate = replaceLo
   const [source, setSource] = useState<Source | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [timedOut, setTimedOut] = useState(false);
+  /** A robots.txt refusal (ADR-0024, 2026-10-11 amendment): offers the paste and upload path. */
+  const [notice, setNotice] = useState<FetchNotice | null>(null);
+  /** Worth another try as it is: a slow site, an unreadable robots.txt, a Crawl-delay. */
+  const [retryable, setRetryable] = useState(false);
   const [slow, setSlow] = useState(false);
   const [leaving, setLeaving] = useState(false);
   const [pending, startTransition] = useTransition();
@@ -68,11 +75,16 @@ export function LeagueFetchView({ allowedHosts, plannerUrl, navigate = replaceLo
   const fetchIt = (url: string) => {
     setError(null);
     setTimedOut(false);
+    setNotice(null);
+    setRetryable(false);
     startTransition(async () => {
       const result = await fetchLeagueSchedule({ url });
       if (!result.success) {
+        const kind = (result.details as { kind?: string } | undefined)?.kind;
         setError(result.error);
-        setTimedOut((result.details as { kind?: string } | undefined)?.kind === "timeout");
+        setTimedOut(kind === "timeout");
+        setNotice(isFetchNotice(kind) ? kind : null);
+        setRetryable(kind === "timeout" || kind === "robots-unavailable" || kind === "crawl-delay");
         return;
       }
       setLeaving(true);
@@ -134,6 +146,18 @@ export function LeagueFetchView({ allowedHosts, plannerUrl, navigate = replaceLo
                       .
                     </Typography>
                   ) : null}
+                  {notice ? (
+                    <Box sx={{ mt: 1.5 }}>
+                      <Button
+                        href={`${plannerUrl}${fetchNoticeRoute(notice)}`}
+                        variant={notice === "robots-disallowed" ? "contained" : "outlined"}
+                        color="inherit"
+                        sx={{ minHeight: 44 }}
+                      >
+                        {PASTE_INSTEAD_LABEL}
+                      </Button>
+                    </Box>
+                  ) : null}
                 </Alert>
               ) : null}
             </CardContent>
@@ -143,10 +167,11 @@ export function LeagueFetchView({ allowedHosts, plannerUrl, navigate = replaceLo
                 size="large"
                 startIcon={busy ? <CircularProgress size={18} color="inherit" /> : <FetchIcon />}
                 onClick={() => fetchIt(source.url)}
-                disabled={busy}
+                // The site said no: another try would be refused the same way.
+                disabled={busy || notice === "robots-disallowed"}
                 sx={{ minHeight: 44, flex: { xs: "1 1 100%", sm: "0 0 auto" } }}
               >
-                {leaving ? "Opening the planner…" : pending ? "Fetching…" : timedOut ? TRY_AGAIN_LABEL : FETCH_BUTTON_LABEL}
+                {leaving ? "Opening the planner…" : pending ? "Fetching…" : retryable ? TRY_AGAIN_LABEL : FETCH_BUTTON_LABEL}
               </Button>
               <Button href={plannerUrl} disabled={busy} sx={{ minHeight: 44 }}>
                 Back to the planner

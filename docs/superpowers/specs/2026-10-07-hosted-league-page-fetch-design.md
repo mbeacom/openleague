@@ -43,7 +43,8 @@ nothing.
    and no button.
 4. **Fetch.** The button calls the `fetchLeagueSchedule` server action. It
    authenticates, validates, checks the URL rules, takes one from the user's
-   rate limit, and fetches under the guard (below).
+   rate limit, checks the site's robots.txt, and fetches under the guard
+   (below).
 5. **Parse and compress: server-side.** The server already has the page, and
    the parser is pure and portable, so it runs there. The raw HTML (hundreds
    of kilobytes) never leaves the server; the browser receives a few kilobytes.
@@ -126,11 +127,75 @@ the fetch and DNS lookup as options so every rule is tested without a network.
 | Size | `Content-Length` over 2 MB refused unread; the body streamed and aborted past 2 MB of decoded bytes | both, with the stream stopped after a few chunks |
 | Content type | `text/html` only (charset honoured) | refuses JSON, plain text, XHTML, `text/htmlx`, missing |
 | Status | 200 only | 404 refused and logged |
-| Identity | fixed, identifiable `User-Agent: OpenLeague-LeaguePageFetch/1.0 (+https://openleague.dev; user-requested)`, `Accept: text/html`; never a browser's string | asserted on the request |
+| Identity | fixed, identifiable `User-Agent: OpenLeague/1.1 (+https://openleague.dev; league page fetch on a user's request; honours robots.txt)`, whose first word is the robots.txt product token; `Accept: text/html` (`text/plain` for robots.txt); never a browser's string | asserted on both requests |
+| robots.txt | fetched first under every rule above (up to 5 redirects) and within the same deadline; a disallowed page is refused; see "robots.txt" below | parser table, status handling, cache, Crawl-delay, permission list |
 | No credentials | `credentials: "omit"`, no headers forwarded from the user's request, `referrerPolicy: "no-referrer"` | asserted on the request |
-| No cache | `cache: "no-store"`; nothing cached in memory | asserted on the request |
+| No cache | `cache: "no-store"`; no page is cached (only each host's parsed robots.txt rules, in memory, see below) | asserted on the request |
 | Rate limit | 10 per user per hour, durable (database), fail-closed; taken only after the URL rules pass, so a typo costs nothing | action tests: limited before any fetch, key and fail-closed asserted; a disallowed host doesn't touch the limit |
 | Logging | one line per fetch: `{ event, host, status, outcome }`, never the path, query or content; error messages carry a kind, never the URL | asserted on the log and on error messages |
+
+## robots.txt
+
+Added 2026-10-11 (ADR-0024 amendment). OpenLeague does not fetch a page the
+site's robots.txt disallows.
+
+- **Where.** `lib/league-fetch/robots.ts` holds the parser and the
+  in-process state (`RobotsGate`); `fetchLeaguePage` fetches
+  `https://<host>/robots.txt` through the same guard and deadline as the page
+  when it is given a gate. The action always passes the shared gate from
+  `lib/league-fetch/config.ts`; `robots` is a required option, so no caller
+  skips the check by omission.
+- **Parsing (RFC 9309).** Records split on CR, LF or CRLF; `#` starts a
+  comment; a leading BOM is dropped; record names are case-insensitive.
+  Consecutive `User-agent` lines share one group. The group naming
+  `OpenLeague` (case-insensitive, the token before any `/` or space) is used,
+  every such group combined; otherwise the `*` groups; otherwise no rules.
+  Rules before any `User-agent` line are ignored, and an empty `Allow` or
+  `Disallow` matches nothing.
+- **Matching.** Against the page's path and query, both normalised:
+  non-ASCII is percent-encoded as UTF-8, an encoded unreserved character is
+  decoded, other encodings keep upper-case hex. `*` matches any run; a
+  trailing `$` anchors the end; otherwise a rule is a prefix. The longest
+  rule (in octets) wins and an Allow wins a tie. `/robots.txt` is always
+  allowed. The matcher is a two-pointer wildcard match, linear-times-linear at
+  worst, so a hostile pattern can't backtrack exponentially. Same-host
+  redirects of the page are checked again.
+- **Status.** 2xx is parsed, whatever its content type, if it is UTF-8 and at
+  most 500 KiB. 4xx means no rules, except 429. 429, 5xx, a network error, a
+  timeout, more than 5 redirects, a redirect the guard refuses, an oversized
+  or non-UTF-8 file all fail closed (`robots-unavailable`). A host that
+  resolves to a private address or not at all keeps its own error.
+- **Cache.** The policy for our token (or "no rules" from a 4xx) is cached per
+  host for 24 hours, or less when `Cache-Control: max-age` says so
+  (`no-store`: not cached). Failures are not cached. At most 256 hosts.
+- **Crawl-delay.** The largest Crawl-delay in the chosen groups is a minimum
+  gap between our requests to the host, the robots.txt request included. The
+  gate claims the next slot before waiting, so two fetches in one instance
+  can't both go at once. A wait of up to 10 s that leaves 5 s of the deadline
+  is held; a longer one is refused (`crawl-delay`) with the seconds to wait,
+  and nothing is claimed.
+- **Instances.** The cache and the spacing are in memory, per serverless
+  instance. Instances don't share them, so each reads robots.txt once per
+  cache period and spaces only its own requests. The durable per-user rate
+  limit still bounds the total.
+- **Written permission.** `ROBOTS_PERMISSIONS` (config.ts, empty by default)
+  lists `{ host, note }` entries for sites whose owners gave written
+  permission, the note saying where it is recorded. A listed host skips only
+  the Disallow refusal; Crawl-delay and failing closed still apply.
+- **Screens.** On `robots-disallowed` the confirm card shows "This site asks
+  automated tools not to fetch this page. Open it in your browser, then paste
+  or upload it here.", disables the fetch button, and links to
+  `<planner>#/rankings/import?notice=robots-disallowed`. The static import
+  route reads `notice` (only the two known values; never with a `pull`) and
+  shows the same words above the schedule paste box and file picker. On
+  `robots-unavailable` the card says "Couldn't check the site's rules — try
+  again or paste the page.", relabels the button Try again, and links to
+  `?notice=robots-unavailable`. On `crawl-delay` it says how long to wait and
+  offers Try again. The words live in `lib/rankings-document/fetch-notice.ts`,
+  shared by both apps.
+- **Deadline.** robots.txt, any Crawl-delay wait and the page share the one
+  deadline. On a slow site the first fetch from an instance spends part of it
+  on robots.txt; later fetches use the cache.
 
 **The DNS check's limit.** Node's `fetch` resolves the name again to connect, so
 a host that answers differently between the check and the connection could
@@ -247,3 +312,13 @@ tests stub the global fetch and mock `node:dns/promises`.
   - the import screen previewing a pull, clearing the hash, and saving only on Save;
   - a damaged pull shown as an error.
 - Login carry-over: `#src=` stashed under its own key, expiry, fragment before stash.
+- robots.txt (`robots.test.ts`, `guard-robots.test.ts`): the parser table
+  (longest match, Allow on a tie, `*`, `$`, case, percent-encoding, group
+  selection and combining, empty Disallow, comments, line ends, BOM,
+  Crawl-delay); a hostile wildcard pattern; the request going through the
+  guard (DNS check, no credentials, same User-Agent, refused off-host,
+  internal, http and other-port redirects, the 5-redirect cap); every status
+  class; the size cap and UTF-8; the shared deadline; the cache, its expiry,
+  max-age and uncached failures; Crawl-delay waits and refusals under fake
+  timers; the permission list; the action's messages; the confirm card's and
+  the static import's notices.

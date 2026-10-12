@@ -7,6 +7,9 @@
  * the static planner as a compact `#/rankings/import?pull=…` link built from
  * server configuration. Nothing is stored: no page, no games, no URL.
  *
+ * The site's robots.txt is honoured: a disallowed page is refused, and the
+ * screens point the user to opening the page and pasting or uploading it.
+ *
  * Authorization is sign-in only: it is a personal tool, not a team or league
  * operation. The per-user rate limit is durable and fail-closed.
  */
@@ -15,8 +18,8 @@ import { z } from "zod";
 import { requireUserId } from "@/lib/auth/session";
 import { checkRateLimit, RATE_LIMITS, rateLimitMessage } from "@/lib/utils/durable-rate-limit";
 import { checkLeagueUrl, fetchLeaguePage, LeagueFetchError, type LeagueFetchErrorKind } from "@/lib/league-fetch/guard";
-import { leagueFetchAllowedHosts, leagueFetchTimeoutMs, staticPullUrl } from "@/lib/league-fetch/config";
-import { encodeSchedulePull, SchedulePullTooLargeError } from "@/lib/rankings-document";
+import { leagueFetchAllowedHosts, leagueFetchRobotsGate, leagueFetchTimeoutMs, staticPullUrl } from "@/lib/league-fetch/config";
+import { encodeSchedulePull, ROBOTS_DISALLOWED_MESSAGE, ROBOTS_UNAVAILABLE_MESSAGE, SchedulePullTooLargeError } from "@/lib/rankings-document";
 import { defaultSeasonYear, parseSchedule } from "@/lib/ratings/import";
 
 export type ActionResult<T> =
@@ -46,7 +49,16 @@ const MESSAGES: Record<LeagueFetchErrorKind, string> = {
     "too-large": "That page is larger than OpenLeague will fetch.",
     timeout: "The league site was too slow to respond, so the request timed out.",
     network: "Couldn't reach the league site. Please try again later.",
+    "robots-disallowed": ROBOTS_DISALLOWED_MESSAGE,
+    "robots-unavailable": ROBOTS_UNAVAILABLE_MESSAGE,
+    "crawl-delay": "The league site asks automated tools to wait between requests. Please try again in a moment.",
 };
+
+function crawlDelayMessage(seconds: number | undefined): string {
+    if (!seconds) return MESSAGES["crawl-delay"];
+    const wait = seconds < 120 ? `${seconds} second${seconds === 1 ? "" : "s"}` : `${Math.ceil(seconds / 60)} minutes`;
+    return `The league site asks automated tools to wait between requests. Please try again in ${wait}.`;
+}
 
 const fetchLeagueScheduleSchema = z.object({
     url: z.string().trim().min(1, "A league page address is required").max(2048, "That address is too long"),
@@ -81,7 +93,8 @@ export async function fetchLeagueSchedule(input: FetchLeagueScheduleInput): Prom
             return { success: false, error: rateLimitMessage(limit.retryAfterSec), details: { kind: "rate-limited" } };
         }
 
-        const page = await fetchLeaguePage(url.toString(), { allowedHosts, timeoutMs: leagueFetchTimeoutMs() });
+        // robots.txt is checked first, inside the same guard and deadline (ADR-0024, 2026-10-11 amendment).
+        const page = await fetchLeaguePage(url.toString(), { allowedHosts, robots: leagueFetchRobotsGate, timeoutMs: leagueFetchTimeoutMs() });
         const schedule = parseSchedule(page.html, { seasonYear: defaultSeasonYear(new Date()) });
         if (schedule.games.length === 0) {
             return { success: false, error: NO_GAMES_MESSAGE, details: { kind: "no-games" } };
@@ -99,6 +112,9 @@ export async function fetchLeagueSchedule(input: FetchLeagueScheduleInput): Prom
         };
     } catch (error) {
         if (error instanceof LeagueFetchError) {
+            if (error.kind === "crawl-delay") {
+                return { success: false, error: crawlDelayMessage(error.retryAfterSec), details: { kind: error.kind, retryAfterSec: error.retryAfterSec } };
+            }
             return { success: false, error: MESSAGES[error.kind], details: { kind: error.kind } };
         }
         if (error instanceof SchedulePullTooLargeError) {

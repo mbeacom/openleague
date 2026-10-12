@@ -3,6 +3,7 @@
  * redirect target always comes from here, never from the request.
  */
 import { LEAGUE_FETCH_MAX_TIMEOUT_MS, LEAGUE_FETCH_MIN_TIMEOUT_MS, LEAGUE_FETCH_TIMEOUT_MS, parseAllowedHosts } from "./guard";
+import { RobotsGate, type RobotsPermission } from "./robots";
 
 export const DEFAULT_STATIC_PLANNER_URL = "https://openleague.dev/planner/";
 /** The static app's rankings import route, with the pulled schedule in its query. */
@@ -14,8 +15,25 @@ export function leagueFetchAllowedHosts(env: Record<string, string | undefined> 
 }
 
 /**
+ * Hosts whose owners have given written permission to fetch their pages even
+ * where robots.txt disallows it (ADR-0024, 2026-10-11 amendment). Crawl-delay
+ * still applies, and a robots.txt that can't be read still fails closed. Each
+ * entry says where the permission is recorded. Kept in code, not an
+ * environment variable, so every change is reviewed. Empty by default.
+ */
+export const ROBOTS_PERMISSIONS: readonly RobotsPermission[] = [];
+
+/**
+ * The robots.txt cache and Crawl-delay spacing for this server instance.
+ * Instances don't share it (each serverless instance learns robots.txt for
+ * itself); the durable per-user rate limit is the bound across instances.
+ */
+export const leagueFetchRobotsGate = new RobotsGate({ permissions: ROBOTS_PERMISSIONS });
+
+/**
  * LEAGUE_FETCH_TIMEOUT_MS, clamped to 5-90 s; the default (60 s) when it is
- * unset, empty or not a number. One total deadline, not per hop.
+ * unset, empty or not a number. One total deadline, not per hop: it covers
+ * the robots.txt check, any Crawl-delay wait and the page.
  */
 export function leagueFetchTimeoutMs(env: Record<string, string | undefined> = process.env): number {
     const raw = env.LEAGUE_FETCH_TIMEOUT_MS?.trim();

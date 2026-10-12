@@ -6,7 +6,17 @@ const mocks = vi.hoisted(() => ({ fetchLeagueSchedule: vi.fn() }));
 vi.mock("@/lib/actions/league-fetch", () => ({ fetchLeagueSchedule: mocks.fetchLeagueSchedule }));
 
 import { act } from "@testing-library/react";
-import { FETCH_BUTTON_LABEL, LeagueFetchView, NO_SOURCE_MESSAGE, SLOW_MESSAGE, SLOW_NOTICE_AFTER_MS, TRY_AGAIN_LABEL, UNSUPPORTED_MESSAGE } from "@/components/features/league-fetch/LeagueFetchView";
+import {
+    FETCH_BUTTON_LABEL,
+    LeagueFetchView,
+    NO_SOURCE_MESSAGE,
+    PASTE_INSTEAD_LABEL,
+    SLOW_MESSAGE,
+    SLOW_NOTICE_AFTER_MS,
+    TRY_AGAIN_LABEL,
+    UNSUPPORTED_MESSAGE,
+} from "@/components/features/league-fetch/LeagueFetchView";
+import { ROBOTS_DISALLOWED_MESSAGE, ROBOTS_UNAVAILABLE_MESSAGE } from "@/lib/rankings-document";
 
 const HOST = "league.example.org";
 const LEAGUE = `https://${HOST}/schedule/8u`;
@@ -124,5 +134,39 @@ describe("LeagueFetchView", () => {
         open(`#src=${encodeURIComponent(url)}`);
         expect(await screen.findByText(UNSUPPORTED_MESSAGE)).toBeInTheDocument();
         expect(screen.queryByRole("button", { name: FETCH_BUTTON_LABEL })).not.toBeInTheDocument();
+    });
+
+    describe("robots.txt refusals", () => {
+        it("when the site disallows the page, says so and points to pasting or uploading it in the planner", async () => {
+            mocks.fetchLeagueSchedule.mockResolvedValueOnce({ success: false, error: ROBOTS_DISALLOWED_MESSAGE, details: { kind: "robots-disallowed" } });
+            open(`#src=${encodeURIComponent(LEAGUE)}`);
+            fireEvent.click(await screen.findByRole("button", { name: FETCH_BUTTON_LABEL }));
+            expect(await screen.findByText(ROBOTS_DISALLOWED_MESSAGE)).toBeInTheDocument();
+            const paste = screen.getByRole("link", { name: PASTE_INSTEAD_LABEL });
+            expect(paste).toHaveAttribute("href", `${PLANNER}#/rankings/import?notice=robots-disallowed`);
+            expect(paste).toHaveStyle({ minHeight: "44px" });
+            // Another try would be refused the same way.
+            await waitFor(() => expect(screen.getByRole("button", { name: FETCH_BUTTON_LABEL })).toBeDisabled());
+            expect(navigate).not.toHaveBeenCalled();
+        });
+
+        it("when the site's rules couldn't be checked, offers Try again and the paste path", async () => {
+            mocks.fetchLeagueSchedule.mockResolvedValueOnce({ success: false, error: ROBOTS_UNAVAILABLE_MESSAGE, details: { kind: "robots-unavailable" } });
+            open(`#src=${encodeURIComponent(LEAGUE)}`);
+            fireEvent.click(await screen.findByRole("button", { name: FETCH_BUTTON_LABEL }));
+            expect(await screen.findByText(ROBOTS_UNAVAILABLE_MESSAGE)).toBeInTheDocument();
+            expect(screen.getByRole("link", { name: PASTE_INSTEAD_LABEL })).toHaveAttribute("href", `${PLANNER}#/rankings/import?notice=robots-unavailable`);
+            expect(await screen.findByRole("button", { name: TRY_AGAIN_LABEL })).toBeEnabled();
+        });
+
+        it("on a Crawl-delay refusal shows the wait and offers Try again", async () => {
+            const error = "The league site asks automated tools to wait between requests. Please try again in 30 seconds.";
+            mocks.fetchLeagueSchedule.mockResolvedValueOnce({ success: false, error, details: { kind: "crawl-delay", retryAfterSec: 30 } });
+            open(`#src=${encodeURIComponent(LEAGUE)}`);
+            fireEvent.click(await screen.findByRole("button", { name: FETCH_BUTTON_LABEL }));
+            expect(await screen.findByText(error)).toBeInTheDocument();
+            expect(await screen.findByRole("button", { name: TRY_AGAIN_LABEL })).toBeEnabled();
+            expect(screen.queryByRole("link", { name: PASTE_INSTEAD_LABEL })).not.toBeInTheDocument();
+        });
     });
 });

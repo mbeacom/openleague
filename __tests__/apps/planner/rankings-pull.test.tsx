@@ -5,7 +5,14 @@ import { matchRoute, staticRoutes } from "@/apps/planner/src/routes";
 import { hostedFetchUrl, HOSTED_URL } from "@/apps/planner/src/config";
 import { RankingsImportScreen, SAVE_IMPORT_LABEL } from "@/apps/planner/src/screens/rankings/RankingsImportScreen";
 import { pulledScheduleLabel, readPulledSchedule } from "@/apps/planner/src/screens/rankings/pulled-schedule";
-import { encodeSchedulePull, PULL_NEWER_MESSAGE, PULL_UNREADABLE_MESSAGE, SCHEDULE_PULL_FORMAT } from "@/lib/rankings-document";
+import {
+    encodeSchedulePull,
+    PULL_NEWER_MESSAGE,
+    PULL_UNREADABLE_MESSAGE,
+    ROBOTS_DISALLOWED_MESSAGE,
+    ROBOTS_UNAVAILABLE_MESSAGE,
+    SCHEDULE_PULL_FORMAT,
+} from "@/lib/rankings-document";
 import { base64UrlEncode, deflateRaw } from "@/lib/plan-document/link";
 import { leagueSourceFragmentValue } from "@/lib/plan-document/pending";
 import { RankingsScreen } from "@/apps/planner/src/screens/rankings/RankingsScreen";
@@ -26,6 +33,11 @@ describe("pull route", () => {
         ["#/rankings/import/?pull=abc", { name: "rankingsImport", pull: "abc" }],
         ["#/rankings/import?pull=", { name: "rankingsImport" }],
         ["#/rankings/import?other=1", { name: "rankingsImport" }],
+        ["#/rankings/import?notice=robots-disallowed", { name: "rankingsImport", notice: "robots-disallowed" }],
+        ["#/rankings/import?notice=robots-unavailable", { name: "rankingsImport", notice: "robots-unavailable" }],
+        ["#/rankings/import?notice=anything-else", { name: "rankingsImport" }],
+        ["#/rankings/import?notice=toString", { name: "rankingsImport" }],
+        ["#/rankings/import?pull=abc&notice=robots-disallowed", { name: "rankingsImport", pull: "abc" }],
         ["#/rankings?pull=abc", { name: "notFound" }],
         ["#/library?pull=abc", { name: "notFound" }],
     ])("%s", (hash, expected) => {
@@ -93,6 +105,26 @@ describe("RankingsImportScreen with a pull", () => {
         renderScreen(<RankingsImportScreen store={store} pull="AAAA" />, store);
         expect(await screen.findByText(PULL_UNREADABLE_MESSAGE)).toBeInTheDocument();
         expect(screen.queryByText(/Schedule fetched from/)).not.toBeInTheDocument();
+    });
+});
+
+describe("RankingsImportScreen with a fetch notice", () => {
+    it.each([
+        ["robots-disallowed", ROBOTS_DISALLOWED_MESSAGE],
+        ["robots-unavailable", ROBOTS_UNAVAILABLE_MESSAGE],
+    ] as const)("shows %s above the paste box and the file picker", async (notice, message) => {
+        const { store } = memoryStore();
+        renderScreen(<RankingsImportScreen store={store} notice={notice} />, store);
+        expect(await screen.findByText(message)).toBeInTheDocument();
+        // The way forward is right there: the schedule box to paste into.
+        expect(screen.getByRole("textbox", { name: "Schedule page" })).toBeInTheDocument();
+    });
+
+    it("shows nothing without a notice", async () => {
+        const { store } = memoryStore();
+        renderScreen(<RankingsImportScreen store={store} />, store);
+        expect(await screen.findByRole("textbox", { name: "Schedule page" })).toBeInTheDocument();
+        expect(screen.queryByTestId("fetch-notice")).not.toBeInTheDocument();
     });
 });
 

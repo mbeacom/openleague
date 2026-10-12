@@ -102,7 +102,7 @@ function RouteView({ route, store }: { route: StaticRoute; store: LocalPlannerSt
             return <StaticRankingsScreen store={store} />;
         case "rankingsImport":
             // A pull (ADR-0024) keeps the "import" key: dropping it from the hash must not remount the screen.
-            return <RankingsImportScreen key={route.update ? "update" : "import"} store={store} update={route.update === true} pull={route.pull} files={createRankingsFileOps(store)} />;
+            return <RankingsImportScreen key={route.update ? "update" : "import"} store={store} update={route.update === true} pull={route.pull} notice={route.notice} files={createRankingsFileOps(store)} />;
         case "rankingsSetup":
             return <RankingsSetupScreen store={store} section={route.section} />;
         case "rankingsWhatIf":
