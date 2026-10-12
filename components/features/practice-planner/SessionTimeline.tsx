@@ -68,6 +68,8 @@ export interface SessionTimelineProps<T extends SessionTimelinePlay> {
     /** Screen only: called with a session-play id when a drill name is clicked */
     onSelectPlay?: (playId: string) => void;
     variant?: "screen" | "print";
+    /** Screen only: a narrow column (the session page's plan column): tighter cells, the clock sized to fit. */
+    dense?: boolean;
 }
 
 /** "Stations · 3": a station group's label in the timeline. */
@@ -91,7 +93,8 @@ function gridTable(grid: RotationGrid<SessionTimelinePlay>, roundStarts: Date[],
     return rotationTable(grid, rotationColumnName, (_, round) => time(roundStarts[round]));
 }
 
-function DrillName({ id, name, onSelect }: { id: string; name: string; onSelect?: (id: string) => void }) {
+/** On the session page the timeline is the drill navigator: the drill on screen is marked current. */
+function DrillName({ id, name, active, onSelect }: { id: string; name: string; active: boolean; onSelect?: (id: string) => void }) {
     if (!onSelect) return <>{name}</>;
     return (
         <Link
@@ -99,6 +102,7 @@ function DrillName({ id, name, onSelect }: { id: string; name: string; onSelect?
             type="button"
             variant="body2"
             underline="hover"
+            aria-current={active ? "true" : undefined}
             onClick={() => onSelect(id)}
             sx={{ textAlign: "left", fontWeight: 600 }}
         >
@@ -134,6 +138,7 @@ export function SessionTimeline<T extends SessionTimelinePlay>({
     activePlayId,
     onSelectPlay,
     variant = "screen",
+    dense = false,
 }: SessionTimelineProps<T>) {
     const clock = useClockText(timeZone, showZone);
     const rows = buildSchedule(plays, sessionStart, transitionMinutes);
@@ -215,11 +220,15 @@ export function SessionTimeline<T extends SessionTimelinePlay>({
 
     return (
         <Stack spacing={1}>
-            <Table size="small" aria-label="Session timeline">
+            <Table
+                size="small"
+                aria-label="Session timeline"
+                sx={dense ? { "& td, & th": { px: 1 }, "& td:first-of-type, & th:first-of-type": { pl: 0 }, "& td:last-of-type, & th:last-of-type": { pr: 0 } } : undefined}
+            >
                 <TableHead>
                     <TableRow>
-                        <TableCell sx={{ width: 120 }}>Start</TableCell>
-                        <TableCell sx={{ width: 56 }} align="right">
+                        <TableCell sx={{ width: dense ? "1%" : 120, whiteSpace: "nowrap" }}>Start</TableCell>
+                        <TableCell sx={{ width: dense ? "1%" : 56 }} align="right">
                             Min
                         </TableCell>
                         <TableCell>Drill</TableCell>
@@ -276,7 +285,7 @@ export function SessionTimeline<T extends SessionTimelinePlay>({
                                                 <Box component="ul" sx={{ m: 0, pl: 2 }}>
                                                     {drills.map((sp) => (
                                                         <li key={sp.id}>
-                                                            <DrillName id={sp.id} name={sp.play.name} onSelect={onSelectPlay} />
+                                                            <DrillName id={sp.id} name={sp.play.name} active={sp.id === activePlayId} onSelect={onSelectPlay} />
                                                             <Typography component="span" variant="caption" color="text.secondary" sx={{ overflowWrap: "anywhere" }}>
                                                                 {`${grid ? staysSuffix(sp.stays) : ` · ${sp.duration} min`}${runBy(sp)}`}
                                                             </Typography>
@@ -286,7 +295,7 @@ export function SessionTimeline<T extends SessionTimelinePlay>({
                                             </>
                                         ) : (
                                             <>
-                                                <DrillName id={head.id} name={drills[0].play.name} onSelect={onSelectPlay} />
+                                                <DrillName id={head.id} name={drills[0].play.name} active={head.id === activePlayId} onSelect={onSelectPlay} />
                                                 {runByCaption(drills[0])}
                                             </>
                                         )}

@@ -40,6 +40,7 @@ import type { RowEdit } from "@/lib/utils/session-rows";
 import { GoalieBadge } from "./GoalieBadge";
 import { RunByField, type RowRunBy } from "./RunByField";
 import { drillEquipment, drillEquipmentText } from "@/lib/utils/equipment-needs";
+import { THUMBNAIL_ASPECT } from "@/lib/utils/canvas/thumbnail-generator";
 
 /** Hidden from sight but read by screen readers (the standard clip pattern). */
 const VISUALLY_HIDDEN = {
@@ -110,6 +111,12 @@ export interface SessionDrillCardProps {
     onEditDiagram: (clientKey: string) => void;
     /** The drag handle (SessionSortable), placed first among the move controls; absent without drag and drop. */
     dragHandle?: ReactNode;
+    /**
+     * Compact rows (useDrillDensity): one line with a small thumbnail, the
+     * minutes, the station switch and every other control as an icon. Edit
+     * opens the full card, where Stays and Run by are.
+     */
+    compact?: boolean;
 }
 
 /**
@@ -143,6 +150,7 @@ export function SessionDrillCard({
     locked = false,
     onEditDiagram,
     dragHandle = null,
+    compact = false,
 }: SessionDrillCardProps) {
     const { Image } = usePlannerPlatform();
     // Local state for editing
@@ -179,37 +187,149 @@ export function SessionDrillCard({
         onCancelEdit();
     };
 
+    const title = play.name || `Drill ${number}`;
+    const media = thumbnail ? (
+        <Image src={thumbnail} alt={title} fit="contain" />
+    ) : (
+        <Typography variant={compact ? "caption" : "body2"} color="text.secondary">
+            Play {number}
+        </Typography>
+    );
+    // Shared by both densities: the station block styling and the group's name.
+    const groupProps = {
+        role: grouped ? "group" : undefined,
+        "aria-labelledby": grouped ? `${slotLabelId} ${titleId}` : undefined,
+    };
+    const groupedSx = grouped ? { borderLeft: 4, borderColor: "primary.main", bgcolor: "action.hover", ml: 1 } : {};
+    const slotLabel = stationSlot && (
+        // Out of flow (absolute), so it takes no flex gap; read as part of the group's name.
+        <Box component="span" id={slotLabelId} sx={VISUALLY_HIDDEN}>
+            {`Station ${stationSlot.position} of ${stationSlot.count}:`}
+        </Box>
+    );
+
+    if (compact && !isEditing) {
+        return (
+            <Card
+                {...groupProps}
+                data-density="compact"
+                sx={{ display: "flex", alignItems: "center", flexWrap: "wrap", columnGap: 1.5, rowGap: 0.5, p: 1, ...groupedSx }}
+            >
+                {slotLabel}
+                <CardMedia
+                    component="div"
+                    sx={{
+                        width: 96,
+                        aspectRatio: `${THUMBNAIL_ASPECT}`,
+                        bgcolor: "action.hover",
+                        borderRadius: 1,
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        position: "relative",
+                        overflow: "hidden",
+                        flexShrink: 0,
+                    }}
+                >
+                    {media}
+                </CardMedia>
+                <Box sx={{ flex: "1 1 160px", minWidth: 0 }}>
+                    <Stack direction="row" alignItems="center" spacing={1} sx={{ minWidth: 0 }}>
+                        <Chip label={`#${number}`} color="primary" size="small" sx={{ flexShrink: 0 }} />
+                        <Typography id={titleId} variant="subtitle1" component={grouped ? "h4" : "h3"} noWrap sx={{ fontWeight: 700, minWidth: 0 }}>
+                            {title}
+                        </Typography>
+                        {needsGoalie(play) && <GoalieBadge sx={{ flexShrink: 0 }} />}
+                    </Stack>
+                    <Stack direction="row" alignItems="center" spacing={1} useFlexGap flexWrap="wrap">
+                        <Typography variant="body2" color="text.secondary">
+                            {stays ? (stays.checked ? STAYS_LABEL : "Rotates") : `${play.duration} min`}
+                        </Typography>
+                        {fitWarning && <Chip label={fitWarning} color="warning" size="small" variant="outlined" />}
+                        {goalieWarning && <Chip label={goalieWarning} color="warning" size="small" variant="outlined" />}
+                        {/* The full card shows its switch only while not editing, so the row carries it too. */}
+                        {station && (
+                            <Tooltip title={capped ? STATION_CAP_TOOLTIP : STATION_SWITCH_LABEL}>
+                                <FormControlLabel
+                                    control={
+                                        <Switch
+                                            size="small"
+                                            checked={station.checked}
+                                            onChange={() => onToggleStation(index)}
+                                            slotProps={{
+                                                input: {
+                                                    "aria-label": STATION_SWITCH_LABEL,
+                                                    "aria-describedby": capped ? `${titleId} ${capReasonId}` : titleId,
+                                                },
+                                            }}
+                                        />
+                                    }
+                                    label={<Typography variant="body2">Station</Typography>}
+                                    disabled={locked || capped}
+                                    sx={{ minHeight: 44, ml: 0, mr: 0 }}
+                                />
+                            </Tooltip>
+                        )}
+                        {capped && (
+                            <Box component="span" id={capReasonId} sx={VISUALLY_HIDDEN}>
+                                {STATION_CAP_TOOLTIP}
+                            </Box>
+                        )}
+                    </Stack>
+                </Box>
+                <Stack direction="row" alignItems="center" sx={{ ml: "auto", "& .MuiIconButton-root": { minWidth: 44, minHeight: 44 } }}>
+                    {dragHandle}
+                    <IconButton size="small" onClick={() => onMoveUp(index)} disabled={locked || !canMoveUp} aria-label={`Move play ${number} up`}>
+                        <ArrowUpwardIcon />
+                    </IconButton>
+                    <IconButton size="small" onClick={() => onMoveDown(index)} disabled={locked || !canMoveDown} aria-label={`Move play ${number} down`}>
+                        <ArrowDownwardIcon />
+                    </IconButton>
+                    <IconButton size="small" color="primary" onClick={() => onEdit(play.id)} disabled={locked} aria-label={`Edit play ${number}`}>
+                        <EditIcon />
+                    </IconButton>
+                    <Tooltip title={canEditDiagram ? "Edit diagram" : "Save the session first"}>
+                        <span>
+                            <IconButton
+                                size="small"
+                                onClick={() => onEditDiagram(play.id)}
+                                disabled={disabled || !canEditDiagram}
+                                aria-label={`Edit diagram for ${play.name || `drill ${number}`}`}
+                            >
+                                <DrawIcon />
+                            </IconButton>
+                        </span>
+                    </Tooltip>
+                    <IconButton size="small" color="error" onClick={() => onDelete(play.id)} disabled={locked} aria-label={`Delete play ${number}`}>
+                        <DeleteIcon />
+                    </IconButton>
+                </Stack>
+            </Card>
+        );
+    }
+
     return (
         <Card
             // A grouped card can't sit inside a wrapper (moving it in or out would remount it),
             // so each one is its own group, named by its place in the block and its title.
-            role={grouped ? "group" : undefined}
-            aria-labelledby={grouped ? `${slotLabelId} ${titleId}` : undefined}
+            {...groupProps}
             sx={{
                 display: "flex",
                 flexDirection: { xs: "column", sm: "row" },
                 gap: 2,
-                ...(grouped && {
-                    borderLeft: 4,
-                    borderColor: "primary.main",
-                    bgcolor: "action.hover",
-                    ml: 1,
-                }),
+                ...groupedSx,
             }}
         >
-            {stationSlot && (
-                // Out of flow (absolute), so it takes no flex gap; read as part of the group's name.
-                <Box component="span" id={slotLabelId} sx={VISUALLY_HIDDEN}>
-                    {`Station ${stationSlot.position} of ${stationSlot.count}:`}
-                </Box>
-            )}
+            {slotLabel}
 
-            {/* Thumbnail */}
+            {/* Thumbnail: the board's shape beside the content, wider where the page allows */}
             <CardMedia
                 component="div"
                 sx={{
-                    width: { xs: "100%", sm: 200 },
-                    height: { xs: 150, sm: 120 },
+                    width: { xs: "100%", sm: 240, md: 280 },
+                    height: { xs: 150, sm: "auto" },
+                    aspectRatio: { sm: `${THUMBNAIL_ASPECT}` },
+                    alignSelf: { sm: "flex-start" },
                     bgcolor: "action.hover",
                     display: "flex",
                     alignItems: "center",
@@ -218,13 +338,7 @@ export function SessionDrillCard({
                     flexShrink: 0,
                 }}
             >
-                {thumbnail ? (
-                    <Image src={thumbnail} alt={play.name || `Drill ${number}`} fit="contain" />
-                ) : (
-                    <Typography variant="body2" color="text.secondary">
-                        Play {number}
-                    </Typography>
-                )}
+                {media}
                 <Chip
                     label={`#${number}`}
                     color="primary"
@@ -242,7 +356,7 @@ export function SessionDrillCard({
             <CardContent sx={{ flexGrow: 1, py: 1 }}>
                 <Stack spacing={1}>
                     <Typography id={titleId} variant="h6" component={grouped ? "h4" : "h3"}>
-                        {play.name || `Drill ${number}`}
+                        {title}
                     </Typography>
 
                     {fitWarning && (
@@ -346,7 +460,7 @@ export function SessionDrillCard({
                         </Typography>
                     )}
 
-                    {runBy && <RunByField {...runBy} title={play.name || `Drill ${number}`} disabled={disabled || locked} />}
+                    {runBy && <RunByField {...runBy} title={title} disabled={disabled || locked} />}
 
                     {!isEditing && (
                         <Tooltip title={canEditDiagram ? "" : "Save the session first"}>

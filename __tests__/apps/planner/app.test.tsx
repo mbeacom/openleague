@@ -186,3 +186,29 @@ describe("PlannerApp", () => {
         expect(document.body.textContent?.split(PRIVACY_NOTE)).toHaveLength(2);
     });
 });
+
+describe("PlannerApp page width", () => {
+    const container = () => screen.getByRole("main").firstElementChild as HTMLElement;
+
+    it("keeps the practice list at the standard width", async () => {
+        const { store } = memoryStore();
+        render(app(store));
+        await screen.findByText("Plan your first practice");
+        expect(container()).toHaveClass("MuiContainer-maxWidthLg");
+    });
+
+    it("widens the session page and its editor, whose two columns use the room", async () => {
+        const { store } = memoryStore();
+        const id = await savedSession(store);
+        window.location.hash = `#/sessions/${id}`;
+        const view = render(app(store));
+        await screen.findByRole("heading", { level: 1, name: "Tuesday Skills" });
+        expect(container()).toHaveClass("MuiContainer-maxWidthXl");
+        view.unmount();
+
+        window.location.hash = `#/sessions/${id}/edit`;
+        render(app(store));
+        await screen.findByRole("heading", { level: 1, name: "Edit Practice Session" });
+        expect(container()).toHaveClass("MuiContainer-maxWidthXl");
+    });
+});

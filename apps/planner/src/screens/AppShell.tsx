@@ -4,6 +4,7 @@
  */
 import { useSyncExternalStore, type ReactNode } from "react";
 import { Alert, AppBar, Box, Button, Container, Link, Stack, Toolbar, Typography } from "@mui/material";
+import { PLANNER_INSET_VARS } from "@/components/features/practice-planner/planner-layout";
 import { HOSTED_URL, PRIVACY_NOTE } from "../config";
 import { staticRoutes, type NavSection } from "../routes";
 import type { StaleSignal } from "../store/open-store";
@@ -26,6 +27,7 @@ export function AppShell({
     stale,
     section = null,
     teamControl,
+    wide = false,
     children,
 }: {
     durable: boolean;
@@ -34,11 +36,23 @@ export function AppShell({
     section?: NavSection | null;
     /** The "Your team" button, beside the title. */
     teamControl?: ReactNode;
+    /** A wider page (the session page and editor), whose two columns use the room. */
+    wide?: boolean;
     children: ReactNode;
 }) {
     const isStale = useSyncExternalStore(stale.subscribe, stale.isStale, () => false);
     return (
-        <Box sx={{ minHeight: "100vh", display: "flex", flexDirection: "column", bgcolor: "background.default" }}>
+        <Box
+            sx={{
+                minHeight: "100vh",
+                display: "flex",
+                flexDirection: "column",
+                bgcolor: "background.default",
+                // The sticky bar's height (planner-layout): the title and nav rows on phones, one 64px row + the 4px rule from sm.
+                [PLANNER_INSET_VARS.top]: { xs: "92px", sm: "68px" },
+                [PLANNER_INSET_VARS.bottom]: "0px",
+            }}
+        >
             <AppBar
                 position="sticky"
                 elevation={0}
@@ -115,12 +129,12 @@ export function AppShell({
                     backgroundSize: "24px 24px",
                 }}
             >
-                <Container maxWidth="lg" sx={{ py: { xs: 2, sm: 3 } }}>
+                <Container maxWidth={wide ? "xl" : "lg"} sx={{ py: { xs: 2, sm: 3 } }}>
                     {children}
                 </Container>
             </Box>
             <Box component="footer" sx={{ borderTop: 1, borderColor: "divider", py: 2 }}>
-                <Container maxWidth="lg">
+                <Container maxWidth={wide ? "xl" : "lg"}>
                     <Stack spacing={0.5}>
                         <Typography variant="body2" color="text.secondary">
                             {PRIVACY_NOTE}

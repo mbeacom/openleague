@@ -67,7 +67,7 @@ describe("SessionDetailView: block rows", () => {
 });
 
 describe("SessionDetailView: a rotating station block", () => {
-    it("names the rotation in the play sequence and shows the grid on the timeline", () => {
+    it("names the rotation above the drill in the viewer and shows the grid on the timeline", () => {
         const rotating: PracticeSessionView = {
             ...SESSION,
             plays: [
@@ -81,11 +81,13 @@ describe("SessionDetailView: a rotating station block", () => {
                 <SessionDetailView session={rotating} isAdmin={false} />
             </ThemeProvider>,
         );
-        const block = screen.getByRole("group", { name: "Stations · rotate every 5 min · 10 min" });
+        const viewer = screen.getByRole("region", { name: "Drill viewer" });
+        expect(within(viewer).getByText("Stations · rotate every 5 min · 10 min")).toBeInTheDocument();
         // Each station says how it runs, as the timeline does, not its stored minutes.
-        expect(within(block).getAllByText("Rotates every 5 min")).toHaveLength(2);
-        expect(within(block).getByText("stays")).toBeInTheDocument();
-        expect(within(block).queryByText("10 min")).toBeNull();
+        expect(within(viewer).getByText("stays")).toBeInTheDocument();
+        expect(within(viewer).queryByText("10 min")).toBeNull();
+        fireEvent.click(screen.getByRole("button", { name: "Next play" }));
+        expect(within(viewer).getByText("Rotates every 5 min")).toBeInTheDocument();
         expect(screen.getByRole("table", { name: /^Rotation grid/ })).toBeInTheDocument();
     });
 });

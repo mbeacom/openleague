@@ -1,6 +1,6 @@
-/** Session detail (practice staff, spec R9): names on the timeline and a "Run by" line on the sidebar cards. */
+/** Session detail (practice staff, spec R9): names on the timeline and a "Run by" line under the drill on screen. */
 import { describe, expect, it, vi } from "vitest";
-import { screen, within } from "@testing-library/react";
+import { fireEvent, screen, within } from "@testing-library/react";
 import { ThemeProvider, createTheme } from "@mui/material/styles";
 import { renderWithPlanner } from "@/__tests__/helpers/planner";
 import { createEmptyPlayData } from "@/lib/utils/play-data";
@@ -32,7 +32,7 @@ const SESSION: PracticeSessionView = {
 };
 
 describe("SessionDetailView: practice staff", () => {
-    it("names who runs each row on the timeline, and on each drill's sidebar card", () => {
+    it("names who runs each row on the timeline, and who runs the drill on screen", () => {
         renderWithPlanner(
             <ThemeProvider theme={createTheme()}>
                 <SessionDetailView session={SESSION} isAdmin={false} />
@@ -41,8 +41,11 @@ describe("SessionDetailView: practice staff", () => {
         const timeline = screen.getByRole("table", { name: "Session timeline" });
         expect(within(timeline).getByText("· run by Sam")).toBeInTheDocument();
         expect(within(timeline).getByText("· run by Coach Lee, Sam")).toBeInTheDocument();
-        expect(screen.getByText("Run by Coach Lee, Sam")).toBeInTheDocument();
-        // The warm-up has no sidebar card, and Shooting has nobody.
-        expect(screen.getAllByText(/^Run by /)).toHaveLength(1);
+        const viewer = screen.getByRole("region", { name: "Drill viewer" });
+        // The viewer opens on the first drill (the warm-up is not one).
+        expect(within(viewer).getByText("Run by Coach Lee, Sam")).toBeInTheDocument();
+        // Shooting has nobody, so it says nothing.
+        fireEvent.click(screen.getByRole("button", { name: "Next play" }));
+        expect(within(viewer).queryByText(/^Run by /)).toBeNull();
     });
 });
