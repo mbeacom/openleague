@@ -198,6 +198,17 @@ export function PlaybackBoard({ playData, label, startPlaying = false, onClose, 
     );
     const stepIndex = frame.stepIndex;
 
+    // Reduced motion switched on while open (an OS setting): drop into step mode
+    // paused, at the step the playhead had reached, so Next step still draws.
+    const [prevReducedMotion, setPrevReducedMotion] = useState(reducedMotion);
+    if (prevReducedMotion !== reducedMotion) {
+        setPrevReducedMotion(reducedMotion);
+        if (reducedMotion && !animate) {
+            setPlaying(false);
+            setStepPos(Math.max(0, poseAt(playback, t).stepIndex + 1));
+        }
+    }
+
     // Paused: draw once per change of playhead, size or font. Playing: the loop draws.
     useEffect(() => {
         if (!playing) draw(frame);
@@ -217,6 +228,12 @@ export function PlaybackBoard({ playData, label, startPlaying = false, onClose, 
             const dt = now - last;
             last = now;
             if (holdUntil !== null) {
+                // Loop turned off during the hold: stay on the last frame.
+                if (!loopRef.current) {
+                    setT(durationMs);
+                    setPlaying(false);
+                    return;
+                }
                 if (now < holdUntil) {
                     raf = requestAnimationFrame(tick);
                     return;

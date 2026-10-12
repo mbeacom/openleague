@@ -16,7 +16,7 @@ import { PLAYER_RADIUS_FT } from "./glyph-metrics";
 import { SNAP_RADIUS_FT } from "./line-editing";
 import { DIAGRAM_THEME } from "./diagram-theme";
 import { ACTION_LABELS, ROLE_LABELS } from "./notation";
-import { resampleByArcLength, strokeCenterline } from "./stroke-geometry";
+import { pathLength, resampleByArcLength, strokeCenterline } from "./stroke-geometry";
 
 // ============================================================================
 // Constants (R3, R5)
@@ -47,6 +47,13 @@ export const LOOP_HOLD_MS = 1500;
 export const CARRY_LEAD_FT = 2;
 /** Spacing of the precomputed arc-length tables. */
 export const SAMPLE_SPACING_FT = 0.5;
+/**
+ * Most samples in one arc-length table. A longer path is sampled more coarsely
+ * so the longest valid stroke (1,000 points corner to corner, about 217,000 ft)
+ * can't allocate hundreds of thousands of samples; any path under 2,000 ft keeps
+ * the 0.5 ft spacing.
+ */
+export const MAX_ARC_SAMPLES = 4000;
 /** Upcoming strokes are drawn with their colour mixed this far toward the ice. */
 export const GHOST_MIX = 0.7;
 /** Ids of pucks the diagram doesn't contain carry this prefix (`playback-puck-<strokeId>`). */
@@ -95,6 +102,8 @@ interface MotionSegment {
     table: ArcTable;
     /** A carried puck rides ahead of the skater instead of sitting on the path. */
     lead: number;
+    /** A carried puck released mid-carry (a pass on the move) follows the path only this far. */
+    untilS?: number;
 }
 
 interface PuckTrack {
@@ -139,7 +148,8 @@ export interface CompileOptions {
 const dist = (a: Position, b: Position) => Math.hypot(a.x - b.x, a.y - b.y);
 
 function arcTable(points: Position[]): ArcTable {
-    const samples = points.length > 1 ? resampleByArcLength(points, SAMPLE_SPACING_FT) : points.map((p) => ({ ...p }));
+    const spacing = Math.max(SAMPLE_SPACING_FT, pathLength(points) / MAX_ARC_SAMPLES);
+    const samples = points.length > 1 ? resampleByArcLength(points, spacing) : points.map((p) => ({ ...p }));
     const cum = [0];
     for (let i = 1; i < samples.length; i++) cum.push(cum[i - 1] + dist(samples[i - 1], samples[i]));
     return { samples, cum, total: cum[cum.length - 1] };
@@ -329,6 +339,8 @@ export function compilePlayback(playData: PlayData, options: CompileOptions = {}
         let puck: PuckTrack | null = null;
         let motion: ArcTable = draw;
         let onTheMoveAt: number | null = null;
+        /** A pass on the move from a carry: the carried puck, and how far along the carry it is released. */
+        let handoff: { puck: PuckTrack; segment: MotionSegment; s: number } | null = null;
 
         if (isMovement(action)) {
             // R4 rule 3: the nearest player (where they are by now) within the attach radius.
@@ -384,10 +396,24 @@ export function compilePlayback(playData: PlayData, options: CompileOptions = {}
                         stroke.startMs + inverseEase(stroke.easing, fraction) * (stroke.endMs - stroke.startMs)
                     );
                     waits.push(onTheMoveAt);
+                    // Passing out of a carry: the pass takes the carried puck where the skater is then,
+                    // unless that puck has already been released or moved on.
+                    if (stroke.action === "carry" && stroke.puckId) {
+                        const track = pucks.find((t) => t.id === stroke.puckId);
+                        const segment = track?.segments[track.segments.length - 1];
+                        if (track && segment && segment.strokeId === stroke.id && segment.untilS === undefined) {
+                            handoff = { puck: track, segment, s };
+                        }
+                    }
                 }
             }
-            puck = findPuck(first);
-            if (puck) {
+            if (handoff) {
+                const { segment, s } = handoff;
+                puck = handoff.puck;
+                const base = pointAt(segment.table, s);
+                const t = tangentAt(segment.table, s);
+                motion = motionFrom({ x: base.x + t.x * segment.lead, y: base.y + t.y * segment.lead }, line);
+            } else if ((puck = findPuck(first))) {
                 const free = puckFreeAt.get(puck.id);
                 if (free !== undefined) waits.push(free + STEP_BEAT_MS);
                 motion = motionFrom(puckAt.get(puck.id) ?? null, line);
@@ -410,6 +436,7 @@ export function compilePlayback(playData: PlayData, options: CompileOptions = {}
         };
         compiled.set(stroke.id, stroke);
         order.push(stroke);
+        if (handoff) handoff.segment.untilS = handoff.s;
 
         // Book-keeping: where everyone is after this stroke, and when they're free.
         const lastPoint = line[line.length - 1];
@@ -494,7 +521,9 @@ function poseAlong(start: Position, segments: MotionSegment[], playback: Playbac
         const stroke = playback.compiled.get(seg.strokeId) as CompiledStroke;
         const p = progress(stroke);
         if (p === "upcoming") break;
-        const s = p * seg.table.total;
+        let s = p * seg.table.total;
+        const released = seg.untilS !== undefined && s >= seg.untilS;
+        if (released) s = seg.untilS as number;
         const base = pointAt(seg.table, s);
         if (seg.lead) {
             const t = tangentAt(seg.table, s);
@@ -502,7 +531,7 @@ function poseAlong(start: Position, segments: MotionSegment[], playback: Playbac
         } else {
             at = base;
         }
-        if (p < 1) break;
+        if (p < 1 && !released) break;
     }
     return at;
 }

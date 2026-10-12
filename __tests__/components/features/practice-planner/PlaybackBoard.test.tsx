@@ -66,6 +66,37 @@ afterEach(() => {
 
 const slider = () => screen.getByRole("slider", { name: "Playback position" });
 
+/** A counting 2D context and a sized board; returns how many times the canvas has been painted. */
+function stubCanvas(): () => number {
+    const calls: Record<string, number> = {};
+    const ctx = new Proxy({} as Record<string | symbol, unknown>, {
+        get(target, prop) {
+            if (prop in target) return target[prop];
+            return (..._args: unknown[]) => {
+                calls[String(prop)] = (calls[String(prop)] ?? 0) + 1;
+                return { addColorStop: () => undefined, width: 10 };
+            };
+        },
+        set(target, prop, value) {
+            target[prop] = value;
+            return true;
+        },
+    });
+    vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockImplementation(() => ctx as unknown as CanvasRenderingContext2D);
+    vi.stubGlobal(
+        "ResizeObserver",
+        class {
+            constructor(private cb: ResizeObserverCallback) {}
+            observe() {
+                this.cb([{ contentRect: { width: 600, height: 256 } } as ResizeObserverEntry], this as unknown as ResizeObserver);
+            }
+            unobserve() {}
+            disconnect() {}
+        }
+    );
+    return () => calls.drawImage ?? 0;
+}
+
 describe("PlaybackBoard", () => {
     it("labels every control and doesn't start on its own", () => {
         render(<PlaybackBoard playData={breakout.playData} label="Breakout" />);
@@ -127,6 +158,53 @@ describe("PlaybackBoard", () => {
         advance(1600);
         advance(16);
         expect(Number(slider().getAttribute("value"))).toBeLessThan(100);
+    });
+
+    it("stops on the last frame when Loop is turned off during the hold", () => {
+        render(<PlaybackBoard playData={breakout.playData} label="Breakout" />);
+        fireEvent.click(screen.getByRole("button", { name: "Loop" }));
+        fireEvent.click(screen.getByRole("button", { name: "Play" }));
+        advance(0);
+        advance(playback.durationMs);
+        fireEvent.click(screen.getByRole("button", { name: "Loop" }));
+        advance(1600);
+        advance(16);
+        expect(slider()).toHaveValue(String(playback.durationMs));
+        expect(screen.getByRole("button", { name: "Play" })).toBeInTheDocument();
+        expect(frames.size).toBe(0);
+    });
+
+    it("pauses and keeps drawing in step mode when reduced motion turns on mid-play", () => {
+        const listeners = new Set<() => void>();
+        let reduce = false;
+        vi.stubGlobal(
+            "matchMedia",
+            vi.fn((query: string) => ({
+                get matches() {
+                    return reduce && query.includes("prefers-reduced-motion");
+                },
+                media: query,
+                onchange: null,
+                addListener: vi.fn(),
+                removeListener: vi.fn(),
+                addEventListener: (_: string, cb: () => void) => listeners.add(cb),
+                removeEventListener: (_: string, cb: () => void) => listeners.delete(cb),
+                dispatchEvent: vi.fn(),
+            }))
+        );
+        const draws = stubCanvas();
+        render(<PlaybackBoard playData={breakout.playData} label="Breakout" />);
+        fireEvent.click(screen.getByRole("button", { name: "Play" }));
+        advance(16);
+        advance(16);
+        act(() => {
+            reduce = true;
+            [...listeners].forEach((cb) => cb());
+        });
+        expect(frames.size).toBe(0);
+        const before = draws();
+        fireEvent.click(screen.getByRole("button", { name: "Next step" }));
+        expect(draws()).toBeGreaterThan(before);
     });
 
     it("steps forward and back by step, and pauses", () => {
@@ -192,46 +270,21 @@ describe("PlaybackBoard", () => {
     });
 
     it("draws every frame while playing and nothing while paused", () => {
-        const calls: Record<string, number> = {};
-        const ctx = new Proxy({} as Record<string | symbol, unknown>, {
-            get(target, prop) {
-                if (prop in target) return target[prop];
-                return (..._args: unknown[]) => {
-                    calls[String(prop)] = (calls[String(prop)] ?? 0) + 1;
-                    return { addColorStop: () => undefined, width: 10 };
-                };
-            },
-            set(target, prop, value) {
-                target[prop] = value;
-                return true;
-            },
-        });
-        vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockImplementation(() => ctx as unknown as CanvasRenderingContext2D);
-        vi.stubGlobal(
-            "ResizeObserver",
-            class {
-                constructor(private cb: ResizeObserverCallback) {}
-                observe() {
-                    this.cb([{ contentRect: { width: 600, height: 256 } } as ResizeObserverEntry], this as unknown as ResizeObserver);
-                }
-                unobserve() {}
-                disconnect() {}
-            }
-        );
+        const draws = stubCanvas();
         render(<PlaybackBoard playData={breakout.playData} label="Breakout" />);
-        const afterMount = calls.drawImage ?? 0;
+        const afterMount = draws();
         expect(afterMount).toBeGreaterThan(0);
         fireEvent.click(screen.getByRole("button", { name: "Play" }));
         advance(16);
         advance(16);
         advance(16);
-        const playing = calls.drawImage ?? 0;
+        const playing = draws();
         expect(playing - afterMount).toBeGreaterThanOrEqual(3);
         fireEvent.click(screen.getByRole("button", { name: "Pause" }));
-        const paused = calls.drawImage ?? 0;
+        const paused = draws();
         advance(1000);
         advance(1000);
-        expect(calls.drawImage ?? 0).toBe(paused);
+        expect(draws()).toBe(paused);
     });
 
     describe("with reduced motion", () => {

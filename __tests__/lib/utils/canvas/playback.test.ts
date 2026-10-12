@@ -12,6 +12,7 @@ import {
 } from "@/types/practice-planner";
 import {
     ATTACH_RADIUS_FT,
+    MAX_ARC_SAMPLES,
     MAX_STROKE_MS,
     MIN_STROKE_MS,
     PLAYBACK_ID_PREFIX,
@@ -226,6 +227,28 @@ describe("pucks (R4)", () => {
         expect(puck?.position.y).toBeCloseTo(skater.y, 5);
     });
 
+    it("hands a carried puck to a pass made mid-carry, at the moment it is released", () => {
+        const data = diagram({
+            players: [player("a", 10, 10)],
+            drawings: [stroke("c", "carry", [[14, 10], [74, 10]]), stroke("pass", "pass", [[44, 13], [44, 60]])],
+        });
+        const pb = compilePlayback(data);
+        const c = at(pb, "c");
+        const pass = at(pb, "pass");
+        // The pass takes the carried puck rather than making a second one or waiting for the carry to end.
+        expect(pass.puckId).toBe(c.puckId);
+        expect(pass.startMs).toBeLessThan(c.endMs);
+        expect(poseAt(pb, pb.durationMs).data.equipment).toHaveLength(1);
+        // The puck leaves the skater where the pass starts: it doesn't ride on to the end of the carry.
+        const atRelease = poseAt(pb, pass.startMs).data;
+        const puckAtRelease = atRelease.equipment.find((e) => e.id === c.puckId)!.position;
+        expect(puckAtRelease.x).toBeCloseTo(atRelease.players[0].position.x + 2, 0);
+        const later = poseAt(pb, Math.min(pass.endMs, c.endMs) - 1).data;
+        const puckLater = later.equipment.find((e) => e.id === c.puckId)!.position;
+        expect(puckLater.y).toBeGreaterThan(20);
+        expect(poseAt(pb, pb.durationMs).data.equipment[0].position).toEqual(P(44, 60));
+    });
+
     it("never moves a puck pile", () => {
         const data = diagram({
             players: [player("a", 10, 10)],
@@ -394,6 +417,23 @@ describe("edge cases", () => {
             const mid = poseAt(pb, pb.durationMs / 2).data.players[0].position;
             expect(distToPolyline(mid, centerline)).toBeLessThan(0.3);
         }
+    });
+
+    it("bounds the arc-length tables for the longest valid stroke", () => {
+        // 1,000 points zig-zagging corner to corner: about 217,000 ft of path.
+        const pts: [number, number][] = Array.from({ length: 1000 }, (_, i) => (i % 2 ? [200, 85] : [0, 0]));
+        const data = diagram({ players: [player("a", 0, 0)], drawings: [stroke("s", "skate", pts)] });
+        const pb = compilePlayback(data);
+        const compiled = pb.compiled.get("s")!;
+        expect(compiled.draw.samples.length).toBeLessThanOrEqual(MAX_ARC_SAMPLES + 1);
+        expect(compiled.motion.samples.length).toBeLessThanOrEqual(MAX_ARC_SAMPLES + 1);
+        expect(at(pb, "s").endMs).toBe(MAX_STROKE_MS);
+        expect(round1(poseAt(pb, pb.durationMs).data.players[0].position)).toEqual(P(200, 85));
+    });
+
+    it("keeps the 0.5 ft spacing for a stroke of ordinary length", () => {
+        const data = diagram({ drawings: [stroke("s", "skate", [[0, 0], [100, 0]])] });
+        expect(compilePlayback(data).compiled.get("s")!.draw.samples.length).toBe(201);
     });
 
     it("handles a stroke of coincident points", () => {

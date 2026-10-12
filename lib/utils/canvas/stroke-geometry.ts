@@ -105,7 +105,8 @@ export function strokeCenterline(stroke: { path: StrokePath; points: Position[] 
     return stroke.points.map((p) => ({ ...p }));
 }
 
-function pathLength(points: Position[]): number {
+/** Total length of a polyline, in the units of its points. */
+export function pathLength(points: Position[]): number {
     let len = 0;
     for (let i = 1; i < points.length; i++) len += Math.hypot(points[i].x - points[i - 1].x, points[i].y - points[i - 1].y);
     return len;
