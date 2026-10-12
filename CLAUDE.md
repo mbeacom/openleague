@@ -17,7 +17,7 @@ bun run build            # Production build
 bun run start            # Start production server
 bun run type-check       # TypeScript type checking (run before commits)
 bun run lint             # ESLint
-bun run planner:dev      # Static practice planner (apps/planner, Vite) at localhost:5173
+bun run planner:dev      # Static practice planner (apps/planner, Vite) at localhost:5173/planner/
 bun run planner:build    # Build it to dist/planner; bun run planner:check verifies the bundle
 
 # Testing

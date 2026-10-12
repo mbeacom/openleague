@@ -14,12 +14,13 @@ import { PLAN_FORMAT, type PlanDocument } from "@/lib/plan-document";
 import type { RankingsDocument } from "@/lib/rankings-document";
 import type { DocumentKind } from "@/lib/document-envelope";
 import { docKeyOf } from "../../store/links";
-import type { RemoteRef, StorageConnector } from "../../storage/connector";
+import { refOf, type RemoteFile, type RemoteRef, type StorageConnector } from "../../storage/connector";
 import { planStartDate } from "../PlanReviewPanel";
 import { useStorage } from "./StorageContext";
+import { RemoteFileListDialog } from "./RemoteFileListDialog";
 import { ReplaceOrKeepDialog } from "./ReplaceOrKeepDialog";
 import { connectIfNeeded, useConnectorPreparation } from "./connection";
-import { CONNECTOR_LABELS, DOWNLOAD_COPY_HINT, LOADING_HINT, connectErrorText, IMPORT_COPY_LABEL, OPEN_FROM_LABEL, STORE_FAILED_MESSAGE, syncErrorText } from "./messages";
+import { CONNECTOR_LABELS, CONNECTOR_NAMES, DOWNLOAD_COPY_HINT, LOADING_HINT, connectErrorText, IMPORT_COPY_LABEL, OPEN_FROM_LABEL, STORE_FAILED_MESSAGE, syncErrorText } from "./messages";
 
 export interface OpenFromMenuProps {
     kind: DocumentKind;
@@ -44,6 +45,7 @@ export function OpenFromMenu({ kind, importHref, onOpened }: OpenFromMenuProps) 
     const [problem, setProblem] = useState<string | null>(null);
     const [pending, setPending] = useState<Pending | null>(null);
     const preparation = useConnectorPreparation();
+    const [listing, setListing] = useState<{ connector: StorageConnector; files: RemoteFile[] } | null>(null);
     if (!storage) return null;
     const { store, engine, connectors } = storage;
 
@@ -69,13 +71,45 @@ export function OpenFromMenu({ kind, importHref, onOpened }: OpenFromMenuProps) 
         onOpened(localId);
     };
 
+    /** Reads a chosen file first: a file this browser already holds is a choice, not a duplicate. */
+    const openRef = async (connector: StorageConnector, ref: RemoteRef) => {
+        const opened = await connector.open(ref);
+        if (!opened.ok) {
+            setProblem(syncErrorText(opened.error, ref.name));
+            return;
+        }
+        const read = await readAnyDocumentText(opened.value.text, opened.value.file.name, { modifiedAt: opened.value.file.modifiedAt }, { kind });
+        if (!read.ok) {
+            setProblem(syncErrorText({ code: "unreadable", message: read.error.message }, ref.name));
+            return;
+        }
+        if (read.document.id) {
+            const found = kind === PLAN_FORMAT ? await store.findSessionByDocumentId(read.document.id) : await store.findRankingsByDocumentId(read.document.id);
+            if (found.success && found.data) {
+                setPending({ ref, payload: read.document.payload, match: { id: found.data.id, title: found.data.title ?? nounOf(kind) } });
+                return;
+            }
+        }
+        await openLinked(crypto.randomUUID(), ref);
+    };
+
     const pick = (connector: StorageConnector) =>
         attempt(async () => {
             setAnchor(null);
-            // A cloud connector signs in first, from this tap; its picker needs the session.
+            // A cloud connector signs in first, from this tap; its picker or list needs the session.
             const unconnected = await connectIfNeeded(connector);
             if (unconnected) {
                 setProblem(connectErrorText(unconnected, connector.id));
+                return;
+            }
+            if (!connector.capabilities.pick && connector.capabilities.list) {
+                // No picker (OneDrive's app folder): choose from the connector's own list.
+                const listed = await connector.list({ kind });
+                if (!listed.ok) {
+                    setProblem(syncErrorText(listed.error, CONNECTOR_NAMES[connector.id]));
+                    return;
+                }
+                setListing({ connector, files: listed.value });
                 return;
             }
             const picked = await connector.pickToOpen({ kind });
@@ -85,25 +119,15 @@ export function OpenFromMenu({ kind, importHref, onOpened }: OpenFromMenuProps) 
             }
             const ref = picked.value[0];
             if (!ref) return;
-            // Read it first: a file this browser already holds is a choice, not a duplicate.
-            const opened = await connector.open(ref);
-            if (!opened.ok) {
-                setProblem(syncErrorText(opened.error, ref.name));
-                return;
-            }
-            const read = await readAnyDocumentText(opened.value.text, opened.value.file.name, { modifiedAt: opened.value.file.modifiedAt }, { kind });
-            if (!read.ok) {
-                setProblem(syncErrorText({ code: "unreadable", message: read.error.message }, ref.name));
-                return;
-            }
-            if (read.document.id) {
-                const found = kind === PLAN_FORMAT ? await store.findSessionByDocumentId(read.document.id) : await store.findRankingsByDocumentId(read.document.id);
-                if (found.success && found.data) {
-                    setPending({ ref, payload: read.document.payload, match: { id: found.data.id, title: found.data.title ?? nounOf(kind) } });
-                    return;
-                }
-            }
-            await openLinked(crypto.randomUUID(), ref);
+            await openRef(connector, ref);
+        });
+
+    const chooseListed = (file: RemoteFile) =>
+        attempt(async () => {
+            if (!listing) return;
+            const { connector } = listing;
+            setListing(null);
+            await openRef(connector, refOf(file));
         });
 
     const replaceMine = () =>
@@ -153,9 +177,10 @@ export function OpenFromMenu({ kind, importHref, onOpened }: OpenFromMenuProps) 
                 {connectors.map((connector) => {
                     // Held while its sign-in loads, so the popup opens from the tap.
                     const loading = preparation.isPreparing(connector.id);
+                    const linkedHint = connector.capabilities.pick ? "Linked: Save writes back to it" : "From the planner's folder there. Linked: Save writes back to it";
                     return (
                         <MenuItem key={connector.id} disabled={loading} onClick={() => !loading && void pick(connector)} sx={{ minHeight: 44 }}>
-                            <ListItemText primary={CONNECTOR_LABELS[connector.id].item} secondary={loading ? LOADING_HINT : "Linked: Save writes back to it"} />
+                            <ListItemText primary={CONNECTOR_LABELS[connector.id].item} secondary={loading ? LOADING_HINT : linkedHint} />
                         </MenuItem>
                     );
                 })}
@@ -167,6 +192,15 @@ export function OpenFromMenu({ kind, importHref, onOpened }: OpenFromMenuProps) 
                 <Alert severity="error" onClose={() => setProblem(null)} sx={{ mt: 1, width: "100%" }}>
                     {problem}
                 </Alert>
+            )}
+            {listing && (
+                <RemoteFileListDialog
+                    open
+                    where={CONNECTOR_NAMES[listing.connector.id]}
+                    files={listing.files}
+                    onChoose={(file) => void chooseListed(file)}
+                    onCancel={() => setListing(null)}
+                />
             )}
             {pending && (
                 <ReplaceOrKeepDialog

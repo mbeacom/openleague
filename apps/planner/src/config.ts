@@ -2,7 +2,7 @@
 import { LEAGUE_FETCH_PATH, PLAN_IMPORT_PATH } from "@/lib/plan-document/pending";
 import { PUBLIC_AI_ORIGINS } from "../ai-origins";
 import { DEFAULT_HOSTED_URL } from "../build-config";
-import type { GoogleCloudSettings, MicrosoftCloudSettings } from "../cloud-config";
+import type { GoogleCloudSettings, MicrosoftAccounts, MicrosoftCloudSettings } from "../cloud-config";
 
 /** The hosted platform. Set at build from OPENLEAGUE_HOSTED_URL; the default under tests. */
 export const HOSTED_URL: string =
@@ -25,6 +25,8 @@ const GOOGLE_CLIENT_ID = typeof __OPENLEAGUE_GOOGLE_CLIENT_ID__ === "string" ? _
 const GOOGLE_API_KEY = typeof __OPENLEAGUE_GOOGLE_API_KEY__ === "string" ? __OPENLEAGUE_GOOGLE_API_KEY__ : "";
 const GOOGLE_APP_ID = typeof __OPENLEAGUE_GOOGLE_APP_ID__ === "string" ? __OPENLEAGUE_GOOGLE_APP_ID__ : "";
 const MICROSOFT_CLIENT_ID = typeof __OPENLEAGUE_MICROSOFT_CLIENT_ID__ === "string" ? __OPENLEAGUE_MICROSOFT_CLIENT_ID__ : "";
+const MICROSOFT_ACCOUNTS: MicrosoftAccounts =
+    typeof __OPENLEAGUE_MICROSOFT_ACCOUNTS__ === "string" && __OPENLEAGUE_MICROSOFT_ACCOUNTS__ === "any" ? "any" : "personal";
 
 /**
  * Google Drive (storage connectors spec R5, R9): set at build from the three
@@ -34,8 +36,12 @@ const MICROSOFT_CLIENT_ID = typeof __OPENLEAGUE_MICROSOFT_CLIENT_ID__ === "strin
 export const GOOGLE_DRIVE_SETTINGS: GoogleCloudSettings | null =
     GOOGLE_CLIENT_ID !== "" ? { clientId: GOOGLE_CLIENT_ID, apiKey: GOOGLE_API_KEY, appId: GOOGLE_APP_ID } : null;
 
-/** OneDrive (spec R6, R9): set at build from OPENLEAGUE_MICROSOFT_CLIENT_ID; null when unset and under tests. */
-export const ONEDRIVE_SETTINGS: MicrosoftCloudSettings | null = MICROSOFT_CLIENT_ID !== "" ? { clientId: MICROSOFT_CLIENT_ID } : null;
+/**
+ * OneDrive (spec R6, R9): set at build from OPENLEAGUE_MICROSOFT_CLIENT_ID and
+ * OPENLEAGUE_MICROSOFT_ACCOUNTS (personal when unset); null when unset and under tests.
+ */
+export const ONEDRIVE_SETTINGS: MicrosoftCloudSettings | null =
+    MICROSOFT_CLIENT_ID !== "" ? { clientId: MICROSOFT_CLIENT_ID, accounts: MICROSOFT_ACCOUNTS } : null;
 
 /**
  * "Fetch it for me" (ADR-0024): the hosted page that fetches a league schedule
@@ -58,4 +64,6 @@ export const PRIVACY_NOTE =
     (GOOGLE_DRIVE_SETTINGS
         ? "If you save to Google Drive, files go from this browser straight to your Drive; opening Save to… or Open from… loads Google's sign-in and file picker. "
         : "") +
+    (ONEDRIVE_SETTINGS ? `If you save to OneDrive, files go from this browser straight to the planner's folder in your OneDrive, after you sign in with ${ONEDRIVE_SETTINGS.accounts === "personal" ? "a personal Microsoft account" : "Microsoft"}. ` : "") +
     "Fonts load from Fontshare and Google Fonts, which see your IP address like any website.";
+

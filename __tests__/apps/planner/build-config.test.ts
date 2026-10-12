@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { PLANNER_CSP, plannerCsp, resolveHostedUrl } from "@/apps/planner/build-config";
 import { resolveAiOrigins } from "@/apps/planner/ai-origins";
-import { NO_CLOUD, resolveCloudSettings } from "@/apps/planner/cloud-config";
+import { MICROSOFT_AUTHORITIES, NO_CLOUD, resolveCloudSettings } from "@/apps/planner/cloud-config";
 
 /** The public policy before cloud connectors existed, byte for byte. */
 const POLICY_BEFORE_CONNECTORS =
@@ -17,6 +17,7 @@ const GOOGLE_ENV = {
     OPENLEAGUE_GOOGLE_APP_ID: "123456789",
 };
 const MICROSOFT_ENV = { OPENLEAGUE_MICROSOFT_CLIENT_ID: "00000000-0000-4000-8000-000000000000" };
+const MICROSOFT_ANY_ENV = { ...MICROSOFT_ENV, OPENLEAGUE_MICROSOFT_ACCOUNTS: "any" };
 
 const directive = (csp: string, name: string) => csp.split("; ").find((part) => part.startsWith(`${name} `)) ?? null;
 
@@ -72,7 +73,28 @@ describe("resolveCloudSettings", () => {
             google: { clientId: "123-fictional.apps.googleusercontent.com", apiKey: "fictional-key_1", appId: "123456789" },
             microsoft: null,
         });
-        expect(resolveCloudSettings(MICROSOFT_ENV)).toEqual({ google: null, microsoft: { clientId: "00000000-0000-4000-8000-000000000000" } });
+        expect(resolveCloudSettings(MICROSOFT_ENV)).toEqual({ google: null, microsoft: { clientId: "00000000-0000-4000-8000-000000000000", accounts: "personal" } });
+    });
+
+    it("signs OneDrive in for personal accounts only unless OPENLEAGUE_MICROSOFT_ACCOUNTS is any", () => {
+        expect(resolveCloudSettings({ ...MICROSOFT_ENV, OPENLEAGUE_MICROSOFT_ACCOUNTS: " " }).microsoft?.accounts).toBe("personal");
+        expect(resolveCloudSettings({ ...MICROSOFT_ENV, OPENLEAGUE_MICROSOFT_ACCOUNTS: "personal" }).microsoft?.accounts).toBe("personal");
+        expect(resolveCloudSettings({ ...MICROSOFT_ENV, OPENLEAGUE_MICROSOFT_ACCOUNTS: " any " }).microsoft?.accounts).toBe("any");
+        // It has a default, so on its own it builds no connector.
+        expect(resolveCloudSettings({ OPENLEAGUE_MICROSOFT_ACCOUNTS: "any" })).toEqual(NO_CLOUD);
+        expect(MICROSOFT_AUTHORITIES).toEqual({ personal: "https://login.microsoftonline.com/consumers", any: "https://login.microsoftonline.com/common" });
+    });
+
+    it("fails an unknown OPENLEAGUE_MICROSOFT_ACCOUNTS, with or without a client id, without echoing it", () => {
+        for (const env of [{ ...MICROSOFT_ENV, OPENLEAGUE_MICROSOFT_ACCOUNTS: "fictional-tenant" }, { OPENLEAGUE_MICROSOFT_ACCOUNTS: "fictional-tenant" }, { ...MICROSOFT_ENV, OPENLEAGUE_MICROSOFT_ACCOUNTS: "common" }]) {
+            let message = "";
+            try {
+                resolveCloudSettings(env);
+            } catch (error) {
+                message = (error as Error).message;
+            }
+            expect(message).toBe("OPENLEAGUE_MICROSOFT_ACCOUNTS must be personal or any.");
+        }
     });
 
     it("fails a half-configured Google Drive, naming what's missing", () => {
@@ -103,6 +125,7 @@ describe("plannerCsp with cloud connectors (spec R9, Security and privacy)", () 
         expect(plannerCsp(origins)).toBe(POLICY_BEFORE_CONNECTORS);
         expect(plannerCsp(origins, { cloud: NO_CLOUD })).toBe(POLICY_BEFORE_CONNECTORS);
         expect(plannerCsp(origins, { cloud: resolveCloudSettings({}) })).toBe(POLICY_BEFORE_CONNECTORS);
+        expect(plannerCsp(origins, { cloud: resolveCloudSettings({ OPENLEAGUE_MICROSOFT_ACCOUNTS: "personal" }) })).toBe(POLICY_BEFORE_CONNECTORS);
         expect(PLANNER_CSP).toBe(POLICY_BEFORE_CONNECTORS);
         expect(POLICY_BEFORE_CONNECTORS).not.toContain("frame-src");
     });
@@ -123,22 +146,35 @@ describe("plannerCsp with cloud connectors (spec R9, Security and privacy)", () 
         }
     });
 
-    it("adds exactly Microsoft's hosts for OneDrive, with 'self' in frame-src for the silent-renewal page", () => {
+    it("adds exactly Microsoft's personal-account hosts for OneDrive, with 'self' in frame-src for the silent-renewal page", () => {
         const csp = plannerCsp(origins, { cloud: resolveCloudSettings(MICROSOFT_ENV) });
         expect(directive(csp, "script-src")).toBe("script-src 'self'");
         expect(directive(csp, "connect-src")).toBe(
-            "connect-src 'self' https://api.anthropic.com https://api.openai.com http://localhost:* http://127.0.0.1:* https://login.microsoftonline.com https://graph.microsoft.com",
+            "connect-src 'self' https://api.anthropic.com https://api.openai.com http://localhost:* http://127.0.0.1:*" +
+                " https://login.microsoftonline.com https://graph.microsoft.com https://*.files.1drv.com https://my.microsoftpersonalcontent.com",
         );
-        expect(directive(csp, "frame-src")).toBe("frame-src 'self' https://login.microsoftonline.com");
+        expect(csp).not.toContain("sharepoint.com");
+        // login.live.com: a personal account's sign-in hop inside the silent-renewal iframe (phase 4a).
+        expect(directive(csp, "frame-src")).toBe("frame-src 'self' https://login.microsoftonline.com https://login.live.com");
         expect(csp).not.toContain("google.com");
         expect(csp).toContain("form-action 'none'");
+    });
+
+    it("adds work or school accounts' SharePoint download host only for an any-account build", () => {
+        const csp = plannerCsp(origins, { cloud: resolveCloudSettings(MICROSOFT_ANY_ENV) });
+        expect(directive(csp, "connect-src")).toBe(
+            "connect-src 'self' https://api.anthropic.com https://api.openai.com http://localhost:* http://127.0.0.1:*" +
+                " https://login.microsoftonline.com https://graph.microsoft.com https://*.files.1drv.com https://my.microsoftpersonalcontent.com https://*.sharepoint.com",
+        );
+        expect(directive(csp, "frame-src")).toBe("frame-src 'self' https://login.microsoftonline.com https://login.live.com");
     });
 
     it("merges both providers into one frame-src that starts with 'self'", () => {
         const csp = plannerCsp(origins, { cloud: resolveCloudSettings({ ...GOOGLE_ENV, ...MICROSOFT_ENV }) });
         expect(csp.split("; ").filter((part) => part.startsWith("frame-src"))).toEqual([
-            "frame-src 'self' https://docs.google.com https://accounts.google.com/gsi/ https://content.googleapis.com https://login.microsoftonline.com",
+            "frame-src 'self' https://docs.google.com https://accounts.google.com/gsi/ https://content.googleapis.com https://login.microsoftonline.com https://login.live.com",
         ]);
-        expect(directive(csp, "connect-src")).toMatch(/https:\/\/oauth2\.googleapis\.com https:\/\/login\.microsoftonline\.com https:\/\/graph\.microsoft\.com$/);
+        expect(directive(csp, "connect-src")).toMatch(/https:\/\/oauth2\.googleapis\.com https:\/\/login\.microsoftonline\.com https:\/\/graph\.microsoft\.com .*https:\/\/my\.microsoftpersonalcontent\.com$/);
+        expect(directive(plannerCsp(origins, { cloud: resolveCloudSettings({ ...GOOGLE_ENV, ...MICROSOFT_ANY_ENV }) }), "connect-src")).toMatch(/https:\/\/\*\.sharepoint\.com$/);
     });
 });

@@ -48,7 +48,14 @@ export type ConnectorError =
      * drill diagram's empty value). `message` is the encoder's own text, never a
      * provider's.
      */
-    | { code: "unwritable"; message: string };
+    | { code: "unwritable"; message: string }
+    /**
+     * OneDrive (spec R6): the app folder couldn't be reached for a work or
+     * school account. Microsoft's documentation disagrees on whether
+     * Files.ReadWrite.AppFolder covers those accounts, and a tenant can block
+     * it, so this is said plainly rather than as a generic failure.
+     */
+    | { code: "app-folder-unavailable" };
 
 export type Result<T> = { ok: true; value: T } | { ok: false; error: ConnectorError };
 

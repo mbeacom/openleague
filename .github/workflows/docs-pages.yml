@@ -71,6 +71,8 @@ jobs:
       # same values to verify the CSP. The API key is a referrer-restricted
       # browser key that ships in the page; it is a secret only to keep it out
       # of logs. Unset values (forks) build the planner without cloud saving.
+      # The Microsoft accounts setting (personal or any) must match the Entra
+      # registration's supported account types; unset means personal.
       - name: Build the static planner
         run: bun run planner:build
         env:
@@ -78,6 +80,7 @@ jobs:
           OPENLEAGUE_GOOGLE_APP_ID: ${{ vars.OPENLEAGUE_GOOGLE_APP_ID }}
           OPENLEAGUE_GOOGLE_API_KEY: ${{ secrets.OPENLEAGUE_GOOGLE_API_KEY }}
           OPENLEAGUE_MICROSOFT_CLIENT_ID: ${{ vars.OPENLEAGUE_MICROSOFT_CLIENT_ID }}
+          OPENLEAGUE_MICROSOFT_ACCOUNTS: ${{ vars.OPENLEAGUE_MICROSOFT_ACCOUNTS }}
 
       - name: Check the static planner bundle
         run: bun run planner:check
@@ -86,6 +89,7 @@ jobs:
           OPENLEAGUE_GOOGLE_APP_ID: ${{ vars.OPENLEAGUE_GOOGLE_APP_ID }}
           OPENLEAGUE_GOOGLE_API_KEY: ${{ secrets.OPENLEAGUE_GOOGLE_API_KEY }}
           OPENLEAGUE_MICROSOFT_CLIENT_ID: ${{ vars.OPENLEAGUE_MICROSOFT_CLIENT_ID }}
+          OPENLEAGUE_MICROSOFT_ACCOUNTS: ${{ vars.OPENLEAGUE_MICROSOFT_ACCOUNTS }}
 
       # The docs build empties dist/docs-pages first, so the planner goes in last.
       - name: Add the planner to the Pages artifact

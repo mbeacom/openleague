@@ -30,6 +30,9 @@ const ENTRIES = [
     "apps/planner/src/main.tsx",
     // The storage connectors (ADR-0022): main.tsx reaches the engine and the Local connector; the fake is for tests and development.
     "apps/planner/src/storage/fake.ts",
+    // OneDrive (phase 4a): loaded only through import(), and the sign-in redirect page's own entry.
+    "apps/planner/src/storage/onedrive.ts",
+    "apps/planner/src/auth/redirect.ts",
 ];
 
 /** Forbidden even as `import type`: the static app has no generated Prisma client. */
