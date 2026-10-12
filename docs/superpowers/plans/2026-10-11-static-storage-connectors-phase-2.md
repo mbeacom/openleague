@@ -142,3 +142,61 @@ Where the spec leaves a choice open, this plan decides it:
 
 - [x] The existing gates, plus a build check that the Saved files screen stays out of the entry chunk. The storage bar and the engine are in it: a practice's page needs them on open.
 - [ ] Tick ADR-0022 action item 2 when 2b merges. Its status remains the owner's call.
+
+---
+
+## Phase 3: Google Drive, and the build variables for every cloud connector
+
+**Goal:** A coach can save a practice plan or a rankings document to their own Google Drive, open it on another device or browser, open a file another coach shared through the Google Picker, and keep every save conflict-checked, all from the browser with no OpenLeague server. Forks that set no variables build exactly what they built before.
+
+**Spec:** R4, R5, R8, R9, Security and privacy (CSP), Sync and conflicts, Phasing row 3, Owner prerequisites. **Owner setup:** done (the `github-pages` environment holds the three ids as variables and the API key as a secret; Google is in Testing mode with `drive.file` only).
+
+### Rulings made in phase 3
+
+23. **One module resolves the cloud variables.** `apps/planner/cloud-config.ts` is pure and build-time, like `ai-origins.ts`: `resolveCloudSettings(process.env)` reads `OPENLEAGUE_GOOGLE_CLIENT_ID`, `OPENLEAGUE_GOOGLE_API_KEY`, `OPENLEAGUE_GOOGLE_APP_ID` and `OPENLEAGUE_MICROSOFT_CLIENT_ID`. The Vite config passes the result to the CSP and, as four string constants, to the app (`GOOGLE_DRIVE_SETTINGS` and `ONEDRIVE_SETTINGS` in `src/config.ts`). A provider with some but not all of its values, or a value of the wrong shape, fails the build without echoing the value.
+24. **CSP additions are per provider and exact.** `googleCsp` and `microsoftCsp` return each provider's sources by directive; `plannerCsp(origins, { cloud })` appends them. With no provider the policy is byte-identical to the one before (a test pins the literal). `frame-src` appears only when a provider adds frames, and then starts with `'self'`. `microsoftCsp` is keyed on `OPENLEAGUE_MICROSOFT_CLIENT_ID` and holds the spec's list; phase 4a owns any change to it (whether personal sign-in passes through `login.live.com`, and where Graph content downloads redirect).
+25. **Google hosts, confirmed 2026-10-11** against Google's GIS setup page ("Content Security Policy"), the Picker web guide and the Picker sample: `script-src https://apis.google.com https://accounts.google.com/gsi/client`; `style-src https://accounts.google.com/gsi/style`; `connect-src https://accounts.google.com/gsi/ https://www.googleapis.com https://content.googleapis.com https://oauth2.googleapis.com`; `frame-src 'self' https://docs.google.com https://accounts.google.com/gsi/ https://content.googleapis.com`. Google publishes no CSP list for the Picker; its frame host (`docs.google.com`) and loader host (`apis.google.com`) come from the guide and sample, and the owner's manual check confirms nothing else is blocked.
+26. **The API key needs `https://docs.google.com/*` in its referrer list.** The Picker guide says a website-restricted key fails with "API developer key is invalid" without it, because the Picker checks the key from its `docs.google.com` frame. This is an owner action on the existing key.
+27. **Lazy by construction.** `storage/google-drive-lazy.ts` (entry chunk) is a stand-in that `import()`s `storage/google-drive.ts` on first use. The service creates it only behind the build constant, so a build without Google settings folds the branch away and emits neither the stand-in nor the chunk. `PLANNER_CSP` is marked pure so the app's import of `build-config.ts` doesn't carry the policy's host strings into the bundle.
+28. **Drive REST through `fetch`.** No gapi client library: metadata and content from `www.googleapis.com/drive/v3`, multipart uploads to `www.googleapis.com/upload/drive/v3`, the token in the `Authorization` header only. Every overwrite reads the file's metadata immediately before the multipart `PATCH` and refuses if `headRevisionId` moved; a file whose `capabilities.canEdit` is false is refused as `forbidden` before any write. An open reads metadata first, then content, so a write landing between the two leaves the older revision recorded and the next save reports a conflict instead of overwriting unseen content. A trashed file counts as `not-found`.
+29. **Error mapping.** 401 drops the token and is `auth-required`; 403 is read for Drive's reason only (rate limits are `unavailable` with `Retry-After`, `storageQuotaExceeded` is `quota`, `appNotAuthorizedToFile` is `not-found`, anything else `forbidden`); 404 `not-found`; 413 `too-large`; 429 and 5xx `unavailable`; a rejected `fetch` is `offline`; anything else `provider` with the status. No provider text leaves the connector.
+30. **Tokens.** The GIS token model with `prompt: ""`, in the connector's closure only, treated as expired a minute early. Granular consent that leaves `drive.file` unticked is `auth-required`. Disconnect revokes the token (`google.accounts.oauth2.revoke`) and keeps every link.
+31. **Sign-in happens inside the tap that needs it.** `connector.prepare()` (a new optional `StorageConnector` method) loads the chunk, the GIS client and the Picker when the "Save to…" or "Open from…" menu opens, so the popup opens while the browser still counts the tap. "Save to… → Google Drive…", "Save", "Allow access", "Open from… → Google Drive…" and Saved files' Connect call `connect()` first when the connector is disconnected. The privacy note says that opening those menus loads Google's sign-in and picker when Google Drive is available.
+32. **Files go in an "OpenLeague" folder** the app creates, tagged `olFolder: documents`; each file carries `olKind` and `olId`. Listing queries `olKind` (one kind, or every registered kind joined with `or`), newest first, across pages.
+33. **"Save a copy to my Drive" (R8)** is the sync engine's `saveCopy`: the "Keep both" path without a conflict (a new envelope id, `<name> (my copy)`, relinked). The storage bar offers it when a save fails as `forbidden`.
+34. **The Pages build job reads the `github-pages` environment with `deployment: false`.** Environment variables and secrets are readable only by a job that names the environment; `deployment: false` (GitHub's "using environments without deployments") reads them without recording a second deployment. Required reviewers, wait timers and any branch rule on the environment still apply to such a job; the build runs on pushes to main, the branch Pages deploys from. A custom deployment protection rule (a GitHub App) would fail it, since those need a deployment object; the environment has none. The values reach only the planner build and bundle check steps (the check needs them to verify the CSP). `scripts/validate-deployment-config.ts` asserts this wiring.
+
+### Files
+
+| File | Responsibility |
+|---|---|
+| Create `apps/planner/cloud-config.ts` | `resolveCloudSettings`, `googleCsp`, `microsoftCsp`, `cloudCspAdditions` |
+| Modify `apps/planner/build-config.ts`, `vite.config.ts`, `src/config.ts`, `src/env.d.ts` | The CSP additions and the app constants |
+| Create `apps/planner/src/storage/google-drive-lazy.ts` | The entry-chunk stand-in; `GOOGLE_DRIVE_CAPABILITIES` |
+| Create `apps/planner/src/storage/google-drive.ts` | The connector, the GIS token client and the Picker (lazy chunk) |
+| Modify `apps/planner/src/storage/connector.ts`, `sync.ts`, `service.ts` | `prepare?`, `saveCopy`, Drive in the service when configured |
+| Create `apps/planner/src/screens/storage/connection.ts`, `CloudConnections.tsx` | Sign-in from the tap; Connect and Disconnect on Saved files |
+| Modify `DocumentStorageBar.tsx`, `OpenFromMenu.tsx`, `StorageScreen.tsx`, `messages.ts` | The menus, "Save a copy to my Drive", the wording |
+| Modify `scripts/check-planner-build.ts`, `scripts/validate-deployment-config.ts`, `.github/workflows/docs-pages.yml` | The bundle check (whole CSP, Google lazy and absent when unset), the workflow wiring |
+| Modify `DEPLOYMENT.md` | "Cloud saving for forks" |
+
+### Tasks
+
+- [x] Build variables, CSP additions, workflow wiring and the validator, with tests for each provider's exact hosts and the unset case.
+- [x] The Drive connector over a fake Drive (`__tests__/apps/planner/storage/fake-drive.ts`): the connector contract, check-then-write with the metadata read before every overwrite, `headRevisionId`, appProperties listing across pages, the folder, view-only shares, the error table, token expiry and revocation, the Picker inputs, and the lazy stand-in.
+- [x] The screens: Google Drive only when configured, sign-in from the tap, "Save a copy to my Drive", opening a picked file as a linked document, Connect and Disconnect.
+- [x] `bun run planner:build && bun run planner:check` with no variables (no Google code or host anywhere in the output) and with fictional values (the Google hosts in the CSP, the connector in its own chunk).
+- [ ] Owner: add `https://docs.google.com/*` to the API key's website restrictions (Ruling 26).
+- [ ] Owner: the manual check below, once on desktop and once on a phone, with test users while the app is in Testing mode.
+
+### Manual check (owner, real Google accounts)
+
+1. **Connect.** On openleague.dev/planner, open Saved files and tap Connect Google Drive. The Google popup asks only to "see, edit, create and delete only the specific Google Drive files you use with this app". Saved files says "connected in this tab". No errors in the console (in particular, no CSP violations).
+2. **Save.** On a practice, Save to… → Google Drive…. An "OpenLeague" folder appears in Drive with the file in it; the bar says "Saved to … in Google Drive". Edit the practice, tap Save, and confirm Drive shows a new version.
+3. **Second browser.** In another browser (or a phone), Open from… → Google Drive… and pick the file. It opens as a linked practice. Edit and save there.
+4. **Conflict.** Back in the first browser, edit without reloading, then Save: the conflict dialog appears. Try Keep mine, Use theirs (a Recovered copy appears) and Keep both (a "(my copy)" file appears in Drive).
+5. **Overwritten.** Save in browser A, then save in browser B without A editing. Focus browser A: it says the save was replaced and offers the choice; it never refreshes silently.
+6. **Share read-only, then Save a copy.** Share the file with a second test user as Viewer. As that user, Open from… → Google Drive… (the file is under "Shared with me"), edit, Save: the bar says the file may be view-only and offers "Save a copy to my Drive", which writes "(my copy)" into that user's own OpenLeague folder and links to it.
+7. **Expiry.** Leave a tab open for more than an hour, then Save: the bar asks for permission; Allow access reopens Google's popup and the save completes.
+8. **Disconnect.** Saved files → Disconnect Google Drive. The note links to the Google Account's third-party connections page; the app is still listed there until removed. Saving again asks to connect. Remove the app's access on that page and confirm the next connect shows consent again.
+9. **A fork-style build.** `bun run planner:build` with no variables shows no Google Drive item anywhere and the CSP has no Google host.
