@@ -24,6 +24,7 @@ import {
     type StrokeOptions,
 } from "@/types/practice-planner";
 import { equipmentNeedsSchema, normalizeEquipmentNeeds, readEquipmentNeeds } from "@/lib/utils/equipment-needs";
+import { MAX_DRILL_VIDEOS, normalizeVideoLinks, readVideoLinks, videoLinksSchema, type VideoLink } from "@/lib/utils/video-links";
 
 /** Mirrors RINK_DIMENSIONS in lib/utils/canvas/rink-renderer.ts (asserted in tests). */
 export const RINK_WIDTH_FT = 200;
@@ -108,6 +109,8 @@ export const playDataSchema = z
         area: iceAreaSchema.optional(),
         // Practice equipment (spec R2): the coach's changes to the diagram's list.
         equipmentNeeds: equipmentNeedsSchema.optional(),
+        // Practice video links (spec R2, R6): links to videos of the drill. Not diagram elements.
+        videos: videoLinksSchema(MAX_DRILL_VIDEOS).optional(),
     })
     .refine(
         (d) => d.players.length + d.drawings.length + d.equipment.length + d.annotations.length <= C.MAX_ELEMENTS_PER_PLAY,
@@ -249,6 +252,26 @@ function readableEquipmentNeeds(raw: object): object {
     return needs ? { ...rest, equipmentNeeds: needs } : rest;
 }
 
+/**
+ * Video links are advisory (practice video links spec R3): an unparseable
+ * entry is dropped and logged, the rest are kept normalized (first 5), and
+ * the key is deleted when none is left. Returns `raw` itself when there is
+ * nothing to change.
+ */
+function readableVideos(raw: object): object {
+    if (!("videos" in raw)) return raw;
+    const { videos, ...rest } = raw as { videos: unknown } & Record<string, unknown>;
+    const links = readVideoLinks(videos, MAX_DRILL_VIDEOS);
+    return links ? { ...rest, videos: links } : rest;
+}
+
+/** Replaces a drill's video links, omitting the key when there are none (the drill editor's merge, like withEquipmentNeeds). */
+export function withVideos(playData: PlayData, videos: readonly VideoLink[] | undefined): PlayData {
+    const { videos: _previous, ...rest } = playData;
+    void _previous;
+    return videos && videos.length > 0 ? { ...rest, videos: [...videos] } : rest;
+}
+
 /** Converts stored play data of any supported version to v2. Throws PlayDataError. */
 export function upgradePlayData(raw: unknown): PlayData {
     if (typeof raw !== "object" || raw === null) throw new PlayDataError("Play data must be an object");
@@ -257,7 +280,7 @@ export function upgradePlayData(raw: unknown): PlayData {
         if ((raw as { version: unknown }).version !== PLAY_DATA_VERSION) {
             throw new PlayDataError(`Unsupported play data version: ${String((raw as { version: unknown }).version)}`);
         }
-        const readable = readableEquipmentNeeds(dropInvalidArea(raw));
+        const readable = readableVideos(readableEquipmentNeeds(dropInvalidArea(raw)));
         const annotations = (readable as { annotations?: unknown }).annotations;
         return parseV2(Array.isArray(annotations) ? { ...readable, annotations: annotations.filter(isNotBlankAnnotation) } : readable);
     }
@@ -305,6 +328,17 @@ export function upgradePlayData(raw: unknown): PlayData {
 }
 
 export const PLAY_DATA_UNREADABLE_MESSAGE = "This play's diagram couldn't be read.";
+export const INVALID_PLAY_DATA_MESSAGE = "Invalid play data";
+
+/**
+ * The write paths' error for refused play data: a refused video link names
+ * the problem ("Video link: Use an https link"), since the editor's field
+ * shows the same message; anything else stays "Invalid play data".
+ */
+export function playDataIssueMessage(issues: ReadonlyArray<{ path: ReadonlyArray<PropertyKey>; message: string }>): string {
+    const video = issues.find((issue) => issue.path.includes("videos"));
+    return video ? `Video link: ${video.message}` : INVALID_PLAY_DATA_MESSAGE;
+}
 export const PLAY_DATA_UNREADABLE_CODE = "PLAY_DATA_UNREADABLE";
 
 export type ParsedPlayData = { ok: true; data: PlayData } | { ok: false; error: PlayDataError };
@@ -349,11 +383,16 @@ function cleanText(text: string | null | undefined, maxLength: number): string {
 export function sanitizePlayDataForWrite(
     playData: PlayData,
 ): { ok: true; data: PlayData } | { ok: false; issues: z.ZodError["issues"] } {
-    const { equipmentNeeds, ...rest } = playData;
+    const { equipmentNeeds, videos, ...rest } = playData;
     const needs = normalizeEquipmentNeeds(equipmentNeeds);
+    // Normalized (provider re-derived, tracking removed) and omitted when empty. When
+    // an entry fails, the raw list stays so the schema check reports it as a field error.
+    const links = normalizeVideoLinks(videos);
+    const keptVideos = links === null ? videos : links;
     const sanitized: PlayData = {
         ...rest,
         ...(needs ? { equipmentNeeds: needs } : {}),
+        ...(keptVideos ? { videos: keptVideos } : {}),
         players: playData.players.map((player) => ({
             ...player,
             label: cleanText(player.label, C.MAX_PLAYER_LABEL_LENGTH),

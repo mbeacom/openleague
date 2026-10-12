@@ -25,6 +25,7 @@ import {
     PLAY_DATA_UNREADABLE_CODE,
     PLAY_DATA_UNREADABLE_MESSAGE,
     parseStoredPlayData,
+    playDataIssueMessage,
     sanitizePlayDataForWrite,
 } from "@/lib/utils/play-data";
 
@@ -44,7 +45,7 @@ function sanitizeAndRevalidate(
 ): { ok: true; data: PlayData } | { ok: false; result: { success: false; error: string; details: unknown } } {
     const result = sanitizePlayDataForWrite(playData);
     if (!result.ok) {
-        return { ok: false, result: { success: false, error: "Invalid play data", details: result.issues } };
+        return { ok: false, result: { success: false, error: playDataIssueMessage(result.issues), details: result.issues } };
     }
     return { ok: true, data: result.data };
 }
@@ -122,7 +123,7 @@ export async function createPlay(
             const isPlayData = error.issues.some((issue) => issue.path[0] === "playData");
             return {
                 success: false,
-                error: isPlayData ? "Invalid play data" : "Invalid input",
+                error: isPlayData ? playDataIssueMessage(error.issues) : "Invalid input",
                 details: error.issues,
             };
         }
@@ -233,7 +234,7 @@ export async function updatePlay(
             const isPlayData = error.issues.some((issue) => issue.path[0] === "playData");
             return {
                 success: false,
-                error: isPlayData ? "Invalid play data" : "Invalid input",
+                error: isPlayData ? playDataIssueMessage(error.issues) : "Invalid input",
                 details: error.issues,
             };
         }

@@ -152,3 +152,37 @@ describe("DrillDetailView", () => {
         expect(name).toBe("riverside-breakout-diagram.png");
     });
 });
+
+describe("DrillDetailView: video links (practice video links R4, R8)", () => {
+    const YT = "Ab3dE5fG7hJ";
+    const videos = [
+        { url: `https://www.youtube.com/watch?v=${YT}`, provider: "youtube" as const, startSec: 90, title: "Breakout demo" },
+        { url: "https://drive.google.com/file/d/1FakeDriveFileId_abcdefghijk/view", provider: "drive" as const },
+    ];
+    const filmed = () => play({ playData: { ...createEmptyPlayData(), videos } });
+
+    it("lists the drill's videos under the description, as links that load nothing until followed", () => {
+        renderView({ play: filmed() });
+        expect(screen.getByRole("heading", { name: "Videos" })).toBeInTheDocument();
+        const list = screen.getByRole("list", { name: "Videos for Riverside Breakout" });
+        expect(list.querySelectorAll("li")).toHaveLength(2);
+        const open = screen.getByRole("link", { name: "Open Breakout demo (opens in a new tab)" });
+        expect(open).toHaveAttribute("href", `https://www.youtube.com/watch?v=${YT}&t=90`);
+        expect(open).toHaveAttribute("rel", "noopener noreferrer");
+        expect(document.querySelectorAll("iframe")).toHaveLength(0);
+        expect([...document.querySelectorAll("img")].filter((img) => /^https?:/.test(img.getAttribute("src") ?? ""))).toHaveLength(0);
+    });
+
+    it("hides the section when the drill has no videos", () => {
+        renderView();
+        expect(screen.queryByRole("heading", { name: "Videos" })).toBeNull();
+    });
+
+    it("duplicates the videos with the drill", async () => {
+        const { store } = renderView({ play: filmed() });
+        vi.mocked(store.createPlay).mockResolvedValue({ success: true, data: { id: "cnewxxxxxxxxxxxxxxxxxxxxx" } } as never);
+        fireEvent.click(screen.getByRole("button", { name: "Duplicate" }));
+        await waitFor(() => expect(store.createPlay).toHaveBeenCalled());
+        expect(vi.mocked(store.createPlay).mock.calls[0][0].playData.videos).toEqual(videos);
+    });
+});

@@ -11,6 +11,7 @@
 import type { SegmentKind } from "@/types/segments";
 import type { AgeGroup } from "@/lib/utils/age-groups";
 import type { PracticeRoster } from "@/lib/utils/practice-roster";
+import type { VideoLink } from "@/lib/utils/video-links";
 
 // ============================================================================
 // Core Play Data Types
@@ -292,6 +293,8 @@ export interface PlayData {
     area?: IceArea;
     /** The coach's changes to the diagram's equipment list. Absent = the diagram's list as is. */
     equipmentNeeds?: EquipmentNeeds;
+    /** Links to videos of the drill, at most 5 (practice video links spec R2). Absent = none. */
+    videos?: VideoLink[];
 }
 
 // ============================================================================

@@ -42,6 +42,8 @@ import { DrillTagFields, type DrillTagValues } from "./DrillTagFields";
 import { drillTags } from "@/lib/utils/drill-tags";
 import { AgeGroupsField } from "./AgeGroupsField";
 import { DrillEquipmentField } from "./DrillEquipmentField";
+import { DrillVideosField } from "./DrillVideosField";
+import type { VideoLink } from "@/lib/utils/video-links";
 import { withEquipmentNeeds } from "@/lib/utils/equipment-needs";
 import { toAgeGroups, type AgeGroup } from "@/lib/utils/age-groups";
 import { findElement } from "@/lib/utils/canvas/element-ops";
@@ -58,7 +60,7 @@ import {
 } from "@/types/practice-planner";
 import { areaRect, countElementsOutside, isFullIce } from "@/lib/utils/ice-area";
 import { ICE_AREA_GROUPS, ICE_AREA_LABELS } from "@/lib/utils/canvas/notation";
-import { createEmptyPlayData } from "@/lib/utils/play-data";
+import { createEmptyPlayData, withVideos } from "@/lib/utils/play-data";
 import { generateThumbnail } from "@/lib/utils/canvas/thumbnail-generator";
 import { STORED_THUMBNAIL_PIXEL_RATIO } from "@/lib/utils/thumbnail-rules";
 import { waitForDiagramFont } from "@/lib/utils/canvas/diagram-fonts";
@@ -124,7 +126,12 @@ export function PlayEditor({
     // The equipment list's changes (practice equipment spec R2): kept outside the board's
     // undo history and merged into the diagram on save, so undo and Clear never touch them.
     const [equipmentNeeds, setEquipmentNeeds] = useState<EquipmentNeeds | undefined>(initialData?.playData?.equipmentNeeds);
-    const playDataToSave = useMemo(() => withEquipmentNeeds(playData, equipmentNeeds), [playData, equipmentNeeds]);
+    // Video links (practice video links spec R8): likewise outside the board's history, merged on save.
+    const [videos, setVideos] = useState<VideoLink[]>(() => initialData?.playData?.videos ?? []);
+    const playDataToSave = useMemo(
+        () => withVideos(withEquipmentNeeds(playData, equipmentNeeds), videos),
+        [playData, equipmentNeeds, videos]
+    );
 
     // Drawing tool state
     const [selectedTool, setSelectedTool] = useState<DrawingTool>("select");
@@ -257,6 +264,12 @@ export function PlayEditor({
 
     const handleEquipmentNeedsChange = (next: EquipmentNeeds | undefined) => {
         setEquipmentNeeds(next);
+        setHasUnsavedChanges(true);
+        setSaveSuccess(false);
+    };
+
+    const handleVideosChange = (next: VideoLink[]) => {
+        setVideos(next);
         setHasUnsavedChanges(true);
         setSaveSuccess(false);
     };
@@ -425,6 +438,9 @@ export function PlayEditor({
                         inputProps={{ maxLength: 500 }}
                         helperText={`${description.length}/500 characters`}
                     />
+
+                    {/* Video links (practice video links spec R8) */}
+                    <DrillVideosField videos={videos} onChange={handleVideosChange} disabled={isSaving} />
 
                     {/* Drill tags (goaltender-aware drills) */}
                     <DrillTagFields value={tags} onChange={handleTagsChange} />

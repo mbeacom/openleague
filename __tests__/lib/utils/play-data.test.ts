@@ -10,6 +10,7 @@ import {
     RINK_WIDTH_FT,
     RINK_HEIGHT_FT,
     sanitizePlayDataForWrite,
+    withVideos,
 } from "@/lib/utils/play-data";
 import { RINK_DIMENSIONS } from "@/lib/utils/canvas/rink-renderer";
 import { VALIDATION_CONSTRAINTS, type IceArea } from "@/types/practice-planner";
@@ -379,5 +380,73 @@ describe("equipment overrides (practice equipment R2)", () => {
         if (result.ok) expect(result.data.equipmentNeeds).toEqual({ kinds: [], custom: [{ name: "Tennis balls", count: 4 }] });
         const untouched = sanitizePlayDataForWrite(createEmptyPlayData());
         expect(untouched.ok && "equipmentNeeds" in untouched.data).toBe(false);
+    });
+});
+
+describe("video links (practice video links R2, R6)", () => {
+    const YT = "Ab3dE5fG7hJ";
+    const link = (n: number) => ({ url: `https://example.org/clip-${n}`, provider: "link" as const });
+
+    it("reads a drill's videos normalized, with the provider re-derived", () => {
+        const data = upgradePlayData({ ...createEmptyPlayData(), videos: [{ url: `https://youtu.be/${YT}?t=90`, provider: "link", title: " Breakout demo " }] });
+        expect(data.videos).toEqual([{ url: `https://www.youtube.com/watch?v=${YT}`, provider: "youtube", startSec: 90, title: "Breakout demo" }]);
+    });
+
+    it("drops an invalid entry on read and keeps the rest of the drill (logged)", () => {
+        const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+        const raw = {
+            ...createEmptyPlayData(),
+            players: [{ id: "p1", position: { x: 10, y: 10 }, role: "X", label: "F1", color: "#000000" }],
+            videos: [{ url: "javascript:alert(1)", provider: "link" }, link(1)],
+        };
+        const data = upgradePlayData(raw);
+        expect(data.videos).toEqual([link(1)]);
+        expect(data.players).toHaveLength(1);
+        expect(errors).toHaveBeenCalledTimes(1);
+        errors.mockRestore();
+    });
+
+    it("drops an unreadable list and a list with no valid entry entirely", () => {
+        const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+        expect("videos" in upgradePlayData({ ...createEmptyPlayData(), videos: "lots" })).toBe(false);
+        expect("videos" in upgradePlayData({ ...createEmptyPlayData(), videos: [{ url: "http://x.example" }] })).toBe(false);
+        expect("videos" in upgradePlayData({ ...createEmptyPlayData(), videos: null })).toBe(false);
+        errors.mockRestore();
+    });
+
+    it("truncates to 5 on read", () => {
+        const data = upgradePlayData({ ...createEmptyPlayData(), videos: [1, 2, 3, 4, 5, 6, 7].map(link) });
+        expect(data.videos).toHaveLength(5);
+    });
+
+    it("refuses more than 5 or an invalid link on write, at the playData.videos path", () => {
+        const six = sanitizePlayDataForWrite({ ...createEmptyPlayData(), videos: [1, 2, 3, 4, 5, 6].map(link) });
+        expect(six.ok).toBe(false);
+        expect(!six.ok && six.issues[0].path).toEqual(["videos"]);
+        const http = sanitizePlayDataForWrite({ ...createEmptyPlayData(), videos: [{ url: "http://example.org/x", provider: "link" }] });
+        expect(!http.ok && http.issues[0].path).toEqual(["videos", 0, "url"]);
+    });
+
+    it("normalizes on write and omits an empty list", () => {
+        const written = sanitizePlayDataForWrite({ ...createEmptyPlayData(), videos: [{ url: `https://youtu.be/${YT}?si=1`, provider: "link" }] });
+        expect(written.ok && written.data.videos).toEqual([{ url: `https://www.youtube.com/watch?v=${YT}`, provider: "youtube" }]);
+        const empty = sanitizePlayDataForWrite({ ...createEmptyPlayData(), videos: [] });
+        expect(empty.ok && "videos" in empty.data).toBe(false);
+    });
+
+    it("leaves the element-count limit to the diagram alone", () => {
+        const C = VALIDATION_CONSTRAINTS;
+        const full = {
+            ...createEmptyPlayData(),
+            players: Array.from({ length: C.MAX_PLAYERS }, (_, i) => ({ id: `p${i}`, position: { x: 1, y: 1 }, role: "X" as const, label: "", color: "#000000" })),
+            videos: [1, 2, 3, 4, 5].map(link),
+        };
+        expect(playDataSchema.safeParse(full).success).toBe(C.MAX_PLAYERS <= C.MAX_ELEMENTS_PER_PLAY);
+    });
+
+    it("withVideos replaces the list and omits an empty one", () => {
+        const base = { ...createEmptyPlayData(), videos: [link(1)] };
+        expect(withVideos(base, [link(2)]).videos).toEqual([link(2)]);
+        expect("videos" in withVideos(base, [])).toBe(false);
     });
 });
