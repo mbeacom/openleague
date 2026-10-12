@@ -151,6 +151,43 @@ describe("DrillDetailView", () => {
         expect((blob as Blob).type).toBe("image/png");
         expect(name).toBe("riverside-breakout-diagram.png");
     });
+
+    it("offers Play only on a drill with something to animate", () => {
+        renderView({
+            play: play({
+                playData: {
+                    ...createEmptyPlayData(),
+                    drawings: [{ id: "l1", action: "line", path: "straight", end: "none", points: [{ x: 0, y: 0 }, { x: 50, y: 0 }], color: "#0D47A1", strokeWidth: 2 }],
+                },
+            }),
+        });
+        expect(screen.queryByRole("button", { name: /^Play/ })).not.toBeInTheDocument();
+    });
+
+    it("swaps the still diagram for the playback board on Play, and back", () => {
+        vi.stubGlobal("requestAnimationFrame", vi.fn(() => 1));
+        vi.stubGlobal("cancelAnimationFrame", vi.fn());
+        try {
+            renderView({
+                play: play({
+                    playData: {
+                        ...createEmptyPlayData(),
+                        players: [{ id: "p1", role: "F", label: "F1", position: { x: 20, y: 20 }, color: "#1976D2" }],
+                        drawings: [{ id: "s1", action: "skate", path: "straight", end: "arrow", points: [{ x: 24, y: 20 }, { x: 80, y: 20 }], color: "#212121", strokeWidth: 3 }],
+                    },
+                }),
+            });
+            fireEvent.click(screen.getByRole("button", { name: "Play the Riverside Breakout animation" }));
+            expect(screen.getByRole("group", { name: /Riverside Breakout playback/ })).toBeInTheDocument();
+            expect(screen.getByRole("button", { name: "Pause" })).toBeInTheDocument();
+            expect(screen.getAllByRole("img", { name: "Riverside Breakout diagram" })).toHaveLength(1);
+            fireEvent.click(screen.getByRole("button", { name: "Close playback" }));
+            expect(screen.queryByRole("group", { name: /playback/ })).not.toBeInTheDocument();
+            expect(screen.getByRole("button", { name: "Play the Riverside Breakout animation" })).toBeInTheDocument();
+        } finally {
+            vi.unstubAllGlobals();
+        }
+    });
 });
 
 describe("DrillDetailView: video links (practice video links R4, R8)", () => {
