@@ -310,6 +310,35 @@ export const STARTER_TEMPLATES: readonly StarterTemplate[] = [
             { block: "cooldown", minutes: 6, note: "Easy laps, then a stretch." },
         ]),
     },
+    {
+        id: "template-8u-musical-pucks-forecheck",
+        name: "8U Musical Pucks and Forecheck",
+        description:
+            "A 50-minute practice for 8U that needs two nets, two cones and a goalie: trucks and trailers while a coach warms up the goalie, then two skater groups rotate every 8 minutes between musical pucks at one net and forecheck vs. breakout on the goalie at the other, a water break, a 3-on-3 designated-shooter game on the goalie's net, and a cool-down.",
+        ageGroups: ["u8"],
+        session: practice("8U Musical Pucks and Forecheck", 50, 0, [
+            {
+                stations: [
+                    { drill: "starter-goalie-warmup", minutes: 8, instructions: "A coach warms up the goalie while the skaters play trucks and trailers." },
+                    { drill: "starter-skate-trucks-trailers", minutes: 8 },
+                ],
+            },
+            {
+                rotateEveryMinutes: 8,
+                stations: [
+                    { drill: "starter-skate-musical-pucks", minutes: 8, instructions: "The second net, with no goalie: it collects the stolen pucks." },
+                    {
+                        drill: "starter-skate-forecheck-breakout",
+                        minutes: 8,
+                        instructions: "The goalie plays in net. Set the two cones as the exit gate; three skaters go at a time and the rest wait by the boards.",
+                    },
+                ],
+            },
+            { block: "break", minutes: 2 },
+            { stations: [{ drill: "starter-game-3v3-designated-shooter", minutes: 18, instructions: "One designated shooter per team each shift; change shooters every shift." }] },
+            { block: "cooldown", minutes: 6, note: "Easy laps, then a stretch." },
+        ]),
+    },
 ];
 
 /** The template as a plan document from the running app, ready for the import flow. */

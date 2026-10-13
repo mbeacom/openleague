@@ -2936,6 +2936,79 @@ exports[`starter drills > matches the golden schedules and step poses 1`] = `
       },
     },
   },
+  "starter-skate-musical-pucks": {
+    "durationMs": 2390,
+    "poses": [
+      {
+        "atMs": 0,
+        "players": {
+          "mpk-c": {
+            "x": 158,
+            "y": 42.5,
+          },
+          "mpk-s1": {
+            "x": 140,
+            "y": 15,
+          },
+          "mpk-s2": {
+            "x": 172,
+            "y": 15,
+          },
+          "mpk-s3": {
+            "x": 140,
+            "y": 70,
+          },
+          "mpk-s4": {
+            "x": 172,
+            "y": 70,
+          },
+          "mpk-s5": {
+            "x": 135,
+            "y": 45,
+          },
+        },
+        "pucks": {},
+      },
+    ],
+    "strokes": {
+      "mpk-c-route": {
+        "actorId": "mpk-c",
+        "endMs": 1835,
+        "puckId": "playback-puck-mpk-c-route",
+        "startMs": 0,
+      },
+      "mpk-s1-route": {
+        "actorId": "mpk-s1",
+        "endMs": 2390,
+        "puckId": "playback-puck-mpk-s1-route",
+        "startMs": 0,
+      },
+      "mpk-s2-route": {
+        "actorId": "mpk-s2",
+        "endMs": 1573,
+        "puckId": "playback-puck-mpk-s2-route",
+        "startMs": 0,
+      },
+      "mpk-s3-route": {
+        "actorId": "mpk-s3",
+        "endMs": 2390,
+        "puckId": "playback-puck-mpk-s3-route",
+        "startMs": 0,
+      },
+      "mpk-s4-route": {
+        "actorId": "mpk-s4",
+        "endMs": 1582,
+        "puckId": "playback-puck-mpk-s4-route",
+        "startMs": 0,
+      },
+      "mpk-s5-route": {
+        "actorId": "mpk-s5",
+        "endMs": 1477,
+        "puckId": "playback-puck-mpk-s5-route",
+        "startMs": 0,
+      },
+    },
+  },
   "starter-skate-obstacle-lane": {
     "durationMs": 10830,
     "poses": [
