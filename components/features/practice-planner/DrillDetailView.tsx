@@ -14,7 +14,6 @@ import {
     ContentCopy as DuplicateIcon,
     Edit as EditIcon,
     FileDownloadOutlined as DownloadIcon,
-    PlayArrow as PlayIcon,
 } from "@mui/icons-material";
 import { usePlannerPlatform, usePlannerStore, type LibraryPlay } from "@/lib/planner-store";
 import { FOCUS_LABELS, GOALIES_LABELS, drillTags } from "@/lib/utils/drill-tags";
@@ -32,9 +31,7 @@ import {
 } from "@/lib/utils/drill-details";
 import { downloadBlob } from "./export/download";
 import { PRINT_DIAGRAM_SIZE } from "./print/PrintDiagram";
-import { PlayDiagram } from "./PlayDiagram";
-import { PlaybackBoard } from "./PlaybackBoard";
-import { hasPlayback } from "@/lib/utils/canvas/playback";
+import { PlayableDiagram } from "./PlayableDiagram";
 import { PlayLegend } from "./PlayLegend";
 import { VideoLinkList } from "./VideoLinkList";
 
@@ -71,9 +68,6 @@ export function DrillDetailView({ play, teamId, canEdit, usageCount, extras }: D
     const { Link, navigate, routes } = usePlannerPlatform();
     const [error, setError] = useState<string | null>(null);
     const [duplicating, setDuplicating] = useState(false);
-    // Play swaps the still diagram for the animated board in the same place (animated playback R10).
-    const [showPlayback, setShowPlayback] = useState(false);
-    const playable = hasPlayback(play.playData);
 
     const tags = drillTags(play);
     const equipment = diagramEquipment(play.playData);
@@ -215,24 +209,7 @@ export function DrillDetailView({ play, teamId, canEdit, usageCount, extras }: D
             <Box sx={{ display: "grid", gap: 3, gridTemplateColumns: { xs: "minmax(0, 1fr)", md: "minmax(0, 2fr) minmax(0, 1fr)" }, alignItems: "start" }}>
                 {/* The diagram, large, with the notation it uses */}
                 <Paper variant="outlined" sx={{ p: { xs: 1.5, sm: 2 }, display: "flex", flexDirection: "column", gap: 2 }}>
-                    {showPlayback ? (
-                        <PlaybackBoard playData={play.playData} label={play.name} startPlaying onClose={() => setShowPlayback(false)} />
-                    ) : (
-                        <Box sx={{ position: "relative", bgcolor: "common.white", borderRadius: 1, overflow: "hidden" }}>
-                            <PlayDiagram playData={play.playData} label={play.name} />
-                            {playable && (
-                                <Button
-                                    variant="contained"
-                                    startIcon={<PlayIcon />}
-                                    onClick={() => setShowPlayback(true)}
-                                    aria-label={`Play the ${play.name} animation`}
-                                    sx={{ position: "absolute", right: 8, bottom: 8, minHeight: 44, minWidth: 44, displayPrint: "none" }}
-                                >
-                                    Play
-                                </Button>
-                            )}
-                        </Box>
-                    )}
+                    <PlayableDiagram playData={play.playData} label={play.name} />
                     <PlayLegend playData={play.playData} defaultExpanded />
                 </Paper>
 
