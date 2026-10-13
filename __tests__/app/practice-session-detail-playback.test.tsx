@@ -45,15 +45,15 @@ describe("SessionDetailView drill playback", () => {
     });
     afterEach(() => vi.unstubAllGlobals());
 
-    it("swaps the active drill's diagram for the playback board on Play, and back", () => {
+    it("swaps the active drill's diagram for the playback board on Play, and back, with focus following", () => {
         const viewer = renderView();
         fireEvent.click(within(viewer).getByRole("button", { name: "Play the Breakout animation" }));
-        expect(within(viewer).getByRole("group", { name: /Breakout playback/ })).toBeInTheDocument();
+        expect(within(viewer).getByRole("group", { name: /Breakout playback/ })).toHaveFocus();
         expect(within(viewer).getAllByRole("img", { name: "Breakout diagram" })).toHaveLength(1);
 
         fireEvent.click(within(viewer).getByRole("button", { name: "Close playback" }));
         expect(within(viewer).queryByRole("group", { name: /playback/ })).not.toBeInTheDocument();
-        expect(within(viewer).getByRole("button", { name: "Play the Breakout animation" })).toBeInTheDocument();
+        expect(within(viewer).getByRole("button", { name: "Play the Breakout animation" })).toHaveFocus();
     });
 
     it("returns to the still diagram when moving to the next drill", () => {
@@ -61,7 +61,7 @@ describe("SessionDetailView drill playback", () => {
         fireEvent.click(within(viewer).getByRole("button", { name: "Play the Breakout animation" }));
         fireEvent.click(within(viewer).getByRole("button", { name: "Next play" }));
         expect(within(viewer).queryByRole("group", { name: /playback/ })).not.toBeInTheDocument();
-        expect(within(viewer).getByRole("button", { name: "Play the Shooting animation" })).toBeInTheDocument();
+        expect(within(viewer).getByRole("button", { name: "Play the Shooting animation" })).not.toHaveFocus();
     });
 
     it("offers no Play on a drill with nothing to animate", () => {

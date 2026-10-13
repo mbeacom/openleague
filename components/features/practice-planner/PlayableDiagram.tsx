@@ -4,9 +4,10 @@
  * A drill's still diagram with a Play button that swaps it for the animated
  * board in the same place, and back (animated playback R10). Drills with
  * nothing to animate get the still diagram alone. Mount it with a `key` per
- * drill so moving to another drill returns to the still diagram.
+ * drill so moving to another drill returns to the still diagram. Focus follows
+ * the swap: into the board on Play, back to Play on close.
  */
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Box, Button, type SxProps, type Theme } from "@mui/material";
 import { PlayArrow as PlayIcon } from "@mui/icons-material";
 import type { PlayData } from "@/types/practice-planner";
@@ -24,15 +25,29 @@ export interface PlayableDiagramProps {
 
 export function PlayableDiagram({ playData, label, playbackSx }: PlayableDiagramProps) {
     const [showPlayback, setShowPlayback] = useState(false);
+    const playButtonRef = useRef<HTMLButtonElement>(null);
+    // Set on close, so a drill's first render never steals focus.
+    const returnFocus = useRef(false);
+
+    useEffect(() => {
+        if (showPlayback || !returnFocus.current) return;
+        returnFocus.current = false;
+        playButtonRef.current?.focus({ preventScroll: true });
+    }, [showPlayback]);
 
     if (showPlayback) {
-        return <PlaybackBoard playData={playData} label={label} startPlaying onClose={() => setShowPlayback(false)} sx={playbackSx} />;
+        const close = () => {
+            returnFocus.current = true;
+            setShowPlayback(false);
+        };
+        return <PlaybackBoard playData={playData} label={label} startPlaying autoFocus onClose={close} sx={playbackSx} />;
     }
     return (
         <Box sx={{ position: "relative", bgcolor: "common.white", borderRadius: 1, overflow: "hidden" }}>
             <PlayDiagram playData={playData} label={label} />
             {hasPlayback(playData) && (
                 <Button
+                    ref={playButtonRef}
                     variant="contained"
                     startIcon={<PlayIcon />}
                     onClick={() => setShowPlayback(true)}

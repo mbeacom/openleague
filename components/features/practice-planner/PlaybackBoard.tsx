@@ -71,6 +71,8 @@ export interface PlaybackBoardProps {
     startPlaying?: boolean;
     /** Shows a close button that returns to the still diagram. */
     onClose?: () => void;
+    /** Focuses the board on mount, for a board that replaced the focused control that opened it. */
+    autoFocus?: boolean;
     sx?: SxProps<Theme>;
 }
 
@@ -134,7 +136,7 @@ export function playbackCaption(playback: Playback, stepIndex: number): string {
     return `Step ${stepIndex + 1} of ${total}${detail ? ` · ${detail}` : ""}`;
 }
 
-export function PlaybackBoard({ playData, label, startPlaying = false, onClose, sx }: PlaybackBoardProps) {
+export function PlaybackBoard({ playData, label, startPlaying = false, onClose, autoFocus = false, sx }: PlaybackBoardProps) {
     const playback = useMemo(() => getPlayback(playData), [playData]);
     const { durationMs, steps } = playback;
     const reducedMotion = useMediaQuery(REDUCED_MOTION_QUERY, { noSsr: true });
@@ -154,6 +156,11 @@ export function PlaybackBoard({ playData, label, startPlaying = false, onClose, 
     }, [loop]);
 
     const boxRef = useRef<HTMLDivElement>(null);
+    // Mount-only: Space and the arrows work at once for a keyboard user who pressed Play.
+    useEffect(() => {
+        if (autoFocus) boxRef.current?.focus({ preventScroll: true });
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const layerRef = useRef<Layer>({ canvas: null, key: "" });
     const [size, setSize] = useState({ width: 0, height: 0 });
