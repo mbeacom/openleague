@@ -1344,4 +1344,35 @@ export const STARTER_PLAYS: readonly StarterPlay[] = [
             area: { kind: "zone-neutral" },
         },
     },
+    {
+        id: "starter-skate-musical-pucks",
+        name: "Musical Pucks",
+        description:
+            "Every skater carries a puck anywhere in the zone. A coach steals a puck and puts it in the net, and a puck stays live until it is in the net. A skater who loses their puck joins the coach and helps steal the others, so the hunters grow until one skater still has a puck. Then everyone takes a puck and it starts again. Teach: head up to see who is coming, the body between the stealer and the puck, quick turns away from pressure. 6–8 min.",
+        focus: "skaters",
+        goalies: "none",
+        ageGroups: ["u6", "u8", "u10"],
+        playData: {
+            version: PLAY_DATA_VERSION,
+            players: [
+                coach("mpk-c", 158, 42.5),
+                player("mpk-s1", "S1", 140, 15),
+                player("mpk-s2", "S2", 172, 15),
+                player("mpk-s3", "S3", 140, 70),
+                player("mpk-s4", "S4", 172, 70),
+                player("mpk-s5", "S5", 135, 45),
+            ],
+            drawings: [
+                carry("mpk-c-route", [164, 42.5], [172, 39], [181, 42.5]),
+                carry("mpk-s1-route", [144, 20], [150, 26], [158, 24], [164, 28]),
+                carry("mpk-s2-route", [177, 20], [182, 27], [178, 33]),
+                carry("mpk-s3-route", [146, 66], [152, 60], [160, 62], [166, 58]),
+                carry("mpk-s4-route", [177, 65], [182, 57], [178, 52]),
+                carry("mpk-s5-route", [133, 51], [136, 58], [132, 64]),
+            ],
+            equipment: [rightNet("mpk-net")],
+            annotations: [note("mpk-note", "Lost your puck? Help steal", 128, 83, "#000000", 4)],
+            area: { kind: "zone-right" },
+        },
+    },
 ];

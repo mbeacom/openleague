@@ -191,6 +191,7 @@ describe("Starter play ice areas", () => {
         "starter-skate-mirror-puck-control": "zone-neutral",
         "starter-skate-forecheck-breakout": "zone-left",
         "starter-skate-chariot-relay": "zone-neutral",
+        "starter-skate-musical-pucks": "zone-right",
     };
 
     it("gives the obvious set plays an explicit area and leaves full-ice drills unset", () => {
@@ -287,10 +288,10 @@ describe("Starter drill tags", () => {
         }
     });
 
-    it("ships twenty-one skater drills, three small-area games and 43 starters in all", () => {
-        expect(STARTER_PLAYS.filter((p) => p.id.startsWith("starter-skate-")).map((p) => p.focus)).toEqual(Array(21).fill("skaters"));
+    it("ships twenty-two skater drills, three small-area games and 44 starters in all", () => {
+        expect(STARTER_PLAYS.filter((p) => p.id.startsWith("starter-skate-")).map((p) => p.focus)).toEqual(Array(22).fill("skaters"));
         expect(STARTER_PLAYS.filter((p) => p.id.startsWith("starter-game-")).map((p) => p.focus)).toEqual(["team", "team", "team"]);
-        expect(STARTER_PLAYS).toHaveLength(43);
+        expect(STARTER_PLAYS).toHaveLength(44);
     });
 
     it("puts every small-area drill on a quarter-ice or zone preset", () => {
@@ -353,6 +354,14 @@ describe("8U partner puck control and forecheck drills", () => {
     it("runs the chariot relay in two lanes around the practice's two cones", () => {
         expect(kinds("starter-skate-chariot-relay", "cone")).toHaveLength(2);
     });
+
+    it("plays musical pucks at the far net with no goalie, every skater carrying a puck", () => {
+        const play = find("starter-skate-musical-pucks");
+        expect([play.name, play.focus, play.goalies]).toEqual(["Musical Pucks", "skaters", "none"]);
+        expect(kinds(play.id, "net").map((n) => [n.position.x, n.position.y])).toEqual([[189, 42.5]]);
+        expect(play.playData.players.filter((p) => p.role === "C")).toHaveLength(1);
+        expect(play.playData.drawings.every((d) => d.action === "carry")).toBe(true);
+    });
 });
 
 describe("Starter age groups (age-group templates R2)", () => {
@@ -400,6 +409,7 @@ describe("Starter age groups (age-group templates R2)", () => {
         "starter-skate-mirror-puck-control": ["u6", "u8", "u10"],
         "starter-skate-forecheck-breakout": ["u8", "u10", "u12"],
         "starter-skate-chariot-relay": ["u6", "u8", "u10"],
+        "starter-skate-musical-pucks": ["u6", "u8", "u10"],
     };
 
     it("tags every starter, leaving drills that suit every age untagged", () => {
