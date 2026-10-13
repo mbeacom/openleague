@@ -4,10 +4,11 @@ import type { ReactNode } from "react";
 /**
  * Shared building blocks for the legal pages (privacy, terms, cookies).
  *
- * These pages are structural drafts: real section hierarchy and anchors, but
- * every substantive paragraph is an explicitly marked counsel placeholder.
- * Do NOT add invented legal language here or in the pages — only factual,
- * non-legal descriptions of what a section will cover.
+ * The privacy policy is final text describing what the code does: keep it in
+ * step with the code when data handling changes. Terms and cookies are still
+ * structural drafts: real section hierarchy and anchors, with each substantive
+ * paragraph an explicitly marked counsel placeholder. Do NOT add invented legal
+ * language to those — only factual descriptions of what a section will cover.
  *
  * Server-component safe: no event handlers, no next/link passed as a prop.
  */
