@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { act as rtlAct, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { PlannerApp } from "@/apps/planner/src/App";
 import { PRIVACY_NOTE } from "@/apps/planner/src/config";
-import { NOT_SAVING_MESSAGE, STALE_TAB_MESSAGE } from "@/apps/planner/src/screens/AppShell";
+import { NOT_SAVING_MESSAGE, PRIVACY_POLICY_HREF, PRIVACY_POLICY_LINK, STALE_TAB_MESSAGE } from "@/apps/planner/src/screens/AppShell";
 import { createStaleSignal } from "@/apps/planner/src/store/open-store";
 import { SESSION_NOT_ON_DEVICE_MESSAGE } from "@/apps/planner/src/store/sessions";
 import { memoryStore } from "./render-screen";
@@ -41,6 +41,14 @@ describe("PlannerApp", () => {
         await screen.findByText("Plan your first practice");
         expect(document.body.textContent?.split(PRIVACY_NOTE)).toHaveLength(2);
         expect(PRIVACY_NOTE).toMatch(/Fontshare and Google Fonts/);
+    });
+
+    it("links the privacy policy page the docs site builds beside the planner", async () => {
+        const { store } = memoryStore();
+        render(app(store));
+        await screen.findByText("Plan your first practice");
+        expect(screen.getByRole("link", { name: PRIVACY_POLICY_LINK })).toHaveAttribute("href", PRIVACY_POLICY_HREF);
+        expect(PRIVACY_POLICY_HREF).toBe("../privacy/");
     });
 
     it("lists saved practices linking to their detail", async () => {

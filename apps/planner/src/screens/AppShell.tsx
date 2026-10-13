@@ -16,6 +16,9 @@ export const STALE_TAB_MESSAGE = "The planner was updated in another tab. Reload
 export const AI_SETTINGS_LINK = "AI assistance settings";
 /** The footer's way to linked files and recovered copies (ADR-0022). */
 export const SAVED_FILES_LINK = "Saved files and recovered copies";
+export const PRIVACY_POLICY_LINK = "Privacy policy";
+/** The policy page the docs site builds beside the planner (scripts/build-docs-pages.ts): relative, so it resolves on a fork's Pages subpath too. */
+export const PRIVACY_POLICY_HREF = "../privacy/";
 
 const NAV_ITEMS: ReadonlyArray<{ section: NavSection; label: string; href: string }> = [
     { section: "practices", label: "Practices", href: staticRoutes.list() },
@@ -140,6 +143,11 @@ export function AppShell({
                     <Stack spacing={0.5}>
                         <Typography variant="body2" color="text.secondary">
                             {PRIVACY_NOTE}
+                        </Typography>
+                        <Typography variant="body2" color="text.secondary">
+                            <Link href={PRIVACY_POLICY_HREF} underline="always">
+                                {PRIVACY_POLICY_LINK}
+                            </Link>
                         </Typography>
                         <Typography variant="body2" color="text.secondary">
                             <Link href={staticRoutes.aiSettings()} underline="always">

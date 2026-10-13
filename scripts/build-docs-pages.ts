@@ -102,6 +102,26 @@ const rankingsLink = {
   description: 'Paste your league\'s public schedule and snake chart to see placement ratings and who might move up or down. Computed in your browser; nothing is sent anywhere.',
 };
 
+/** The planner's privacy policy (served at /privacy/ beside the planner, which links to it). */
+export const PLANNER_PRIVACY_SOURCE = path.join('apps', 'planner', 'PRIVACY.md');
+export const plannerPrivacyHref = '/docs/privacy';
+
+/** Relative URL to the privacy policy page, like `plannerUrlFor`. */
+export function privacyUrlFor(page: StaticPage): string {
+  const depth = staticDocsUrlForHref(page.href).split('/').filter(Boolean).length;
+  return `${'../'.repeat(depth)}privacy/`;
+}
+
+/**
+ * What the home page says the planner is and what it asks Google and Microsoft for: Google's
+ * OAuth brand verification reads the home page for the app's purpose and a privacy policy link.
+ */
+export function plannerAboutHtml(page: StaticPage): string {
+  return `<section class="about"><h2>About the OpenLeague Planner</h2>
+<p>The <a href="${plannerUrlFor(page)}">OpenLeague Planner</a> is a free practice planner and team rankings tool for youth sports coaches. It runs entirely in your browser with no account: you draw drills, build practice plans and compare league placement ratings, and everything you make is stored on your own device.</p>
+<p>If you choose, the Planner can save your plans to and open them from your own Google Drive or Microsoft OneDrive. For Google Drive it asks only for access to the files it creates and the files you pick; files go straight from your browser to your Drive and are never sent to OpenLeague. Read the <a href="${privacyUrlFor(page)}">privacy policy</a> for details.</p></section>`;
+}
+
 /** The planner's rankings route (a hash route), relative like `plannerUrlFor`. */
 export function rankingsUrlFor(page: StaticPage): string {
   return `${plannerUrlFor(page)}#/rankings`;
@@ -139,13 +159,14 @@ export function wrapPage(page: StaticPage, navItems: DocsNavItem[]): string {
     .card { border: 1px solid #e2e8f0; border-radius: .75rem; padding: 1rem; background: #fff; }
     .muted, footer { color: var(--muted); }
     footer { padding: 2rem 1rem; font-size: .9rem; }
+    .about { margin-bottom: 2rem; }
   </style>
 </head>
 <body>
   <header><div><p class="muted" style="color:#bfdbfe;margin:0">OpenLeague</p><h1>${escapeHtml(page.title)}</h1><p>${escapeHtml(page.description)}</p><nav>${navLinks}</nav></div></header>
   <main>${page.html}</main>
   <footer>
-    <p style="margin:0 0 .5rem">Generated from the OpenLeague repository docs. Main application: <a href="https://openl.app">openl.app</a>.</p>
+    <p style="margin:0 0 .5rem">Generated from the OpenLeague repository docs. Main application: <a href="https://openl.app">openl.app</a>. <a href="${privacyUrlFor(page)}">Planner privacy policy</a>.</p>
     <p style="margin:0">&copy; 2025 Mark Beacom. This documentation is licensed under <a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a>; OpenLeague source code is licensed under <a href="https://github.com/mbeacom/openleague/blob/main/LICENSE">Apache 2.0</a>. &quot;OpenLeague&quot; and the OpenLeague logo are <a href="https://github.com/mbeacom/openleague/blob/main/TRADEMARKS.md">trademarks</a> of Mark Beacom.</p>
   </footer>
 </body>
@@ -166,7 +187,7 @@ export async function buildAppDocsPages(): Promise<StaticPage[]> {
   const homePage = { ...home, html: '' };
   const toolCards = [toolCard(plannerLink, plannerUrlFor(homePage)), toolCard(rankingsLink, rankingsUrlFor(homePage))].join('\n');
 
-  pages.push({ ...home, html: `<div class="cards">${cards}\n${toolCards}</div>` });
+  pages.push({ ...home, html: `${plannerAboutHtml(homePage)}<div class="cards">${cards}\n${toolCards}</div>` });
 
   for (const item of docsItems) {
     const slug = item.href.replace(/^\/docs\/?/, '');
@@ -218,6 +239,17 @@ async function buildRepositoryDocPages(): Promise<StaticPage[]> {
   return pages;
 }
 
+/** The planner's privacy policy, rendered without its own H1 (the page header carries the title). */
+export async function buildPrivacyPage(): Promise<StaticPage> {
+  const markdown = await readFile(path.join(rootDir, PLANNER_PRIVACY_SOURCE), 'utf8');
+  return {
+    title: titleFromMarkdown(markdown, 'Privacy Policy'),
+    description: 'How the OpenLeague Planner handles your data, including Google Drive and OneDrive.',
+    href: plannerPrivacyHref,
+    html: renderMarkdown(markdown.replace(/^#\s+.+\n+/u, '')),
+  };
+}
+
 async function writePage(page: StaticPage, navItems: DocsNavItem[]) {
   const relativePath = pagePathForHref(page.href);
   const destination = path.join(outputDir, relativePath);
@@ -246,7 +278,7 @@ async function main() {
 
   const appPages = await buildAppDocsPages();
   const repositoryPages = await buildRepositoryDocPages();
-  const pages = [...appPages, ...repositoryPages];
+  const pages = [...appPages, await buildPrivacyPage(), ...repositoryPages];
   const navItems = [docsHome, ...docsItems];
 
   await Promise.all(pages.map((page) => writePage(page, navItems)));
