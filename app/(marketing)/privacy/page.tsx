@@ -171,7 +171,7 @@ export default function PrivacyPolicyPage() {
                 items={[
                   'Sign-in uses essential cookies: a session cookie that lasts up to 7 days, a CSRF protection cookie and a callback cookie. Changing your password or email signs out your other sessions.',
                   'Your browser’s local storage keeps preferences such as light or dark mode and practice planner display settings.',
-                  'Where enabled, Umami records page views. Where enabled, Google Analytics records usage with IP anonymization and with Google signals and ad personalization turned off; it is not loaded when your browser sends Do Not Track or Global Privacy Control.',
+                  'Where enabled, Umami records page views. Where enabled, Google Analytics records usage with IP anonymization and with Google signals and ad personalization turned off. When your browser sends Do Not Track or Global Privacy Control, the Google Analytics script still loads but is told not to collect anything.',
                   'Where enabled, Sentry receives error reports and performance samples. It is configured not to send default personal data.',
                   'Pages reached through private links, such as invitation links, are excluded from analytics.',
                 ]}
@@ -203,9 +203,9 @@ export default function PrivacyPolicyPage() {
               <List
                 items={[
                   'We keep information for as long as your account, team or league uses it, until it is deleted.',
-                  'When you delete your account, your account, memberships, RSVPs, registrations, uploads, notification preferences and activity log entries are deleted. Roster entries that administrators created for you remain on the team’s roster until an administrator removes them. Parental consent records are kept as a record of consent.',
+                  'When you delete your account, your account, memberships, RSVPs, registrations, notification preferences, activity log entries and the records of your uploads are deleted. The uploaded files themselves can remain in storage at their unlisted addresses; email us to have them removed. Roster entries that administrators created for you remain on the team’s roster until an administrator removes them. Parental consent records are kept as a record of consent.',
                   'When an administrator deletes a player, the player’s roster entry is deleted.',
-                  'Records used to limit repeated requests expire within an hour and are cleared out after that. Used and expired sign-in tokens are deleted.',
+                  'Records used to limit repeated requests expire within an hour and are removed by routine cleanup some time after that. Expired sign-in tokens are removed when new ones are issued for the same account, and when the account is deleted.',
                   'Email delivery records may keep the address an email was sent to.',
                   'Payment records are kept for the organizer’s and Stripe’s records.',
                 ]}
