@@ -47,7 +47,7 @@ import { StationMap } from "@/components/features/practice-planner/StationMap";
 import { SessionTimeline } from "@/components/features/practice-planner/SessionTimeline";
 import { ExportPlanMenu } from "@/components/features/practice-planner/ExportPlanMenu";
 import { RosterSummary } from "@/components/features/practice-planner/RosterSummary";
-import { PlayDiagram } from "@/components/features/practice-planner/PlayDiagram";
+import { PlayableDiagram } from "@/components/features/practice-planner/PlayableDiagram";
 import { useSessionGoalies } from "@/components/features/practice-planner/useSessionGoalies";
 import { TeamColorsToggle } from "@/components/features/practice-planner/TeamColorsToggle";
 import { useTeamRoleColors } from "@/components/features/practice-planner/useTeamColors";
@@ -554,9 +554,14 @@ export function SessionDetailView({ session, isAdmin }: SessionDetailViewProps) 
 
                   {/* The diagram fills the viewer's width at the board's shape (THUMBNAIL_ASPECT) */}
                   <Box sx={{ bgcolor: "action.hover" }}>
-                    {/* Drawn live at the screen's pixel ratio; the drawn data already drops a hidden goalie. */}
+                    {/* Drawn live at the screen's pixel ratio, with Play for an animated drill; the drawn data already drops a hidden goalie. */}
                     {activeDrawn ? (
-                      <PlayDiagram playData={activeDrawn} label={activePlay.play.name} />
+                      <PlayableDiagram
+                        key={activePlay.id}
+                        playData={activeDrawn}
+                        label={activePlay.play.name}
+                        playbackSx={{ p: { xs: 1, sm: 1.5 } }}
+                      />
                     ) : activePlay.play.thumbnail ? (
                       <Box sx={{ position: "relative", width: "100%", aspectRatio: `${THUMBNAIL_ASPECT}` }}>
                         <Image src={activePlay.play.thumbnail} alt={activePlay.play.name} fit="contain" />
