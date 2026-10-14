@@ -3,7 +3,7 @@
  * not-found, unreadable diagrams, the practice count), a new practice started
  * from a drill, and the practice list's card opening details with Edit secondary.
  */
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import { createEmptyPlayData, PLAY_DATA_UNREADABLE_CODE } from "@/lib/utils/play-data";
 
@@ -147,6 +147,15 @@ describe("practice list cards", () => {
         playCount: 2,
         firstPlayThumbnail: null,
     };
+
+    // The list shows upcoming practices by default, so pin "now" before SESSION.date.
+    beforeEach(() => {
+        vi.useFakeTimers({ toFake: ["Date"] });
+        vi.setSystemTime(new Date("2026-10-01T12:00:00Z"));
+    });
+    afterEach(() => {
+        vi.useRealTimers();
+    });
 
     it("open the details page, with Edit as an admin's secondary action", () => {
         render(<PracticePlannerList sessions={[SESSION]} teamId={TEAM} teamName="Riverside 901" isAdmin canImport />);
