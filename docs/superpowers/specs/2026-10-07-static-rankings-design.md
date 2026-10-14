@@ -56,7 +56,7 @@ Snake chart, schedule and standings all carry the 3-digit team number, but displ
 ### R4. Method settings are data, CSHL is a preset
 
 Nothing is hard-coded to CSHL. One `RatingMethod` object carries every setting, and the **CSHL 8U** preset fills it in:
-- goal cap 8;
+- goal cap 7 (8 in the 2025 releases; editable per document);
 - Walkush variant `plus-one`;
 - low-confidence threshold 3 games;
 - default levels R1–R3 and W1–W4, sizes editable.
@@ -164,7 +164,7 @@ Edge cases:
   - **Table toggle.** All the league's columns, sortable. This is also the accessible view.
   - **Filters (one row).** Team search, starting bracket, and "my team's opponents".
 - **Team detail (`#/rankings/team/:number`).**
-  - The game log: opponent and their rating · score · capped margin, marked "capped at 8" where a game was capped.
+  - The game log: opponent and their rating · score · capped margin, marked "capped at <cap>" where a game was capped.
   - Inline margin bars around 0.
   - The plain arithmetic behind the team's numbers, and a low-confidence note when it applies.
 - **What-if (`#/rankings/what-if`).**
@@ -188,7 +188,7 @@ Edge cases:
   "meta": { "title": "08 Mite Preseason 2026", "ageGroup": "8U", "seasonLabel": "2026", "source": "optional URL text" },
   "method": {
     "preset": "cshl-8u",
-    "goalCap": 8,
+    "goalCap": 7,
     "walkush": { "variant": "plus-one" },
     "lowConfidenceGames": 3,
     "levels": [{ "name": "R1", "size": 6 }]

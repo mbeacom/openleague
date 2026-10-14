@@ -13,7 +13,7 @@ describe("capMargin", () => {
 
 describe("CSHL_8U_METHOD", () => {
     it("matches the spec's preset", () => {
-        expect(CSHL_8U_METHOD.goalCap).toBe(8);
+        expect(CSHL_8U_METHOD.goalCap).toBe(7);
         expect(CSHL_8U_METHOD.walkush.variant).toBe("plus-one");
         expect(CSHL_8U_METHOD.lowConfidenceGames).toBe(3);
         expect(CSHL_8U_METHOD.levels.map((l) => `${l.name}:${l.size}`).join(",")).toBe("R1:6,R2:6,R3:7,W1:6,W2:8,W3:6,W4:7");
