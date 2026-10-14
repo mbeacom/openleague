@@ -36,7 +36,8 @@ export interface RatingMethod {
 
 export const CSHL_8U_METHOD: RatingMethod = {
     preset: "cshl-8u",
-    goalCap: 8,
+    /** 7 from the 2026-27 season; the 2025 releases capped at 8. */
+    goalCap: 7,
     walkush: { variant: "plus-one" },
     lowConfidenceGames: 3,
     levels: [
