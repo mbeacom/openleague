@@ -1061,9 +1061,9 @@ exports[`starter drills > matches the golden schedules and step poses 1`] = `
             "x": 22,
             "y": 16,
           },
-          "ad-g2": {
-            "x": 22,
-            "y": 69,
+          "ad-s": {
+            "x": 64,
+            "y": 66,
           },
         },
         "pucks": {},
@@ -1079,9 +1079,9 @@ exports[`starter drills > matches the golden schedules and step poses 1`] = `
             "x": 22,
             "y": 29,
           },
-          "ad-g2": {
-            "x": 22,
-            "y": 56,
+          "ad-s": {
+            "x": 64,
+            "y": 66,
           },
         },
         "pucks": {},
@@ -1097,9 +1097,9 @@ exports[`starter drills > matches the golden schedules and step poses 1`] = `
             "x": 47,
             "y": 29,
           },
-          "ad-g2": {
-            "x": 47,
-            "y": 56,
+          "ad-s": {
+            "x": 64,
+            "y": 66,
           },
         },
         "pucks": {},
@@ -1125,19 +1125,19 @@ exports[`starter drills > matches the golden schedules and step poses 1`] = `
         "startMs": 4356,
       },
       "ad-g2-long": {
-        "actorId": "ad-g2",
+        "actorId": null,
         "endMs": 3956,
         "puckId": null,
         "startMs": 1178,
       },
       "ad-g2-short": {
-        "actorId": "ad-g2",
+        "actorId": null,
         "endMs": 778,
         "puckId": null,
         "startMs": 0,
       },
       "ad-g2-short-again": {
-        "actorId": "ad-g2",
+        "actorId": null,
         "endMs": 5689,
         "puckId": null,
         "startMs": 4356,
@@ -1701,9 +1701,9 @@ exports[`starter drills > matches the golden schedules and step poses 1`] = `
             "x": 38,
             "y": 47.5,
           },
-          "cb-g2": {
-            "x": 22,
-            "y": 56,
+          "cb-s": {
+            "x": 62,
+            "y": 70,
           },
         },
         "pucks": {},
@@ -1719,9 +1719,9 @@ exports[`starter drills > matches the golden schedules and step poses 1`] = `
             "x": 38,
             "y": 37.5,
           },
-          "cb-g2": {
-            "x": 30,
-            "y": 60.5,
+          "cb-s": {
+            "x": 62,
+            "y": 70,
           },
         },
         "pucks": {},
@@ -1737,9 +1737,9 @@ exports[`starter drills > matches the golden schedules and step poses 1`] = `
             "x": 48,
             "y": 37.5,
           },
-          "cb-g2": {
-            "x": 30,
-            "y": 69,
+          "cb-s": {
+            "x": 62,
+            "y": 70,
           },
         },
         "pucks": {},
@@ -1755,9 +1755,9 @@ exports[`starter drills > matches the golden schedules and step poses 1`] = `
             "x": 48,
             "y": 37.5,
           },
-          "cb-g2": {
-            "x": 29.4,
-            "y": 69.3,
+          "cb-s": {
+            "x": 62,
+            "y": 70,
           },
         },
         "pucks": {},
@@ -1773,9 +1773,9 @@ exports[`starter drills > matches the golden schedules and step poses 1`] = `
             "x": 48,
             "y": 47.5,
           },
-          "cb-g2": {
-            "x": 23,
-            "y": 73,
+          "cb-s": {
+            "x": 62,
+            "y": 70,
           },
         },
         "pucks": {},
@@ -1783,19 +1783,19 @@ exports[`starter drills > matches the golden schedules and step poses 1`] = `
     ],
     "strokes": {
       "cb-crease1": {
-        "actorId": "cb-g2",
+        "actorId": null,
         "endMs": 600,
         "puckId": null,
         "startMs": 0,
       },
       "cb-crease2": {
-        "actorId": "cb-g2",
+        "actorId": null,
         "endMs": 1944,
         "puckId": null,
         "startMs": 1000,
       },
       "cb-crease3": {
-        "actorId": "cb-g2",
+        "actorId": null,
         "endMs": 3240,
         "puckId": null,
         "startMs": 2344,

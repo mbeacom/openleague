@@ -447,8 +447,8 @@ describe("Foundation Stage goalie drills and the 8U goaltender-integration drill
     });
 
     it("draws one goalie unless the drill is built for two", () => {
-        const pairs = ["border-tag", "blocker-save-foundation", "clifford-box", "glove-save-foundation", "adaptive-skating",
-            "soccer-coach-outlet", "two-goalie-fundamental-save", "vp-save", "starman-stick-save"].map((s) => `starter-goalie-${s}`);
+        const pairs = ["border-tag", "blocker-save-foundation", "glove-save-foundation", "soccer-coach-outlet",
+            "two-goalie-fundamental-save", "vp-save", "starman-stick-save"].map((s) => `starter-goalie-${s}`);
         for (const id of FOUNDATION) {
             if (pairs.includes(id)) expect(goalieCount(id), id).toBeGreaterThanOrEqual(2);
             else expect(goalieCount(id), id).toBe(1);

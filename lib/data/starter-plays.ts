@@ -1501,7 +1501,7 @@ export const STARTER_PLAYS: readonly StarterPlay[] = [
             version: PLAY_DATA_VERSION,
             players: [
                 goalie("cb-g1", 38, 47.5),
-                goalie("cb-g2", 22, 56),
+                player("cb-s", "S", 62, 70),
                 coach("cb-c", 62, 42.5),
             ],
             drawings: [
@@ -1633,7 +1633,7 @@ export const STARTER_PLAYS: readonly StarterPlay[] = [
             version: PLAY_DATA_VERSION,
             players: [
                 goalie("ad-g1", 22, 16),
-                goalie("ad-g2", 22, 69),
+                player("ad-s", "S", 64, 66),
                 coach("ad-c", 62, 42.5),
             ],
             drawings: [
