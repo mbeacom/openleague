@@ -270,7 +270,13 @@ export function createGoogleDriveConnector({
         if (!kindFolder) return root;
         const key = `${root.value}/${kind}`;
         const cached = kindFolderIds.get(key);
-        if (cached) return connectorOk(cached);
+        if (cached) {
+            // Checked again, cheaply: the coach may have trashed it since, and a file saved into the trash is lost from view.
+            const still = await json<{ trashed?: boolean }>(fileUrl(cached, { fields: "id,trashed" }));
+            if (still.ok && !still.value.trashed) return connectorOk(cached);
+            if (!still.ok && still.error.code !== "not-found") return still;
+            kindFolderIds.delete(key);
+        }
         const q = `mimeType=${driveQuoted(FOLDER_MIME_TYPE)} and ${driveQuoted(root.value)} in parents and ${appPropertyQuery(FOLDER_TAG_KEY, kind)} and trashed=false`;
         const found = await json<{ files?: Array<{ id: string }> }>(`${DRIVE_API}/files?${new URLSearchParams({ q, fields: "files(id)", pageSize: "1", spaces: "drive", supportsAllDrives: "true", includeItemsFromAllDrives: "true" })}`);
         if (!found.ok) return found;

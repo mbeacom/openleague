@@ -10,7 +10,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Alert, Box, Button, Card, CardActions, CardContent, FormControlLabel, Stack, Switch, Typography } from "@mui/material";
 import type { StorageConnector } from "../../storage/connector";
 import { KIND_FOLDERS } from "../../storage/folders";
-import { restoreFromFolder, restoreText, saveAllText, saveAllToFolder } from "../../storage/planner-folder";
+import { restoreFromFolder, restoreText, saveAllText, saveAllToFolder, takeFolderCopy, type FolderDifference } from "../../storage/planner-folder";
 import { connectIfNeeded, useConnectorPreparation } from "./connection";
 import { CONNECTOR_NAMES, connectErrorText, syncErrorText } from "./messages";
 import { useStorage } from "./StorageContext";
@@ -23,6 +23,8 @@ export const STOP_FOLDER_LABEL = "Stop using this folder";
 export const AUTOSAVE_LABEL = "Keep the folder up to date";
 export const SAVE_ALL_LABEL = "Save everything to the folder";
 export const RESTORE_LABEL = "Restore from the folder";
+export const TAKE_FOLDER_COPY_LABEL = "Use the folder's copy";
+export const DIFFERENCES_HELP = "These are in this browser with other content than their files in the folder. The folder's copy replaces this browser's, which is kept in Recovered copies. Leave one alone to keep this browser's version, unlinked.";
 
 const SUBFOLDERS = Object.values(KIND_FOLDERS).join(" and ");
 /** Said under every location: the layout inside it, and that nothing already saved moves. */
@@ -36,7 +38,13 @@ interface Row {
     location: { name: string; chosen: boolean } | null;
 }
 
-export function SaveLocations({ connectors }: { connectors: readonly StorageConnector[] }) {
+export interface SaveLocationsProps {
+    connectors: readonly StorageConnector[];
+    /** After a step that may link, relink or replace documents: the page's other lists reload. */
+    onChanged?: () => void;
+}
+
+export function SaveLocations({ connectors, onChanged }: SaveLocationsProps) {
     const storage = useStorage();
     const preparation = useConnectorPreparation();
     const [rows, setRows] = useState<Row[] | null>(null);
@@ -44,6 +52,7 @@ export function SaveLocations({ connectors }: { connectors: readonly StorageConn
     const [busy, setBusy] = useState(false);
     const [problem, setProblem] = useState<string | null>(null);
     const [notice, setNotice] = useState<string | null>(null);
+    const [differences, setDifferences] = useState<FolderDifference[]>([]);
     const [version, setVersion] = useState(0);
     const reload = useCallback(() => setVersion((value) => value + 1), []);
 
@@ -70,6 +79,7 @@ export function SaveLocations({ connectors }: { connectors: readonly StorageConn
         setBusy(true);
         setProblem(null);
         setNotice(null);
+        setDifferences([]);
         try {
             await work();
         } catch (error) {
@@ -78,6 +88,7 @@ export function SaveLocations({ connectors }: { connectors: readonly StorageConn
         } finally {
             setBusy(false);
             reload();
+            onChanged?.();
         }
     };
 
@@ -126,7 +137,21 @@ export function SaveLocations({ connectors }: { connectors: readonly StorageConn
             const anything = summary.added + summary.linked + summary.unchanged + summary.differing + summary.unreadable > 0;
             if (summary.firstError && !anything) setProblem(syncErrorText(summary.firstError, "the planner folder") ?? restoreText(summary));
             else setNotice(restoreText(summary));
+            setDifferences(summary.differences);
         });
+
+    const takeCopy = async (difference: FolderDifference) => {
+        setBusy(true);
+        setProblem(null);
+        try {
+            const outcome = await takeFolderCopy(storage, difference);
+            if (!outcome.ok) setProblem(syncErrorText(outcome.error, difference.file.name));
+            else setDifferences((current) => current.filter((entry) => entry.docKey !== difference.docKey));
+        } finally {
+            setBusy(false);
+            onChanged?.();
+        }
+    };
 
     return (
         <Box component="section" aria-labelledby="locations-title">
@@ -142,6 +167,28 @@ export function SaveLocations({ connectors }: { connectors: readonly StorageConn
                 <Alert severity="success" onClose={() => setNotice(null)} sx={{ mb: 1 }} role="status">
                     {notice}
                 </Alert>
+            )}
+            {differences.length > 0 && (
+                <Card variant="outlined" sx={{ mb: 1 }} aria-labelledby="differences-title">
+                    <CardContent sx={{ pb: 1 }}>
+                        <Typography id="differences-title" fontWeight={700}>
+                            Different in the folder
+                        </Typography>
+                        <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                            {DIFFERENCES_HELP}
+                        </Typography>
+                        <Stack spacing={1}>
+                            {differences.map((difference) => (
+                                <Stack key={difference.docKey} direction="row" spacing={1} sx={{ alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", rowGap: 1 }}>
+                                    <Typography>{`${difference.title} · ${difference.file.name}`}</Typography>
+                                    <Button disabled={busy} onClick={() => void takeCopy(difference)} sx={{ minHeight: 44 }} aria-label={`${TAKE_FOLDER_COPY_LABEL}: ${difference.title}`}>
+                                        {TAKE_FOLDER_COPY_LABEL}
+                                    </Button>
+                                </Stack>
+                            ))}
+                        </Stack>
+                    </CardContent>
+                </Card>
             )}
             {rows === null ? (
                 <Typography color="text.secondary">Loading…</Typography>

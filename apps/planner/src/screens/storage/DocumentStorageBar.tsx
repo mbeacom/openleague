@@ -4,7 +4,9 @@
  * linked file, "Save to…" a new file, and the conflict dialog. The linked
  * file is checked when the screen opens, when the window regains focus and
  * when the browser comes back online (at most once a minute; no polling).
- * Every remote write is a tap: nothing saves in the background.
+ * Every remote write here is a tap. The one background writer is the planner
+ * folder's "Keep the folder up to date" (storage/planner-folder.ts), which
+ * saves only files in that folder, through the same sync rules.
  */
 import { useCallback, useEffect, useRef, useState } from "react";
 import { kindFolderOf } from "../../storage/folders";

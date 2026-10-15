@@ -47,6 +47,8 @@ export interface FakeFsa {
     queueDirectory: (answer: string | "cancel") => void;
     /** Every path on the disk. */
     paths: () => string[];
+    /** Runs just before the next create-on-open of a file (another app racing the planner to that name). */
+    beforeNextCreate: (hook: (path: string) => void) => void;
     writes: number;
 }
 
@@ -62,6 +64,7 @@ export function createFakeFsa(start = Date.parse("2026-10-11T12:00:00.000Z")): F
     let openAnswers: Array<string[] | "cancel"> = [];
     const directoryAnswers: Array<string | "cancel"> = [];
     const directories = new Set<string>();
+    let createHook: ((path: string) => void) | null = null;
     const fsa: FakeFsa = {
         writes: 0,
         pickers: {
@@ -90,6 +93,9 @@ export function createFakeFsa(start = Date.parse("2026-10-11T12:00:00.000Z")): F
         },
         queueDirectory: (answer) => directoryAnswers.push(answer),
         paths: () => [...disk.keys()].sort(),
+        beforeNextCreate: (hook) => {
+            createHook = hook;
+        },
         directory: (path) => {
             directories.add(path);
             const child = (name: string) => `${path}/${name}`;
@@ -103,6 +109,11 @@ export function createFakeFsa(start = Date.parse("2026-10-11T12:00:00.000Z")): F
                 },
                 getFileHandle: async (name, options) => {
                     if (directories.has(child(name))) throw domError("TypeMismatchError");
+                    if (options?.create && createHook) {
+                        const hook = createHook;
+                        createHook = null;
+                        hook(child(name));
+                    }
                     if (!disk.has(child(name))) {
                         if (!options?.create) throw domError("NotFoundError");
                         clock += 1000;
@@ -114,6 +125,7 @@ export function createFakeFsa(start = Date.parse("2026-10-11T12:00:00.000Z")): F
                     for (const key of [...disk.keys()]) if (key.startsWith(`${path}/`) && !key.slice(path.length + 1).includes("/")) yield fsa.handleFor(key);
                     for (const dir of [...directories]) if (dir.startsWith(`${path}/`) && !dir.slice(path.length + 1).includes("/")) yield fsa.directory(dir);
                 },
+                isSameEntry: async (other) => other.kind === "directory" && (other as { path?: string }).path === path,
                 queryPermission: async () => permission,
                 requestPermission: async () => {
                     if (!gesture) throw domError("SecurityError");
@@ -122,6 +134,7 @@ export function createFakeFsa(start = Date.parse("2026-10-11T12:00:00.000Z")): F
                     return permission;
                 },
             };
+            Object.defineProperty(handle, "path", { value: path });
             return handle;
         },
         queueSave: (answer) => saveAnswers.push(answer),

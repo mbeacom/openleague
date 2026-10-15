@@ -20,6 +20,10 @@ This data never leaves your device unless you take one of the actions described 
 
 The Planner uses no cookies, analytics, advertising or tracking.
 
+## Files and folders on this computer
+
+In browsers that support it, you can save to a file on this computer, or choose a folder as the planner folder. The Planner then reads and writes only the files you pick and the files in that folder (it creates "Practices" and "Rankings" folders inside it). With "Keep the folder up to date" on, which is the default once you choose a folder, the Planner saves your changes to the files in that folder a few seconds after you edit, while the page is open and only after you have allowed access in this browser. These files stay on your computer; the Planner sends them nowhere. If you choose a folder that another app syncs, such as a cloud drive's desktop folder, that app handles the files under its own terms.
+
 ## Google Drive
 
 Saving to Google Drive is optional. If you choose it, the Planner connects to your Google account directly from your browser.

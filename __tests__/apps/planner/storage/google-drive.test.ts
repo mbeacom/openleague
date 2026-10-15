@@ -159,6 +159,17 @@ describe("Google Drive connector", () => {
         expect(await locations.get("google-drive")).toBeUndefined();
     });
 
+    it("makes the kind subfolder again when the coach trashed it during the session", async () => {
+        const { drive, connector } = await connected();
+        const first = await created(connector);
+        const subfolder = drive.files.get(first.fileId)!.parents[0];
+        drive.files.get(subfolder)!.trashed = true;
+        const second = await created(connector, create("spring.rankings.json"));
+        const parent = drive.files.get(second.fileId)!.parents[0];
+        expect(parent).not.toBe(subfolder);
+        expect(drive.files.get(parent)).toMatchObject({ name: "Rankings", trashed: false });
+    });
+
     it("refuses to save, without falling back, when the chosen folder was trashed or is out of reach", async () => {
         const drive = createFakeDrive();
         const chosen = drive.addFile({ name: "U12 Hawks", mimeType: "application/vnd.google-apps.folder" });

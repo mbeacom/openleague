@@ -13,6 +13,8 @@ export interface LocalFolderLocation {
     name: string;
     /** "Keep the folder up to date". */
     autosave: boolean;
+    /** New with every choice of a different folder (random, so two choices never share one); scopes the folder's file ids. */
+    generation: string;
     chosenAt: string;
 }
 
@@ -42,8 +44,8 @@ export function readLocations(stored: unknown): StorageLocations {
     if (!isRecord(stored)) return {};
     const out: StorageLocations = {};
     const local = stored["local-file"];
-    if (isRecord(local) && "handle" in local && typeof local.name === "string" && typeof local.chosenAt === "string") {
-        out["local-file"] = { handle: local.handle, name: local.name, autosave: local.autosave !== false, chosenAt: local.chosenAt };
+    if (isRecord(local) && "handle" in local && typeof local.name === "string" && typeof local.generation === "string" && local.generation !== "" && typeof local.chosenAt === "string") {
+        out["local-file"] = { handle: local.handle, name: local.name, autosave: local.autosave !== false, generation: local.generation, chosenAt: local.chosenAt };
     }
     const drive = stored["google-drive"];
     if (isRecord(drive) && typeof drive.folderId === "string" && drive.folderId !== "" && typeof drive.name === "string" && typeof drive.chosenAt === "string") {

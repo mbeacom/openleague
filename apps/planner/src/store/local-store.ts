@@ -40,7 +40,9 @@ export async function requestPersistence(
 
 export function createLocalPlannerStore(repo: PlannerRepo, options: LocalStoreOptions = {}): LocalPlannerStore {
     let asked = false;
+    const writeListeners = new Set<() => void>();
     const ctx = createStoreContext(repo, options, () => {
+        for (const listener of writeListeners) listener();
         if (asked || !repo.durable) return;
         asked = true;
         void requestPersistence(repo);
@@ -59,5 +61,9 @@ export function createLocalPlannerStore(repo: PlannerRepo, options: LocalStoreOp
         links: createLinkStore(repo),
         fileHandles: createFileHandleStore(repo, ctx.now),
         locations: createLocationStore(repo),
+        subscribeWrites: (listener) => {
+            writeListeners.add(listener);
+            return () => writeListeners.delete(listener);
+        },
     };
 }

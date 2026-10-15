@@ -16,6 +16,8 @@ export interface StoredFileHandle {
 export interface FileHandleStore {
     get: (fileId: string) => Promise<unknown>;
     put: (fileId: string, handle: unknown) => Promise<void>;
+    /** Several at once, in one write (a folder listing). */
+    putMany?: (entries: ReadonlyArray<readonly [fileId: string, handle: unknown]>) => Promise<void>;
     delete: (fileId: string) => Promise<void>;
     /** Drops every handle whose file id isn't in `keep` (no link uses it); resolves to how many it dropped. */
     sweep: (keep: ReadonlySet<string>) => Promise<number>;
@@ -40,6 +42,15 @@ export function createFileHandleStore(repo: PlannerRepo, now: () => Date = () =>
             await repo.write(async (tx) => {
                 const map = readMap(await tx.getMeta(META_FILE_HANDLES));
                 await tx.putMeta(META_FILE_HANDLES, { ...map, [fileId]: { handle, addedAt } });
+            });
+        },
+        putMany: async (entries) => {
+            if (entries.length === 0) return;
+            const addedAt = now().toISOString();
+            await repo.write(async (tx) => {
+                const map = readMap(await tx.getMeta(META_FILE_HANDLES));
+                for (const [fileId, handle] of entries) map[fileId] = { handle, addedAt };
+                await tx.putMeta(META_FILE_HANDLES, map);
             });
         },
         delete: async (fileId) => {

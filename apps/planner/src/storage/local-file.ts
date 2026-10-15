@@ -16,7 +16,8 @@
  * - With a planner folder chosen (storage locations design, decision 2), a
  *   new file is written into `<folder>/<Kind>/` with no picker, and the
  *   folder's files can be listed. Files there get folder-scoped ids
- *   (`folder:<generation>:<Kind>/<name>`), so autosave can tell them apart and
+ *   (`folder:<generation>:<Kind>/<name>`, the generation a random id per
+ *   folder choice), so autosave can tell them apart and
  *   listing the same file again reuses its id; a new folder choice is a new
  *   generation, so an old link never resolves into a different folder.
  *
@@ -61,6 +62,8 @@ export interface FsaDirectoryHandle {
     getDirectoryHandle: (name: string, options?: { create?: boolean }) => Promise<FsaDirectoryHandle>;
     getFileHandle: (name: string, options?: { create?: boolean }) => Promise<FsaFileHandle>;
     values: () => AsyncIterable<FsaFileHandle | FsaDirectoryHandle>;
+    /** Whether two handles are the same folder on disk. */
+    isSameEntry?: (other: FsaDirectoryHandle) => Promise<boolean>;
     queryPermission?: (descriptor: { mode: PermissionMode }) => Promise<PermissionState>;
     requestPermission?: (descriptor: { mode: PermissionMode }) => Promise<PermissionState>;
 }
@@ -75,7 +78,7 @@ export interface FsaPickers {
 /** The planner folder as the connector gets it: the handle, and the choice it came from. */
 export interface PlannerFolder {
     handle: FsaDirectoryHandle;
-    /** Changes with every new choice (the location's chosenAt). */
+    /** Changes with every choice of a different folder (the location's generation). */
     generation: string;
 }
 
@@ -84,8 +87,17 @@ export const FOLDER_FILE_PREFIX = "folder:";
 
 export const folderFileId = (generation: string, kindFolder: string, name: string) => `${FOLDER_FILE_PREFIX}${generation}:${kindFolder}/${name}`;
 
-/** True for a file the connector placed in, or listed from, the planner folder. */
+/** The kind subfolder ("Practices") of a file in the planner folder; undefined for any other file id. */
+export function folderOfFileId(fileId: string): string | undefined {
+    if (!isFolderFileId(fileId)) return undefined;
+    return Object.values(KIND_FOLDERS).find((kindFolder) => fileId.includes(`:${kindFolder}/`));
+}
+
+/** True for a file the connector placed in, or listed from, a planner folder (this one or an earlier choice). */
 export const isFolderFileId = (fileId: string): boolean => fileId.startsWith(FOLDER_FILE_PREFIX);
+
+/** True for a file in the planner folder chosen at `generation`: the current one, when that's the current choice. */
+export const isInFolderGeneration = (fileId: string, generation: string): boolean => fileId.startsWith(`${FOLDER_FILE_PREFIX}${generation}:`);
 
 export function isDirectoryHandle(value: unknown): value is FsaDirectoryHandle {
     const handle = value as Partial<FsaDirectoryHandle> | null;
@@ -176,6 +188,12 @@ export interface LocalFileConnectorOptions {
     now?: () => Date;
 }
 
+/** Runs `work` holding the planner folder's Web Lock where the browser has one, so two tabs don't pick the same new name. */
+async function withFolderLock<T>(work: () => Promise<T>): Promise<T> {
+    const locks = (globalThis.navigator as { locks?: { request: (name: string, callback: () => Promise<T>) => Promise<T> } } | undefined)?.locks;
+    return locks ? locks.request("openleague-planner-folder", work) : work();
+}
+
 /** Tries before giving up on a free name in a kind folder. */
 const MAX_NAME_TRIES = 50;
 
@@ -183,7 +201,7 @@ export function createLocalFileConnector({ pickers, handles, locations, newId = 
     /** The planner folder, when the coach chose one and it is still a folder handle. */
     async function folder(): Promise<PlannerFolder | null> {
         const stored = await locations?.get("local-file");
-        return stored && isDirectoryHandle(stored.handle) ? { handle: stored.handle, generation: stored.chosenAt } : null;
+        return stored && isDirectoryHandle(stored.handle) ? { handle: stored.handle, generation: stored.generation } : null;
     }
 
     /** The file as a RemoteFile, with its text: one getFile() for both, so the revision matches the text. */
@@ -244,16 +262,21 @@ export function createLocalFileConnector({ pickers, handles, locations, newId = 
         const kindFolder = kindFolderOf(input.kind);
         if (!kindFolder) return connectorFail({ code: "provider", status: 0 });
         const directory = (await kindDirectory(current.handle, kindFolder, true))!;
-        for (let n = 1; n <= MAX_NAME_TRIES; n++) {
-            const name = numberedName(input.name, n);
-            if (await exists(directory, name)) continue;
-            const handle = await directory.getFileHandle(name, { create: true });
-            await writeText(handle, input.text);
-            const fileId = folderFileId(current.generation, kindFolder, name);
-            await handles.put(fileId, handle);
-            return connectorOk((await read(fileId, handle)).file);
-        }
-        return connectorFail({ code: "provider", status: 409 });
+        // One tab at a time picks a free name; another app can still create one between the check and the create,
+        // so a file that turns out to have content is left alone and the next name is tried.
+        return withFolderLock(async () => {
+            for (let n = 1; n <= MAX_NAME_TRIES; n++) {
+                const name = numberedName(input.name, n);
+                if (await exists(directory, name)) continue;
+                const handle = await directory.getFileHandle(name, { create: true });
+                if ((await handle.getFile()).size !== 0) continue;
+                await writeText(handle, input.text);
+                const fileId = folderFileId(current.generation, kindFolder, name);
+                await handles.put(fileId, handle);
+                return connectorOk((await read(fileId, handle)).file);
+            }
+            return connectorFail({ code: "provider", status: 409 });
+        });
     }
 
     async function writeText(handle: FsaFileHandle, text: string): Promise<void> {
@@ -301,7 +324,15 @@ export function createLocalFileConnector({ pickers, handles, locations, newId = 
                 }
                 if (!(await permitted(handle, "readwrite"))) return connectorFail({ code: "auth-required" });
                 const previous = await locations.get("local-file");
-                await locations.set("local-file", { handle, name: handle.name, autosave: previous?.autosave ?? true, chosenAt: now().toISOString() });
+                // The same folder chosen again keeps its generation, so its files stay "in the folder" and none are saved twice.
+                const same = previous && isDirectoryHandle(previous.handle) && handle.isSameEntry ? await handle.isSameEntry(previous.handle).catch(() => false) : false;
+                await locations.set("local-file", {
+                    handle,
+                    name: handle.name,
+                    autosave: previous?.autosave ?? true,
+                    generation: same && previous ? previous.generation : newId(),
+                    chosenAt: now().toISOString(),
+                });
                 return connectorOk({ name: handle.name });
             }),
 
@@ -317,6 +348,7 @@ export function createLocalFileConnector({ pickers, handles, locations, newId = 
                 const current = granted.value;
                 if (!current) return connectorOk([]);
                 const files: RemoteFile[] = [];
+                const found: Array<readonly [string, FsaFileHandle]> = [];
                 const kinds = filter?.kind ? [filter.kind] : Object.keys(KIND_FOLDERS);
                 for (const kind of kinds) {
                     const kindFolder = kindFolderOf(kind);
@@ -326,10 +358,13 @@ export function createLocalFileConnector({ pickers, handles, locations, newId = 
                     for await (const entry of directory.values()) {
                         if (entry.kind !== "file" || !isDocumentFileName(entry.name)) continue;
                         const fileId = folderFileId(current.generation, kindFolder, entry.name);
-                        await handles.put(fileId, entry);
+                        found.push([fileId, entry]);
                         files.push({ ...(await read(fileId, entry)).file, kind });
                     }
                 }
+                // One write for the whole listing (the map is one record); one at a time where the store has no batch.
+                if (handles.putMany) await handles.putMany(found);
+                else for (const [fileId, handle] of found) await handles.put(fileId, handle);
                 files.sort((a, b) => b.modifiedAt.localeCompare(a.modifiedAt));
                 return connectorOk(files);
             }),

@@ -106,6 +106,8 @@ export interface LocalPlannerStore extends PlannerStore, RankingsOps, RankingsDo
     fileHandles: FileHandleStore;
     /** Where connectors save new files (storage locations design). */
     locations: LocationStore;
+    /** Called after each successful user write in this tab (autosave listens); returns the unsubscribe. */
+    subscribeWrites: (listener: () => void) => () => void;
     /** Favorites on this device (practice favorites spec): always present here. */
     listPlannerFavorites: NonNullable<PlannerStore["listPlannerFavorites"]>;
     setPlannerFavorite: NonNullable<PlannerStore["setPlannerFavorite"]>;

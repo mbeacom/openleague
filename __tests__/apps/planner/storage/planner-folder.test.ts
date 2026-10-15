@@ -11,9 +11,9 @@ import { createMemoryLocationStore, type LocationStore } from "@/apps/planner/sr
 import { docKeyOf } from "@/apps/planner/src/store/links";
 import type { LocalPlannerStore } from "@/apps/planner/src/store/types";
 import { createStorageService } from "@/apps/planner/src/storage/service";
-import { isFolderFileId } from "@/apps/planner/src/storage/local-file";
+import { isFolderFileId, isInFolderGeneration } from "@/apps/planner/src/storage/local-file";
 import { numberedName } from "@/apps/planner/src/storage/folders";
-import { restoreFromFolder, saveAllToFolder, startFolderAutosave } from "@/apps/planner/src/storage/planner-folder";
+import { restoreFromFolder, saveAllToFolder, startFolderAutosave, takeFolderCopy } from "@/apps/planner/src/storage/planner-folder";
 import { PLAN_FORMAT } from "@/lib/plan-document";
 import { RANKINGS_FORMAT, createRankingsDocument } from "@/lib/rankings-document";
 import { createFakeFsa, memoryHandleStore, type FakeFsa } from "./fake-fsa";
@@ -51,6 +51,15 @@ describe("numbered names", () => {
 });
 
 describe("the Local connector with a planner folder", () => {
+    it("never writes over a file another app created under the same name a moment before", async () => {
+        const { local, disk } = setup();
+        await chooseFolder(local, disk);
+        disk.beforeNextCreate((path) => disk.seed(path, "another app's file"));
+        const saved = await local.save({ ref: null, name: "fall.rankings.json", text: "mine", kind: RANKINGS_FORMAT, documentId: "d1", expectedRevision: null });
+        expect(saved.ok && saved.value.name).toBe("fall (2).rankings.json");
+        expect(disk.read(`${ROOT}/Rankings/fall.rankings.json`)).toBe("another app's file");
+    });
+
     it("has no location until a folder is chosen, then saves new files into the kind's subfolder without a picker", async () => {
         const { local, disk } = setup();
         expect(await local.location!()).toBeNull();
@@ -116,6 +125,44 @@ describe("the Local connector with a planner folder", () => {
         disk.activate();
         disk.denyPrompts(true);
         expect(await local.list()).toEqual({ ok: false, error: { code: "auth-required" } });
+    });
+});
+
+describe("Choosing the folder again", () => {
+    it("keeps the same folder's files in it, so nothing is saved twice", async () => {
+        const { store, disk, service, local } = setup();
+        await chooseFolder(local, disk);
+        await newPractice(store, "Tuesday skills");
+        await saveAllToFolder(service);
+        await chooseFolder(local, disk);
+        expect(await saveAllToFolder(service)).toMatchObject({ added: 0, moved: 0 });
+        expect(disk.paths()).toHaveLength(1);
+    });
+
+    it("saves into a new folder what was linked into the one before, and leaves the old files as they were", async () => {
+        const { store, disk, service, local, locations } = setup();
+        await chooseFolder(local, disk, "Old");
+        const id = await newPractice(store, "Tuesday skills");
+        await saveAllToFolder(service);
+        const oldPath = disk.paths()[0];
+        const before = disk.read(oldPath);
+        await chooseFolder(local, disk, "New");
+        await rename(store, id, "Tuesday skills and edges");
+
+        // Autosave waits: the file it would write is in the folder used before.
+        const quiet = { setInterval: (() => 0) as unknown as typeof setInterval, clearInterval: (() => undefined) as typeof clearInterval, setTimeout: (() => 0) as unknown as typeof setTimeout, clearTimeout: (() => undefined) as typeof clearTimeout };
+        const autosave = startFolderAutosave(service, { scope: quiet, granted: async () => true });
+        expect(await autosave.run()).toBe(0);
+        autosave.stop();
+
+        expect(await saveAllToFolder(service)).toMatchObject({ added: 0, moved: 1 });
+        expect(disk.read(oldPath)).toBe(before);
+        const moved = disk.paths().find((path) => path.startsWith("New/Practices/"))!;
+        expect(disk.read(moved)).toContain("Tuesday skills and edges");
+        const link = await store.links.get(docKeyOf(PLAN_FORMAT, id));
+        const current = await locations.get("local-file");
+        expect(isInFolderGeneration(link!.remote.fileId, current!.generation)).toBe(true);
+        expect(await saveAllToFolder(service)).toMatchObject({ added: 0, moved: 0, saved: 0 });
     });
 });
 
@@ -192,6 +239,25 @@ describe("Restore from the folder", () => {
         expect(recovered.success && recovered.data).toEqual([]);
     });
 
+    it("lets the coach take the folder's copy of a document that differs, keeping this browser's in Recovered copies", async () => {
+        const disk = createFakeFsa();
+        const { store, service, local } = setup({ disk });
+        await chooseFolder(local, disk);
+        const id = await newPractice(store, "Saturday scrimmage");
+        await saveAllToFolder(service);
+        await service.engine.unlink(docKeyOf(PLAN_FORMAT, id));
+        await rename(store, id, "Changed here");
+        const summary = await restoreFromFolder(service);
+        expect(summary.differences.map((difference) => difference.title)).toEqual(["Changed here"]);
+        const taken = await takeFolderCopy(service, summary.differences[0]);
+        expect(taken.ok).toBe(true);
+        const view = await store.getSessionView(id);
+        expect(view.success && view.data.title).toBe("Saturday scrimmage");
+        expect(await store.links.get(docKeyOf(PLAN_FORMAT, id))).not.toBeNull();
+        const recovered = await store.listRecoveredCopies();
+        expect(recovered.success && recovered.data.map((copy) => copy.title)).toEqual(["Changed here"]);
+    });
+
     it("counts files it can't read, and keeps going", async () => {
         const { disk, service, local } = setup();
         await chooseFolder(local, disk);
@@ -201,7 +267,12 @@ describe("Restore from the folder", () => {
 });
 
 describe("Keep the folder up to date", () => {
-    const quietScope = { setInterval: (() => 0) as unknown as typeof setInterval, clearInterval: (() => undefined) as typeof clearInterval };
+    const quietScope = {
+        setInterval: (() => 0) as unknown as typeof setInterval,
+        clearInterval: (() => undefined) as typeof clearInterval,
+        setTimeout: (() => 0) as unknown as typeof setTimeout,
+        clearTimeout: (() => undefined) as typeof clearTimeout,
+    };
 
     it("saves edited documents linked into the folder, only when the browser already grants it", async () => {
         const { store, disk, service, local } = setup();
@@ -246,6 +317,29 @@ describe("Keep the folder up to date", () => {
         expect(await autosave.run()).toBe(0);
         expect(disk.read("elsewhere.olplan.json")).not.toContain("Edited");
         autosave.stop();
+    });
+
+    it("saves a few seconds after the last edit, once, however many edits came before", async () => {
+        const { store, disk, service, local } = setup();
+        await chooseFolder(local, disk);
+        const id = await newPractice(store, "Tuesday skills");
+        await saveAllToFolder(service);
+        const path = disk.paths().find((entry) => entry.startsWith(`${ROOT}/Practices/`))!;
+        vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+        try {
+            const autosave = startFolderAutosave(service, { scope: { ...quietScope, setTimeout, clearTimeout }, debounceMs: 3000, granted: async () => true });
+            const writesBefore = disk.writes;
+            await rename(store, id, "Edit one");
+            await rename(store, id, "Edit two");
+            expect(disk.writes).toBe(writesBefore);
+            await vi.advanceTimersByTimeAsync(3000);
+            vi.useRealTimers();
+            await vi.waitFor(() => expect(disk.read(path)).toContain("Edit two"));
+            expect(disk.writes).toBe(writesBefore + 1);
+            autosave.stop();
+        } finally {
+            vi.useRealTimers();
+        }
     });
 
     it("saves when the tab is hidden", async () => {

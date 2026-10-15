@@ -17,6 +17,7 @@ import type { DocumentLink } from "../../store/records";
 import type { RecoveredCopySummary } from "../../store/recovered";
 import { RECOVERED_RETENTION_DAYS } from "../../store/recovered";
 import { parseDocKey } from "../../storage/documents";
+import { folderOfFileId } from "../../storage/local-file";
 import { planStartDate } from "../PlanReviewPanel";
 import { CloudConnections } from "./CloudConnections";
 import { SaveLocations } from "./SaveLocations";
@@ -34,6 +35,12 @@ interface LinkedRow {
     link: DocumentLink;
     title: string;
     href: string | null;
+}
+
+/** "Practices/tuesday.olplan.json in the planner folder", or the file's name and where it is. */
+function linkedWhere(link: DocumentLink): string {
+    const kindFolder = link.connector === "local-file" ? folderOfFileId(link.remote.fileId) : undefined;
+    return kindFolder ? `${kindFolder}/${link.remote.name} in the planner folder` : `${link.remote.name} ${CONNECTOR_LABELS[link.connector].where}`;
 }
 
 const kindNoun = (kind: string) => (kind === PLAN_FORMAT ? "Practice plan" : kind === RANKINGS_FORMAT ? "Rankings" : "Document");
@@ -154,7 +161,7 @@ export function StorageScreen() {
                     </Stack>
                 </Box>
 
-                <SaveLocations connectors={connectors} />
+                <SaveLocations connectors={connectors} onChanged={reload} />
 
                 <Box component="section" aria-labelledby="linked-title">
                     <Typography id="linked-title" variant="h6" component="h2" fontWeight={700} sx={{ mb: 1 }}>
@@ -170,7 +177,7 @@ export function StorageScreen() {
                                 <Card key={link.docKey} variant="outlined">
                                     <CardContent sx={{ pb: 1 }}>
                                         <Typography fontWeight={700}>{title}</Typography>
-                                        <Typography variant="body2" color="text.secondary">{`${link.remote.name} ${CONNECTOR_LABELS[link.connector].where} · last saved or read ${savedAtText(link.lastSyncedAt)}`}</Typography>
+                                        <Typography variant="body2" color="text.secondary">{`${linkedWhere(link)} · last saved or read ${savedAtText(link.lastSyncedAt)}`}</Typography>
                                     </CardContent>
                                     <CardActions sx={{ justifyContent: "flex-end", pt: 0, flexWrap: "wrap", gap: 1 }}>
                                         {href && (

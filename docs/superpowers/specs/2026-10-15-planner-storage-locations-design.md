@@ -34,12 +34,22 @@ browser back to where they were from those files.
    - "Open from…" offers "From the planner folder…", a list of the folder's
      files. The connector lists only with a folder chosen, so its
      `capabilities.list` stays false; the screens ask `location()` instead.
-   - Files in the folder get folder-scoped ids (`folder:<when chosen>:<Kind>/<name>`).
-     Choosing another folder starts new ids, so an old link never resolves
-     into a different folder; its stored handle still reaches the old file.
+   - Files in the folder get folder-scoped ids (`folder:<generation>:<Kind>/<name>`),
+     where the generation is a random id per folder choice. Choosing the same
+     folder again (`isSameEntry`) keeps it. Choosing a different folder starts
+     a new one, so an old link never resolves into the new folder; its stored
+     handle still reaches the old file. Autosave writes only to the current
+     generation; "Save everything" saves documents linked into an earlier
+     folder into this one and relinks them, leaving the old files as they were.
+   - New names are picked under a Web Lock, and a file that turns out to have
+     content when created (another app got there first) is skipped for the
+     next number, so a save never truncates someone else's file.
+   - A restore that finds a document with other content lists it with "Use
+     the folder's copy" (this browser's version goes to Recovered copies);
+     leaving it keeps this browser's version, unlinked.
    - **Keep the folder up to date** (on by default): linked files in the planner
-     folder that have edits are saved every 15 seconds and when the tab is
-     hidden. Autosave runs only while the browser already
+     folder that have edits are saved 3 seconds after the last edit, when the
+     tab is hidden, and once a minute as a safety net. Autosave runs only while the browser already
      grants access; it never prompts. A conflict is left for the coach (the
      storage bar shows it on the next check), never resolved automatically.
    - **Save everything to the folder** links every unlinked practice and the
