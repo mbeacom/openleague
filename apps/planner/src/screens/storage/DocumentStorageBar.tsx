@@ -7,6 +7,7 @@
  * Every remote write is a tap: nothing saves in the background.
  */
 import { useCallback, useEffect, useRef, useState } from "react";
+import { kindFolderOf } from "../../storage/folders";
 import { Alert, Box, Button, Chip, ListItemText, Menu, MenuItem, Paper, Stack, Typography } from "@mui/material";
 import {
     CloudDoneOutlined as SyncedIcon,
@@ -75,6 +76,8 @@ function StorageBar({ docKey, kind, fileName, onReplaced, editVersion = 0 }: Doc
     const [choice, setChoice] = useState<Choice | null>(null);
     const [dialogOpen, setDialogOpen] = useState(false);
     const [menu, setMenu] = useState<HTMLElement | null>(null);
+    /** Where each connector puts a new file (storage locations design), read when the menu opens. */
+    const [places, setPlaces] = useState<Partial<Record<ConnectorId, string>>>({});
     /** The linked file refused a save (a view-only share, spec R8): offer a copy. */
     const [refused, setRefused] = useState(false);
     const preparation = useConnectorPreparation();
@@ -293,6 +296,10 @@ function StorageBar({ docKey, kind, fileName, onReplaced, editVersion = 0 }: Doc
                         onClick={(event) => {
                             preparation.prepare(connectors);
                             setMenu(event.currentTarget);
+                            void Promise.all(connectors.map(async (connector) => [connector.id, await connector.location?.()] as const)).then((entries) => {
+                                const folder = kindFolderOf(kind);
+                                setPlaces(Object.fromEntries(entries.flatMap(([id, location]) => (location ? [[id, folder ? `Into ${folder} in ${location.name}` : `Into ${location.name}`]] : []))));
+                            });
                         }}
                         sx={{ minHeight: 44 }}
                     >
@@ -327,7 +334,7 @@ function StorageBar({ docKey, kind, fileName, onReplaced, editVersion = 0 }: Doc
                     const loading = preparation.isPreparing(connector.id);
                     return (
                         <MenuItem key={connector.id} disabled={loading} onClick={() => !loading && saveTo(connector.id)} sx={{ minHeight: 44 }}>
-                            <ListItemText primary={CONNECTOR_LABELS[connector.id].item} secondary={loading ? LOADING_HINT : link ? "Saves to a new file and links it" : undefined} />
+                            <ListItemText primary={CONNECTOR_LABELS[connector.id].item} secondary={loading ? LOADING_HINT : [places[connector.id], link ? "Saves to a new file and links it" : undefined].filter(Boolean).join(". ") || undefined} />
                         </MenuItem>
                     );
                 })}

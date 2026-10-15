@@ -96,6 +96,9 @@ export const ONEDRIVE_APP_FOLDER_UNAVAILABLE =
     "OneDrive couldn't open the planner's folder for this work or school account. Your organization may not allow it. " +
     "Save to a file on this computer, or connect OneDrive with a personal Microsoft account.";
 
+/** The folder chosen for new files is gone (storage locations design). */
+export const LOCATION_MISSING_MESSAGE = "The folder chosen for new files is gone, or the planner can no longer reach it. Choose another folder, or the default, in Saved files.";
+
 export const STORE_FAILED_MESSAGE = "Couldn't update this document. Please try again.";
 
 /** A failed step in words; null when there's nothing to say (a cancelled picker). */
@@ -124,6 +127,8 @@ export function syncErrorText(error: SyncError, name: string): string | null {
             return error.message;
         case "app-folder-unavailable":
             return ONEDRIVE_APP_FOLDER_UNAVAILABLE;
+        case "location-missing":
+            return LOCATION_MISSING_MESSAGE;
         case "not-linked":
             return "This document isn't saved to a file.";
         case "missing-local":

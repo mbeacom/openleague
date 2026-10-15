@@ -189,6 +189,12 @@ export const META_RECOVERED_COPIES = "recoveredCopies";
  * permission). Read through storage/local-file.ts.
  */
 export const META_FILE_HANDLES = "fileHandles";
+/**
+ * Where each connector saves new files (storage locations design): the
+ * planner folder's directory handle for files on this computer, the chosen
+ * Drive folder. Read through store/locations.ts.
+ */
+export const META_STORAGE_LOCATIONS = "storageLocations";
 
 /** A working copy kept when something replaced it. `payload` is the bare document, as it was. */
 export interface RecoveredCopy {

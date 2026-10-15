@@ -54,7 +54,7 @@ function parseMultipart(body: string, contentType: string): { metadata: Record<s
     return { metadata: JSON.parse(parts[0]) as Record<string, unknown>, content: parts[1] };
 }
 
-/** files.list's q, as far as the connector writes it: appProperties clauses (OR'd in parentheses, else AND'd), a mimeType and trashed=false. */
+/** files.list's q, as far as the connector writes it: appProperties clauses (OR'd in parentheses, else AND'd), a mimeType, '<id>' in parents and trashed=false. */
 function matches(file: FakeDriveFile, q: string): boolean {
     const clauses = Array.from(q.matchAll(/appProperties has \{ key='((?:\\.|[^'\\])*)' and value='((?:\\.|[^'\\])*)' \}/g), (match) => ({
         key: match[1].replace(/\\(.)/g, "$1"),
@@ -66,6 +66,8 @@ function matches(file: FakeDriveFile, q: string): boolean {
     const mime = /mimeType='([^']*)'/.exec(q)?.[1];
     if (mime !== undefined && file.mimeType !== mime) return false;
     if (/trashed=false/.test(q) && file.trashed) return false;
+    const parent = /'([^']*)' in parents/.exec(q)?.[1];
+    if (parent !== undefined && !file.parents.includes(parent)) return false;
     return true;
 }
 
@@ -97,6 +99,7 @@ export function createFakeDrive() {
     let offline = false;
     let listPageSize: number | null = null;
     const pickQueue: Array<PickedFile[] | Error> = [];
+    const folderPickQueue: Array<PickedFile | null> = [];
     const pickInputs: Array<{ accessToken: string; apiKey: string; appId: string }> = [];
     let nextToken: TokenResult | Error | null = null;
     let tokenLifetimeSeconds = 3599;
@@ -156,8 +159,8 @@ export function createFakeDrive() {
             return json({ files: page.map(resource), ...(next ? { nextPageToken: next } : {}) });
         }
         if (!upload && url.pathname === "/drive/v3/files" && method === "POST") {
-            const metadata = JSON.parse(body) as { name: string; mimeType: string; appProperties?: Record<string, string> };
-            const created = addFile({ name: metadata.name, mimeType: metadata.mimeType, appProperties: metadata.appProperties ?? {} });
+            const metadata = JSON.parse(body) as { name: string; mimeType: string; parents?: string[]; appProperties?: Record<string, string> };
+            const created = addFile({ name: metadata.name, mimeType: metadata.mimeType, parents: metadata.parents ?? [], appProperties: metadata.appProperties ?? {} });
             return json(resource(created));
         }
         if (!upload && id && method === "GET") {
@@ -223,6 +226,10 @@ export function createFakeDrive() {
             if (next instanceof Error) throw next;
             return next ?? [];
         },
+        pickFolder: async (input) => {
+            pickInputs.push(input);
+            return folderPickQueue.shift() ?? null;
+        },
     };
 
     return {
@@ -254,6 +261,8 @@ export function createFakeDrive() {
         goOnline: () => void (offline = false),
         failNext: (failure: InjectedFailure) => void failures.push(failure),
         queuePick: (result: PickedFile[] | Error) => void pickQueue.push(result),
+        /** The next folder-mode pick: a folder, or null (cancelled). */
+        queueFolderPick: (result: PickedFile | null) => void folderPickQueue.push(result),
         queueToken: (result: TokenResult | Error) => void (nextToken = result),
         setTokenLifetime: (seconds: number) => void (tokenLifetimeSeconds = seconds),
         setListPageSize: (size: number) => void (listPageSize = size),

@@ -31,6 +31,7 @@ import { PublicClientApplication, type AccountInfo, type AuthenticationResult, t
 import { DOCUMENT_KINDS, ENVELOPE_OVERHEAD_BYTES } from "@/lib/document-envelope";
 import { PLAN_FORMAT } from "@/lib/plan-document/document";
 import { RANKINGS_FORMAT } from "@/lib/rankings-document/document";
+import { KIND_FOLDERS, kindFolderOf, ONEDRIVE_FOLDER_DESCRIPTION } from "./folders";
 import { MICROSOFT_AUTHORITIES, type MicrosoftAccounts } from "../../cloud-config";
 import { connectorFail, connectorOk, type ConnectorError, type ConnectorStatus, type RemoteFile, type RemoteRef, type Result, type SaveInput, type StorageConnector } from "./connector";
 
@@ -398,17 +399,69 @@ export function createOneDriveConnector({ auth, fetch: fetchImpl = (input, init)
         return connectorFail(remote ? { code: "conflict", remote } : { code: "provider", status: 412 });
     }
 
+    /** `Apps/<app>/<Kind>/` exists afterwards (storage locations design, decision 4); a folder already there is fine. */
+    async function ensureKindFolder(kindFolder: string): Promise<Result<void>> {
+        const response = await graph(`${GRAPH_ROOT}/me/drive/special/approot/children`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ name: kindFolder, folder: {}, "@microsoft.graph.conflictBehavior": "fail" }),
+        });
+        if (!response.ok) return response;
+        if (response.value.ok || response.value.status === 409) return connectorOk(undefined);
+        return connectorFail(statusError(response.value, "folder"));
+    }
+
     async function create(input: SaveInput): Promise<Result<RemoteFile>> {
+        // New files go in the kind's subfolder; a kind this build doesn't place stays at the top of the app folder.
+        const kindFolder = kindFolderOf(input.kind);
+        const parent = kindFolder ? `${encodeURIComponent(kindFolder)}/` : "";
+        let madeFolder = false;
         for (const name of candidateNames(input.name)) {
             // `fail`, not `rename`: OneDrive's own renaming ("fall.rankings 1.json") would break the document extension.
-            const url = `${GRAPH_ROOT}/me/drive/special/approot:/${encodeURIComponent(name)}:/content?@microsoft.graph.conflictBehavior=fail`;
-            const response = await graph(url, { method: "PUT", headers: { "Content-Type": "text/plain" }, body: input.text });
+            const url = `${GRAPH_ROOT}/me/drive/special/approot:/${parent}${encodeURIComponent(name)}:/content?@microsoft.graph.conflictBehavior=fail`;
+            let response = await graph(url, { method: "PUT", headers: { "Content-Type": "text/plain" }, body: input.text });
             if (!response.ok) return response;
+            // The subfolder isn't there yet: made once, then the same name is tried again.
+            if (response.value.status === 404 && kindFolder && !madeFolder) {
+                madeFolder = true;
+                const made = await ensureKindFolder(kindFolder);
+                if (!made.ok) return connectorFail(made.error);
+                response = await graph(url, { method: "PUT", headers: { "Content-Type": "text/plain" }, body: input.text });
+                if (!response.ok) return response;
+            }
             if (response.value.status === 409) continue;
             if (!response.value.ok) return connectorFail(statusError(response.value, "folder"));
             return remoteFrom(response.value);
         }
         return connectorFail({ code: "provider", status: 409 });
+    }
+
+    /** The document files in one folder of the app folder; [] for a subfolder that doesn't exist yet. */
+    async function listFolder(url: string, filter: { kind?: string } | undefined, optional: boolean): Promise<Result<RemoteFile[]>> {
+        const files: RemoteFile[] = [];
+        let next: string | null = url;
+        while (next) {
+            const response: Result<Response> = await graph(next);
+            if (!response.ok) return connectorFail(response.error);
+            if (optional && response.value.status === 404) return connectorOk([]);
+            if (!response.value.ok) return connectorFail(statusError(response.value, "folder"));
+            let page: { value?: DriveItem[]; "@odata.nextLink"?: string };
+            try {
+                page = (await response.value.json()) as typeof page;
+            } catch {
+                return connectorFail({ code: "provider", status: response.value.status });
+            }
+            for (const item of page.value ?? []) {
+                if (item.file === undefined) continue;
+                const remote = remoteOf(item);
+                if (remote?.kind === undefined) continue;
+                if (filter?.kind === undefined || remote.kind === filter.kind) files.push(remote);
+            }
+            const link = page["@odata.nextLink"];
+            // The token only ever goes to Graph.
+            next = typeof link === "string" && link.startsWith(`${GRAPH_ROOT}/`) ? link : null;
+        }
+        return connectorOk(files);
     }
 
     async function overwrite(ref: RemoteRef, input: SaveInput): Promise<Result<RemoteFile>> {
@@ -444,28 +497,21 @@ export function createOneDriveConnector({ auth, fetch: fetchImpl = (input, init)
 
         disconnect: () => auth.disconnect(),
 
+        // Named after the Entra registration, which a fork sets: described, not spelled out.
+        location: async () => ({ name: ONEDRIVE_FOLDER_DESCRIPTION, chosen: false }),
+
         list: async (filter) => {
-            const files: RemoteFile[] = [];
-            let url: string | null = `${GRAPH_ROOT}/me/drive/special/approot/children?$select=${ITEM_FIELDS}&$top=200`;
-            while (url) {
-                const response: Result<Response> = await graph(url);
-                if (!response.ok) return connectorFail(response.error);
-                if (!response.value.ok) return connectorFail(statusError(response.value, "folder"));
-                let page: { value?: DriveItem[]; "@odata.nextLink"?: string };
-                try {
-                    page = (await response.value.json()) as typeof page;
-                } catch {
-                    return connectorFail({ code: "provider", status: response.value.status });
-                }
-                for (const item of page.value ?? []) {
-                    if (item.file === undefined) continue;
-                    const remote = remoteOf(item);
-                    if (remote?.kind === undefined) continue;
-                    if (filter?.kind === undefined || remote.kind === filter.kind) files.push(remote);
-                }
-                const next = page["@odata.nextLink"];
-                // The token only ever goes to Graph.
-                url = typeof next === "string" && next.startsWith(`${GRAPH_ROOT}/`) ? next : null;
+            // Files saved before the subfolders sit at the top of the app folder; newer ones in each kind's subfolder.
+            const top = await listFolder(`${GRAPH_ROOT}/me/drive/special/approot/children?$select=${ITEM_FIELDS}&$top=200`, filter, false);
+            if (!top.ok) return top;
+            const files = [...top.value];
+            const kinds = filter?.kind ? [filter.kind] : Object.keys(KIND_FOLDERS);
+            for (const kind of kinds) {
+                const kindFolder = kindFolderOf(kind);
+                if (!kindFolder) continue;
+                const listed = await listFolder(`${GRAPH_ROOT}/me/drive/special/approot:/${encodeURIComponent(kindFolder)}:/children?$select=${ITEM_FIELDS}&$top=200`, filter, true);
+                if (!listed.ok) return listed;
+                files.push(...listed.value);
             }
             return connectorOk(files);
         },

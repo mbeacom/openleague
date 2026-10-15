@@ -5,7 +5,10 @@
  * not the cTag), `If-Match` and 412 on content PUTs, `conflictBehavior=fail`
  * and 409 on creates, paged children with `@odata.nextLink`, pre-authenticated
  * download URLs that refuse an Authorization header, 401 for a bad token, and
- * throttling with Retry-After. CI makes no calls to Microsoft.
+ * throttling with Retry-After. Folders inside the app folder (one level,
+ * the kind subfolders) answer 404 to a create under a folder that doesn't
+ * exist yet, as a path upload into a missing parent does here. CI makes no
+ * calls to Microsoft.
  */
 import type { AccountInfo, AuthenticationResult } from "@azure/msal-browser";
 import { GRAPH_ROOT, PERSONAL_ACCOUNT_TENANT_ID, type MsalClient } from "@/apps/planner/src/storage/onedrive";
@@ -15,6 +18,8 @@ export const WORK_TENANT_ID = "11111111-2222-4333-8444-555555555555";
 
 interface FakeItem {
     id: string;
+    /** The subfolder of the app folder it is in; "" for the top. */
+    parent: string;
     name: string;
     text: string;
     cTag: string;
@@ -44,7 +49,10 @@ export interface FakeGraph {
     setPageSize: (size: number) => void;
     /** A nextLink pointing away from Graph, to check the token never follows it. */
     setForeignNextLink: (url: string | null) => void;
+    /** "Practices/x.olplan.json" seeds into a subfolder (made if needed). */
     seed: (name: string, text: string, by?: string) => FakeItem;
+    /** The subfolders that exist. */
+    folders: () => string[];
     overwrite: (id: string, text: string, by?: string) => void;
     rename: (id: string, name: string) => void;
     remove: (id: string) => void;
@@ -68,6 +76,7 @@ function headersOf(init: RequestInit | undefined): Record<string, string> {
 
 export function createFakeGraph({ user = "Coach Avery" }: { user?: string } = {}): FakeGraph {
     const items = new Map<string, FakeItem>();
+    const folders = new Set<string>();
     const tokens = new Set<string>();
     const requests: GraphRequest[] = [];
     let offline = false;
@@ -96,8 +105,12 @@ export function createFakeGraph({ user = "Coach Avery" }: { user?: string } = {}
         };
     }
 
-    function put(name: string, text: string, by: string): FakeItem {
-        const item: FakeItem = { id: `item-${++seq}`, name, text, cTag: tag("c:"), eTag: tag(""), modifiedAt: stamp(), by };
+    function put(path: string, text: string, by: string): FakeItem {
+        const at = path.lastIndexOf("/");
+        const parent = at === -1 ? "" : path.slice(0, at);
+        const name = at === -1 ? path : path.slice(at + 1);
+        if (parent) folders.add(parent);
+        const item: FakeItem = { id: `item-${++seq}`, parent, name, text, cTag: tag("c:"), eTag: tag(""), modifiedAt: stamp(), by };
         items.set(item.id, item);
         return item;
     }
@@ -126,6 +139,7 @@ export function createFakeGraph({ user = "Coach Avery" }: { user?: string } = {}
             foreignNext = url;
         },
         seed: (name, text, by = user) => put(name, text, by),
+        folders: () => [...folders],
         overwrite: (id, text, by = "Coach Jordan") => {
             const item = items.get(id);
             if (!item) throw new Error(`no item ${id}`);
@@ -176,19 +190,36 @@ export function createFakeGraph({ user = "Coach Avery" }: { user?: string } = {}
                 if (blocked !== null) return json(blocked, { error: { code: "accessDenied" } });
                 const create = /^\/me\/drive\/special\/approot:\/([^:]+):\/content\?@microsoft\.graph\.conflictBehavior=fail$/.exec(path);
                 if (create && method === "PUT") {
-                    const name = decodeURIComponent(create[1]);
-                    if ([...items.values()].some((item) => item.name === name)) return json(409, { error: { code: "nameAlreadyExists" } });
-                    const item = put(name, String(init?.body ?? ""), user);
+                    const segments = create[1].split("/").map(decodeURIComponent);
+                    const name = segments.pop()!;
+                    const parent = segments.join("/");
+                    if (parent && !folders.has(parent)) return json(404, { error: { code: "itemNotFound" } });
+                    if ([...items.values()].some((item) => item.parent === parent && item.name === name)) return json(409, { error: { code: "nameAlreadyExists" } });
+                    const item = put(parent ? `${parent}/${name}` : name, String(init?.body ?? ""), user);
                     return json(201, itemJson(item, false));
+                }
+                if (path === "/me/drive/special/approot/children" && method === "POST") {
+                    const body = JSON.parse(String(init?.body ?? "{}")) as { name?: string; folder?: unknown };
+                    if (!body.name || body.folder === undefined) return json(400, { error: { code: "invalidRequest" } });
+                    if (folders.has(body.name)) return json(409, { error: { code: "nameAlreadyExists" } });
+                    folders.add(body.name);
+                    return json(201, { id: `folder-${body.name}`, name: body.name, folder: { childCount: 0 } });
+                }
+                const sub = /^\/me\/drive\/special\/approot:\/([^:]+):\/children/.exec(path);
+                if (sub && method === "GET") {
+                    const parent = decodeURIComponent(sub[1]);
+                    if (!folders.has(parent)) return json(404, { error: { code: "itemNotFound" } });
+                    return json(200, { value: [...items.values()].filter((item) => item.parent === parent).map((item) => itemJson(item, false)) });
                 }
                 if (path.startsWith("/me/drive/special/approot/children") && method === "GET") {
                     const skip = Number(new URL(url).searchParams.get("$skiptoken") ?? "0");
-                    const all = [...items.values()];
+                    const all = [...items.values()].filter((item) => item.parent === "");
                     const page = all.slice(skip, skip + pageSize).map((item) => itemJson(item, false));
                     const more = skip + pageSize < all.length;
                     const nextLink = foreignNext ?? (more ? `${GRAPH_ROOT}/me/drive/special/approot/children?$skiptoken=${skip + pageSize}` : undefined);
                     // A folder in the app folder is skipped by the connector.
-                    const folder = skip === 0 ? [{ id: "folder-1", name: "Old plans", cTag: '"c:x"', folder: { childCount: 0 } }] : [];
+                    const subfolders = [...folders].map((folder) => ({ id: `folder-${folder}`, name: folder, cTag: '"c:f"', folder: { childCount: 0 } }));
+                    const folder = skip === 0 ? [{ id: "folder-1", name: "Old plans", cTag: '"c:x"', folder: { childCount: 0 } }, ...subfolders] : [];
                     return json(200, { value: [...folder, ...page], ...(nextLink ? { "@odata.nextLink": nextLink } : {}) });
                 }
                 if (method === "GET") return json(200, { id: "approot", name: "OpenLeague Planner", folder: { childCount: items.size } });

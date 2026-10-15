@@ -19,6 +19,7 @@ import { RECOVERED_RETENTION_DAYS } from "../../store/recovered";
 import { parseDocKey } from "../../storage/documents";
 import { planStartDate } from "../PlanReviewPanel";
 import { CloudConnections } from "./CloudConnections";
+import { SaveLocations } from "./SaveLocations";
 import { useStorage } from "./StorageContext";
 import { CONNECTOR_LABELS, DOWNLOAD_IS_A_COPY, SAVED_IN_BROWSER, UNLINK_LABEL, savedAtText } from "./messages";
 
@@ -152,6 +153,8 @@ export function StorageScreen() {
                         <CloudConnections connectors={connectors} />
                     </Stack>
                 </Box>
+
+                <SaveLocations connectors={connectors} />
 
                 <Box component="section" aria-labelledby="linked-title">
                     <Typography id="linked-title" variant="h6" component="h2" fontWeight={700} sx={{ mb: 1 }}>

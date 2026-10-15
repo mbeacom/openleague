@@ -13,13 +13,22 @@
  *   browser asks again, and only from a tap: a check made without one reports
  *   auth-required and the screen offers "Allow access".
  *
+ * - With a planner folder chosen (storage locations design, decision 2), a
+ *   new file is written into `<folder>/<Kind>/` with no picker, and the
+ *   folder's files can be listed. Files there get folder-scoped ids
+ *   (`folder:<generation>:<Kind>/<name>`), so autosave can tell them apart and
+ *   listing the same file again reuses its id; a new folder choice is a new
+ *   generation, so an old link never resolves into a different folder.
+ *
  * Tier 2 (download and file input, every browser including iOS Safari) is not
  * a connector: a download is a copy with no link (see the storage screens).
  * Where the API is missing, this connector reports "unconfigured".
  */
 import { formatFromFileName } from "@/lib/document-formats";
+import { isDocumentFileName, KIND_FOLDERS, kindFolderOf, numberedName } from "./folders";
 import type { FileHandleStore } from "../store/file-handles";
-import { connectorFail, connectorOk, type ConnectorError, type RemoteFile, type RemoteRef, type Result, type StorageConnector } from "./connector";
+import type { LocationStore } from "../store/locations";
+import { connectorFail, connectorOk, type ConnectorError, type RemoteFile, type RemoteRef, type Result, type SaveInput, type StorageConnector } from "./connector";
 import { reencodeForFile } from "./encode";
 
 type PermissionMode = "read" | "readwrite";
@@ -45,10 +54,42 @@ export interface FsaPickerType {
     accept: Record<string, string[]>;
 }
 
-/** The window's pickers (showSaveFilePicker, showOpenFilePicker). */
+/** The part of FileSystemDirectoryHandle this connector uses. */
+export interface FsaDirectoryHandle {
+    readonly kind: "directory";
+    readonly name: string;
+    getDirectoryHandle: (name: string, options?: { create?: boolean }) => Promise<FsaDirectoryHandle>;
+    getFileHandle: (name: string, options?: { create?: boolean }) => Promise<FsaFileHandle>;
+    values: () => AsyncIterable<FsaFileHandle | FsaDirectoryHandle>;
+    queryPermission?: (descriptor: { mode: PermissionMode }) => Promise<PermissionState>;
+    requestPermission?: (descriptor: { mode: PermissionMode }) => Promise<PermissionState>;
+}
+
+/** The window's pickers (showSaveFilePicker, showOpenFilePicker, and showDirectoryPicker where the browser has it). */
 export interface FsaPickers {
     showSaveFilePicker: (options: { suggestedName?: string; types?: FsaPickerType[]; excludeAcceptAllOption?: boolean }) => Promise<FsaFileHandle>;
     showOpenFilePicker: (options: { multiple?: boolean; types?: FsaPickerType[]; excludeAcceptAllOption?: boolean }) => Promise<FsaFileHandle[]>;
+    showDirectoryPicker?: (options: { id?: string; mode?: PermissionMode }) => Promise<FsaDirectoryHandle>;
+}
+
+/** The planner folder as the connector gets it: the handle, and the choice it came from. */
+export interface PlannerFolder {
+    handle: FsaDirectoryHandle;
+    /** Changes with every new choice (the location's chosenAt). */
+    generation: string;
+}
+
+/** The prefix of a file id inside the planner folder. */
+export const FOLDER_FILE_PREFIX = "folder:";
+
+export const folderFileId = (generation: string, kindFolder: string, name: string) => `${FOLDER_FILE_PREFIX}${generation}:${kindFolder}/${name}`;
+
+/** True for a file the connector placed in, or listed from, the planner folder. */
+export const isFolderFileId = (fileId: string): boolean => fileId.startsWith(FOLDER_FILE_PREFIX);
+
+export function isDirectoryHandle(value: unknown): value is FsaDirectoryHandle {
+    const handle = value as Partial<FsaDirectoryHandle> | null;
+    return typeof handle === "object" && handle !== null && handle.kind === "directory" && typeof handle.getFileHandle === "function" && typeof handle.getDirectoryHandle === "function";
 }
 
 /** The pickers when this browser has the File System Access API, else null (tier 2: download and file input). */
@@ -57,9 +98,11 @@ export function fileSystemAccess(scope: unknown = globalThis): FsaPickers | null
     if (!target || typeof target.showSaveFilePicker !== "function" || typeof target.showOpenFilePicker !== "function") return null;
     const save = target.showSaveFilePicker as FsaPickers["showSaveFilePicker"];
     const open = target.showOpenFilePicker as FsaPickers["showOpenFilePicker"];
+    const directory = (scope as { showDirectoryPicker?: unknown }).showDirectoryPicker;
     return {
         showSaveFilePicker: (options) => save.call(scope, options),
         showOpenFilePicker: (options) => open.call(scope, options),
+        ...(typeof directory === "function" ? { showDirectoryPicker: (options) => (directory as NonNullable<FsaPickers["showDirectoryPicker"]>).call(scope, options) } : {}),
     };
 }
 
@@ -127,10 +170,22 @@ export interface LocalFileConnectorOptions {
     /** null: this browser has no File System Access API. */
     pickers: FsaPickers | null;
     handles: FileHandleStore;
+    /** Where the planner folder is kept (the store's locations, in the app); none: no planner folder. */
+    locations?: Pick<LocationStore, "get" | "set">;
     newId?: () => string;
+    now?: () => Date;
 }
 
-export function createLocalFileConnector({ pickers, handles, newId = () => crypto.randomUUID() }: LocalFileConnectorOptions): StorageConnector {
+/** Tries before giving up on a free name in a kind folder. */
+const MAX_NAME_TRIES = 50;
+
+export function createLocalFileConnector({ pickers, handles, locations, newId = () => crypto.randomUUID(), now = () => new Date() }: LocalFileConnectorOptions): StorageConnector {
+    /** The planner folder, when the coach chose one and it is still a folder handle. */
+    async function folder(): Promise<PlannerFolder | null> {
+        const stored = await locations?.get("local-file");
+        return stored && isDirectoryHandle(stored.handle) ? { handle: stored.handle, generation: stored.chosenAt } : null;
+    }
+
     /** The file as a RemoteFile, with its text: one getFile() for both, so the revision matches the text. */
     async function read(fileId: string, handle: FsaFileHandle): Promise<{ file: RemoteFile; text: string }> {
         const file = await handle.getFile();
@@ -142,7 +197,7 @@ export function createLocalFileConnector({ pickers, handles, newId = () => crypt
     }
 
     /** Granted already, or asked now (works only from a tap); anything else needs the coach. */
-    async function permitted(handle: FsaFileHandle, mode: PermissionMode): Promise<boolean> {
+    async function permitted(handle: Pick<FsaFileHandle, "queryPermission" | "requestPermission">, mode: PermissionMode): Promise<boolean> {
         if (!handle.queryPermission) return true;
         if ((await handle.queryPermission({ mode })) === "granted") return true;
         if (!handle.requestPermission) return false;
@@ -152,6 +207,53 @@ export function createLocalFileConnector({ pickers, handles, newId = () => crypt
     async function handleFor(ref: RemoteRef): Promise<FsaFileHandle | null> {
         const stored = await handles.get(ref.fileId);
         return isHandle(stored) ? stored : null;
+    }
+
+    /** The planner folder with access granted (asked for now if this is a tap), or why not. */
+    async function grantedFolder(mode: PermissionMode): Promise<Result<PlannerFolder | null>> {
+        const current = await folder();
+        if (!current) return connectorOk(null);
+        if (!(await permitted(current.handle, mode))) return connectorFail({ code: "auth-required" });
+        return connectorOk(current);
+    }
+
+    /** A kind folder inside the planner folder; null when it doesn't exist and `create` is false. */
+    async function kindDirectory(root: FsaDirectoryHandle, kindFolder: string, create: boolean): Promise<FsaDirectoryHandle | null> {
+        try {
+            return await root.getDirectoryHandle(kindFolder, { create });
+        } catch (error) {
+            if (!create && (errorName(error) === "NotFoundError" || errorName(error) === "TypeMismatchError")) return null;
+            throw error;
+        }
+    }
+
+    async function exists(directory: FsaDirectoryHandle, name: string): Promise<boolean> {
+        try {
+            await directory.getFileHandle(name);
+            return true;
+        } catch (error) {
+            if (errorName(error) === "NotFoundError") return false;
+            // A folder by that name counts as taken.
+            if (errorName(error) === "TypeMismatchError") return true;
+            throw error;
+        }
+    }
+
+    /** A new file in `<folder>/<Kind>/`: the asked-for name, or the first numbered one free. */
+    async function createInFolder(current: PlannerFolder, input: SaveInput): Promise<Result<RemoteFile>> {
+        const kindFolder = kindFolderOf(input.kind);
+        if (!kindFolder) return connectorFail({ code: "provider", status: 0 });
+        const directory = (await kindDirectory(current.handle, kindFolder, true))!;
+        for (let n = 1; n <= MAX_NAME_TRIES; n++) {
+            const name = numberedName(input.name, n);
+            if (await exists(directory, name)) continue;
+            const handle = await directory.getFileHandle(name, { create: true });
+            await writeText(handle, input.text);
+            const fileId = folderFileId(current.generation, kindFolder, name);
+            await handles.put(fileId, handle);
+            return connectorOk((await read(fileId, handle)).file);
+        }
+        return connectorFail({ code: "provider", status: 409 });
     }
 
     async function writeText(handle: FsaFileHandle, text: string): Promise<void> {
@@ -181,8 +283,56 @@ export function createLocalFileConnector({ pickers, handles, newId = () => crypt
         // No account: permission is asked per file, from the tap that saves or opens it.
         connect: async () => (pickers ? connectorOk(undefined) : connectorFail({ code: "unavailable" })),
         disconnect: async () => undefined,
-        // Without access to a folder the API can't list files.
-        list: async () => (pickers ? connectorOk([]) : connectorFail({ code: "unavailable" })),
+        location: async () => {
+            const current = await folder();
+            return current ? { name: current.handle.name, chosen: true } : null;
+        },
+
+        chooseLocation: () =>
+            guarded(async () => {
+                if (!pickers!.showDirectoryPicker || !locations) return connectorFail({ code: "unavailable" });
+                let handle: FsaDirectoryHandle;
+                try {
+                    // The id lets the browser reopen the picker where the coach last chose.
+                    handle = await pickers!.showDirectoryPicker({ id: "openleague-planner", mode: "readwrite" });
+                } catch (error) {
+                    if (errorName(error) === "AbortError") return connectorOk(null);
+                    throw error;
+                }
+                if (!(await permitted(handle, "readwrite"))) return connectorFail({ code: "auth-required" });
+                const previous = await locations.get("local-file");
+                await locations.set("local-file", { handle, name: handle.name, autosave: previous?.autosave ?? true, chosenAt: now().toISOString() });
+                return connectorOk({ name: handle.name });
+            }),
+
+        resetLocation: async () => {
+            await locations?.set("local-file", undefined);
+        },
+
+        // Without a planner folder there is nothing to list; with one, its kind folders.
+        list: (filter) =>
+            guarded(async () => {
+                const granted = await grantedFolder("read");
+                if (!granted.ok) return granted;
+                const current = granted.value;
+                if (!current) return connectorOk([]);
+                const files: RemoteFile[] = [];
+                const kinds = filter?.kind ? [filter.kind] : Object.keys(KIND_FOLDERS);
+                for (const kind of kinds) {
+                    const kindFolder = kindFolderOf(kind);
+                    if (!kindFolder) continue;
+                    const directory = await kindDirectory(current.handle, kindFolder, false);
+                    if (!directory) continue;
+                    for await (const entry of directory.values()) {
+                        if (entry.kind !== "file" || !isDocumentFileName(entry.name)) continue;
+                        const fileId = folderFileId(current.generation, kindFolder, entry.name);
+                        await handles.put(fileId, entry);
+                        files.push({ ...(await read(fileId, entry)).file, kind });
+                    }
+                }
+                files.sort((a, b) => b.modifiedAt.localeCompare(a.modifiedAt));
+                return connectorOk(files);
+            }),
 
         pickToOpen: (filter) =>
             guarded(async () => {
@@ -214,6 +364,9 @@ export function createLocalFileConnector({ pickers, handles, newId = () => crypt
         save: (input) =>
             guarded(async () => {
                 if (input.ref === null) {
+                    const granted = await grantedFolder("readwrite");
+                    if (!granted.ok) return granted;
+                    if (granted.value) return createInFolder(granted.value, input);
                     const handle = await pickers!.showSaveFilePicker({ suggestedName: input.name, types: SAVE_PICKER_TYPES });
                     // The coach may have typed another extension: the file is written in its own format.
                     const text = formatFromFileName(handle.name) === formatFromFileName(input.name) ? { ok: true as const, text: input.text } : await reencodeForFile(input.text, input.name, handle.name);

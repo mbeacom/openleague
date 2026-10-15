@@ -79,17 +79,48 @@ describe("OneDrive connector", () => {
         expect(await connector.pickToOpen()).toEqual({ ok: true, value: [] });
     });
 
-    it("creates files in the app folder, refusing to replace a file of the same name", async () => {
+    it("creates files in the kind's subfolder of the app folder, making it once, and refusing to replace a file of the same name", async () => {
         const { connector, graph } = await ready();
-        graph.seed("fall.rankings.json", "{}");
+        const first = await created(connector, "fall.rankings.json");
+        expect(first.name).toBe("fall.rankings.json");
+        expect(graph.folders()).toEqual(["Rankings"]);
         const file = await created(connector, "fall.rankings.json");
         expect(file.name).toBe("fall (2).rankings.json");
         const puts = graph.requests.filter((request) => request.method === "PUT");
         expect(puts.map((request) => request.url)).toEqual([
-            `${GRAPH_ROOT}/me/drive/special/approot:/fall.rankings.json:/content?@microsoft.graph.conflictBehavior=fail`,
-            `${GRAPH_ROOT}/me/drive/special/approot:/fall%20(2).rankings.json:/content?@microsoft.graph.conflictBehavior=fail`,
+            // The subfolder isn't there: 404, made, then the same name again.
+            `${GRAPH_ROOT}/me/drive/special/approot:/Rankings/fall.rankings.json:/content?@microsoft.graph.conflictBehavior=fail`,
+            `${GRAPH_ROOT}/me/drive/special/approot:/Rankings/fall.rankings.json:/content?@microsoft.graph.conflictBehavior=fail`,
+            `${GRAPH_ROOT}/me/drive/special/approot:/Rankings/fall.rankings.json:/content?@microsoft.graph.conflictBehavior=fail`,
+            `${GRAPH_ROOT}/me/drive/special/approot:/Rankings/fall%20(2).rankings.json:/content?@microsoft.graph.conflictBehavior=fail`,
         ]);
+        expect(graph.requests.filter((request) => request.method === "POST")).toHaveLength(1);
         expect(puts.every((request) => request.headers["if-match"] === undefined)).toBe(true);
+    });
+
+    it("lists files saved flat before the subfolders and files in each kind's subfolder", async () => {
+        const { connector, graph } = await ready();
+        graph.seed("old.rankings.json", "{}");
+        graph.seed("Rankings/new.rankings.json", "{}");
+        graph.seed("Practices/sat.olplan.json", "{}");
+        const all = await connector.list();
+        if (!all.ok) throw new Error(all.error.code);
+        expect(all.value.map((file) => file.name).sort()).toEqual(["new.rankings.json", "old.rankings.json", "sat.olplan.json"]);
+        const rankings = await connector.list({ kind: KIND });
+        if (!rankings.ok) throw new Error(rankings.error.code);
+        expect(rankings.value.map((file) => file.name).sort()).toEqual(["new.rankings.json", "old.rankings.json"]);
+    });
+
+    it("lists an app folder with no subfolders yet", async () => {
+        const { connector, graph } = await ready();
+        graph.seed("old.rankings.json", "{}");
+        const listed = await connector.list();
+        expect(listed.ok && listed.value.map((file) => file.name)).toEqual(["old.rankings.json"]);
+    });
+
+    it("describes where new files go without naming the registration", async () => {
+        const { connector } = await ready();
+        expect(await connector.location?.()).toEqual({ name: "the planner's folder inside Apps", chosen: false });
     });
 
     it("uses the cTag as the revision, and sends If-Match with it on every overwrite", async () => {
@@ -122,7 +153,8 @@ describe("OneDrive connector", () => {
         const file = await created(connector);
         const result = await connector.save(overwrite(file, "{}", null));
         expect(result.ok === false && result.error.code).toBe("conflict");
-        expect(graph.requests.filter((request) => request.method === "PUT")).toHaveLength(1);
+        // Only the create wrote; the overwrite sent nothing.
+        expect(graph.requests.filter((request) => request.method === "PUT" && request.url.includes("/me/drive/items/"))).toHaveLength(0);
     });
 
     it("reads through the pre-authenticated download URL, with no token, cookies or referrer", async () => {

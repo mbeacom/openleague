@@ -3,9 +3,11 @@
  * a disk of named files, handles over them, permissions, and whether the call
  * runs inside a tap (pickers and requestPermission throw SecurityError
  * outside one, as browsers do). The clock moves a second per write, so every
- * write has its own lastModified.
+ * write has its own lastModified. Folders are path prefixes: a file seeded
+ * as "Planner/Practices/a.olplan.json" is inside the "Planner" folder's
+ * "Practices" folder, and its handle's name is "a.olplan.json".
  */
-import type { FsaFileHandle, FsaPickers } from "@/apps/planner/src/storage/local-file";
+import type { FsaDirectoryHandle, FsaFileHandle, FsaPickers } from "@/apps/planner/src/storage/local-file";
 import type { FileHandleStore } from "@/apps/planner/src/store/file-handles";
 
 interface DiskFile {
@@ -39,8 +41,16 @@ export interface FakeFsa {
     /** The coach refuses the next permission prompts. */
     denyPrompts: (deny: boolean) => void;
     handleFor: (name: string) => FsaFileHandle;
+    /** A folder's handle (made if missing). */
+    directory: (path: string) => FsaDirectoryHandle;
+    /** What the next directory picker returns: a folder path, or "cancel". */
+    queueDirectory: (answer: string | "cancel") => void;
+    /** Every path on the disk. */
+    paths: () => string[];
     writes: number;
 }
+
+const baseName = (path: string) => path.slice(path.lastIndexOf("/") + 1);
 
 export function createFakeFsa(start = Date.parse("2026-10-11T12:00:00.000Z")): FakeFsa {
     const disk = new Map<string, DiskFile>();
@@ -50,6 +60,8 @@ export function createFakeFsa(start = Date.parse("2026-10-11T12:00:00.000Z")): F
     let permission: PermissionState = "granted";
     let saveAnswers: Array<string | "cancel"> = [];
     let openAnswers: Array<string[] | "cancel"> = [];
+    const directoryAnswers: Array<string | "cancel"> = [];
+    const directories = new Set<string>();
     const fsa: FakeFsa = {
         writes: 0,
         pickers: {
@@ -69,12 +81,55 @@ export function createFakeFsa(start = Date.parse("2026-10-11T12:00:00.000Z")): F
                 if (answer === "cancel") throw domError("AbortError");
                 return answer.map((name) => fsa.handleFor(name));
             },
+            showDirectoryPicker: async () => {
+                if (!gesture) throw domError("SecurityError");
+                const answer = directoryAnswers.shift() ?? "cancel";
+                if (answer === "cancel") throw domError("AbortError");
+                return fsa.directory(answer);
+            },
+        },
+        queueDirectory: (answer) => directoryAnswers.push(answer),
+        paths: () => [...disk.keys()].sort(),
+        directory: (path) => {
+            directories.add(path);
+            const child = (name: string) => `${path}/${name}`;
+            const handle: FsaDirectoryHandle = {
+                kind: "directory",
+                name: baseName(path),
+                getDirectoryHandle: async (name, options) => {
+                    if (disk.has(child(name))) throw domError("TypeMismatchError");
+                    if (!directories.has(child(name)) && !options?.create) throw domError("NotFoundError");
+                    return fsa.directory(child(name));
+                },
+                getFileHandle: async (name, options) => {
+                    if (directories.has(child(name))) throw domError("TypeMismatchError");
+                    if (!disk.has(child(name))) {
+                        if (!options?.create) throw domError("NotFoundError");
+                        clock += 1000;
+                        disk.set(child(name), { name, text: "", lastModified: clock });
+                    }
+                    return fsa.handleFor(child(name));
+                },
+                values: async function* () {
+                    for (const key of [...disk.keys()]) if (key.startsWith(`${path}/`) && !key.slice(path.length + 1).includes("/")) yield fsa.handleFor(key);
+                    for (const dir of [...directories]) if (dir.startsWith(`${path}/`) && !dir.slice(path.length + 1).includes("/")) yield fsa.directory(dir);
+                },
+                queryPermission: async () => permission,
+                requestPermission: async () => {
+                    if (!gesture) throw domError("SecurityError");
+                    if (deny) return "denied";
+                    permission = "granted";
+                    return permission;
+                },
+            };
+            return handle;
         },
         queueSave: (answer) => saveAnswers.push(answer),
         queueOpen: (answer) => openAnswers.push(answer),
         seed: (name, text) => {
             clock += 1000;
-            disk.set(name, { name, text, lastModified: clock });
+            disk.set(name, { name: baseName(name), text, lastModified: clock });
+            for (let at = name.indexOf("/"); at !== -1; at = name.indexOf("/", at + 1)) directories.add(name.slice(0, at));
         },
         read: (name) => disk.get(name)?.text,
         overwrite: (name, text) => {
@@ -92,7 +147,7 @@ export function createFakeFsa(start = Date.parse("2026-10-11T12:00:00.000Z")): F
             const file = disk.get(from);
             if (!file) throw new Error(`No file ${from}`);
             disk.delete(from);
-            file.name = to;
+            file.name = baseName(to);
             disk.set(to, file);
         },
         remove: (name) => {

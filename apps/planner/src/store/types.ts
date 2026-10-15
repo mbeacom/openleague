@@ -17,6 +17,7 @@ import type { RankingsDocumentOps, RankingsOps } from "./rankings";
 import type { AiSettingsOps } from "./ai-settings";
 import type { RecoveredOps } from "./recovered";
 import type { LinkStore } from "./links";
+import type { LocationStore } from "./locations";
 import type { FileHandleStore } from "./file-handles";
 
 export interface LocalSessionSummary {
@@ -103,6 +104,8 @@ export interface LocalPlannerStore extends PlannerStore, RankingsOps, RankingsDo
     links: LinkStore;
     /** File System Access handles for linked local files, by the connector's file id (storage connectors spec R7). */
     fileHandles: FileHandleStore;
+    /** Where connectors save new files (storage locations design). */
+    locations: LocationStore;
     /** Favorites on this device (practice favorites spec): always present here. */
     listPlannerFavorites: NonNullable<PlannerStore["listPlannerFavorites"]>;
     setPlannerFavorite: NonNullable<PlannerStore["setPlannerFavorite"]>;

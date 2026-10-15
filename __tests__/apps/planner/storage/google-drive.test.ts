@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { DOCUMENT_KINDS, ENVELOPE_OVERHEAD_BYTES } from "@/lib/document-envelope";
 import type { GoogleCloudSettings } from "@/apps/planner/cloud-config";
 import type { RemoteFile, SaveInput, StorageConnector } from "@/apps/planner/src/storage/connector";
+import { createMemoryLocationStore } from "@/apps/planner/src/store/locations";
 import { DRIVE_FOLDER_NAME, DRIVE_UPLOAD_API, createGoogleDriveConnector, driveQuoted } from "@/apps/planner/src/storage/google-drive";
 import { GOOGLE_DRIVE_CAPABILITIES, createLazyGoogleDriveConnector } from "@/apps/planner/src/storage/google-drive-lazy";
 import { describeConnectorContract } from "./connector-contract";
@@ -90,38 +91,85 @@ describe("Google Drive connector", () => {
         expect(opened.ok && opened.value.file).toMatchObject({ revision: stored.headRevisionId, modifiedBy: "Coach Avery", kind: KIND });
     });
 
-    it("creates files in its own tagged folder, with private appProperties naming the kind and the envelope id", async () => {
+    it("creates files in a kind subfolder of its own tagged folder, with private appProperties naming the kind and the envelope id", async () => {
         const { drive, connector } = await connected();
         const file = await created(connector);
         const folders = [...drive.files.values()].filter((entry) => entry.mimeType === "application/vnd.google-apps.folder");
-        expect(folders).toHaveLength(1);
-        expect(folders[0]).toMatchObject({ name: DRIVE_FOLDER_NAME, appProperties: { olFolder: "documents" } });
+        expect(folders).toHaveLength(2);
+        const root = folders.find((entry) => entry.appProperties.olFolder === "documents")!;
+        expect(root).toMatchObject({ name: DRIVE_FOLDER_NAME, parents: [] });
+        const rankings = folders.find((entry) => entry.appProperties.olFolder === KIND)!;
+        expect(rankings).toMatchObject({ name: "Rankings", parents: [root.id] });
         expect(drive.files.get(file.fileId)).toMatchObject({
             name: "fall.rankings.json",
             mimeType: "application/json",
             content: '{"a":1}\n',
-            parents: [folders[0].id],
+            parents: [rankings.id],
             appProperties: { olKind: KIND, olId: DOC },
         });
-        // The folder is looked up once per session.
+        // The folders are looked up once per session.
         await created(connector, create("spring.rankings.json"));
-        expect(drive.apiCalls().filter((call) => call === "POST /drive/v3/files")).toHaveLength(1);
-        expect(drive.apiCalls().filter((call) => call === "GET /drive/v3/files")).toHaveLength(1);
+        expect(drive.apiCalls().filter((call) => call === "POST /drive/v3/files")).toHaveLength(2);
+        expect(drive.apiCalls().filter((call) => call === "GET /drive/v3/files")).toHaveLength(2);
     });
 
-    it("finds the folder another device made, and renamed, by its tag", async () => {
+    it("finds the folders another device made, and renamed, by their tags", async () => {
         const drive = createFakeDrive();
         const make = () => createGoogleDriveConnector({ settings: SETTINGS, fetch: drive.fetch, auth: drive.auth, picker: drive.picker });
         const first = make();
         await first.connect();
-        await created(first);
-        const folder = [...drive.files.values()].find((entry) => entry.mimeType === "application/vnd.google-apps.folder")!;
-        drive.rename(folder.id, "Team files");
+        const earlier = await created(first);
+        const subfolder = drive.files.get(earlier.fileId)!.parents[0];
+        const root = [...drive.files.values()].find((entry) => entry.appProperties.olFolder === "documents")!;
+        drive.rename(root.id, "Team files");
+        drive.rename(subfolder, "Standings");
         const second = make();
         await second.connect();
         const file = await created(second, create("spring.rankings.json"));
-        expect(drive.files.get(file.fileId)!.parents).toEqual([folder.id]);
-        expect([...drive.files.values()].filter((entry) => entry.mimeType === "application/vnd.google-apps.folder")).toHaveLength(1);
+        expect(drive.files.get(file.fileId)!.parents).toEqual([subfolder]);
+        expect([...drive.files.values()].filter((entry) => entry.mimeType === "application/vnd.google-apps.folder")).toHaveLength(2);
+    });
+
+    it("saves into the kind subfolder of a folder the coach chose with the Picker, and keeps the choice", async () => {
+        const drive = createFakeDrive();
+        const locations = createMemoryLocationStore();
+        const connector = createGoogleDriveConnector({ settings: SETTINGS, fetch: drive.fetch, auth: drive.auth, picker: drive.picker, locations });
+        await connector.connect();
+        const chosen = drive.addFile({ name: "U12 Hawks", mimeType: "application/vnd.google-apps.folder" });
+        drive.queueFolderPick({ id: chosen.id, name: chosen.name });
+        expect(await connector.chooseLocation!()).toEqual({ ok: true, value: { name: "U12 Hawks" } });
+        expect(await connector.location!()).toEqual({ name: "U12 Hawks", chosen: true });
+        const file = await created(connector);
+        const parent = drive.files.get(drive.files.get(file.fileId)!.parents[0])!;
+        expect(parent).toMatchObject({ name: "Rankings", parents: [chosen.id] });
+        // No default folder was made.
+        expect([...drive.files.values()].some((entry) => entry.appProperties.olFolder === "documents")).toBe(false);
+
+        await connector.resetLocation!();
+        expect(await connector.location!()).toEqual({ name: DRIVE_FOLDER_NAME, chosen: false });
+    });
+
+    it("leaves the location alone when the coach cancels the folder Picker", async () => {
+        const drive = createFakeDrive();
+        const locations = createMemoryLocationStore();
+        const connector = createGoogleDriveConnector({ settings: SETTINGS, fetch: drive.fetch, auth: drive.auth, picker: drive.picker, locations });
+        await connector.connect();
+        drive.queueFolderPick(null);
+        expect(await connector.chooseLocation!()).toEqual({ ok: true, value: null });
+        expect(await locations.get("google-drive")).toBeUndefined();
+    });
+
+    it("refuses to save, without falling back, when the chosen folder was trashed or is out of reach", async () => {
+        const drive = createFakeDrive();
+        const chosen = drive.addFile({ name: "U12 Hawks", mimeType: "application/vnd.google-apps.folder" });
+        const locations = createMemoryLocationStore({ "google-drive": { folderId: chosen.id, name: "U12 Hawks", chosenAt: "2026-10-15T00:00:00.000Z" } });
+        const connector = createGoogleDriveConnector({ settings: SETTINGS, fetch: drive.fetch, auth: drive.auth, picker: drive.picker, locations });
+        await connector.connect();
+        drive.files.get(chosen.id)!.trashed = true;
+        expect(await connector.save(create())).toEqual({ ok: false, error: { code: "location-missing" } });
+        drive.remove(chosen.id);
+        expect(await connector.save(create())).toEqual({ ok: false, error: { code: "location-missing" } });
+        expect([...drive.files.values()].filter((entry) => entry.mimeType !== "application/vnd.google-apps.folder")).toHaveLength(0);
     });
 
     it("saves YAML, TOML and JSONC files with their own types", async () => {

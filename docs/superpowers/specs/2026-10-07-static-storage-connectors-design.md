@@ -135,7 +135,7 @@ Every save carries the `baseRevision` it expects. The providers differ, and the 
 - **Where the token lives:** in memory only, in the connector instance. A reload means asking again; GIS usually returns a token without a consent screen once consent is given, but the request must come from a user gesture.
 - **Revocation:** "Disconnect Google Drive" calls `revoke`, drops the token, and keeps the local link table so a later reconnect resumes (the links hold no credential).
 - **Listing:** with `drive.file`, a files list returns only files this app can see. Each saved file gets private `appProperties` (`olKind`, `olId`; private to the app per the File resource) so the app can list "my OpenLeague plans" on a new device without a picker.
-- **Where new files go** (phase 3): an "OpenLeague" folder the app creates on first save, found again by its own `appProperties` tag (`olFolder`), so a folder the coach renames or moves is still used.
+- **Where new files go** (phase 3): an "OpenLeague" folder the app creates on first save, found again by its own `appProperties` tag (`olFolder`), so a folder the coach renames or moves is still used. Amended 2026-10-15 by the [storage locations design](2026-10-15-planner-storage-locations-design.md): new files go in `Practices/` and `Rankings/` inside that folder, or inside a folder the coach chooses with the Picker.
 
 ### R6. OneDrive: app folder by default; the Picker v8 is a separate, broader opt-in
 
@@ -375,7 +375,7 @@ Each phase ships alone and leaves the app fully working.
 
 ## Out of scope
 
-- Several remotes per document; folders and organisation inside the app; trash or delete from the app.
+- Several remotes per document; trash or delete from the app. (Folders were out of scope here; the [storage locations design](2026-10-15-planner-storage-locations-design.md) adds a subfolder per kind and a chosen save folder, but no other organisation inside the app.)
 - Background sync, push notifications, change feeds.
 - Hosted-platform connectors (the hosted app keeps its own database).
 - Any document kind beyond plans and rankings (each later kind adopts the envelope in its own spec).
