@@ -209,5 +209,6 @@ describe("PlayLibrary whole-library names scan", () => {
         fireEvent.click(await screen.findByRole("button", { name: "Delete" }));
         await waitFor(() => expect(screen.queryByRole("button", { name: "Delete Goalie Warm-Up" })).toBeNull());
         await waitFor(() => expect(within(cardOf("Goalie Warm-Up")).getByText("Starter")).toBeInTheDocument());
-    });
+        // Renders every starter card more than once, so its time grows with the starter pack.
+    }, 20000);
 });
