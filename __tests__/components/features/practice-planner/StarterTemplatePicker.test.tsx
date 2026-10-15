@@ -68,9 +68,10 @@ describe("StarterTemplatePicker: counts", () => {
         });
         // Skills Stations 2 + 3 + 1 + 1 + 1 drills, Goalie & Skater 3 + 3 + 1 + 1, Team Practice 1 + 3 + 3 + 1 + 1,
         // then the 8U, 10U and 12U templates 4 + 1 each, and 3 + 1 + 1, and 8U Tag, Stops and Battles 2 + 2 + 1,
-        // 8U Partner Puck Control and Forecheck 2 + 2 + 1, and 8U Musical Pucks and Forecheck 2 + 2 + 1;
+        // 8U Partner Puck Control and Forecheck 2 + 2 + 1, 8U Musical Pucks and Forecheck 2 + 2 + 1, and
+        // 8U Goaltender Integration 1 + 1 + 3 + 1 + 1;
         // block rows (warm-up, break, cool-down) never count.
-        expect(chips).toEqual(["8 drills", "8 drills", "9 drills", "5 drills", "5 drills", "5 drills", "5 drills", "5 drills", "5 drills"]);
+        expect(chips).toEqual(["8 drills", "8 drills", "9 drills", "5 drills", "5 drills", "5 drills", "5 drills", "5 drills", "5 drills", "7 drills"]);
     });
 });
 
