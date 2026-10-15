@@ -339,6 +339,49 @@ export const STARTER_TEMPLATES: readonly StarterTemplate[] = [
             { block: "cooldown", minutes: 6, note: "Easy laps, then a stretch." },
         ]),
     },
+    {
+        id: "template-8u-goaltender-integration",
+        name: "8U Goaltender Integration",
+        description:
+            "A 60-minute, station-based practice for 8U that builds the goalie in while they skate out for most of it: stance and shuffles in a corner while the skaters free-skate, in and out of circles with the goalie as a skater, then three stations rotating every 9 minutes (edges, 1-on-1 keep-away, and alternating corner attacks on the only net, so the goalie is in goal for one rotation), cross-ice 4-on-4, a breakaway relay and a huddle.",
+        ageGroups: ["u8"],
+        session: practice("8U Goaltender Integration", 60, 0, [
+            {
+                stations: [
+                    {
+                        drill: "starter-goalie-base-depth-shuffle",
+                        minutes: 5,
+                        instructions:
+                            "In a corner, warm the goalie up while the skaters free-skate with pucks: stance holds on command, then post to post, five shuffles and five T-pushes. Anyone who signed up for a turn in goal joins.",
+                    },
+                ],
+            },
+            { stations: [{ drill: "starter-skate-in-out-circles", minutes: 7, instructions: "The goalie plays as a skater, with a stick and a puck. Last two minutes: skate the width and stop on both feet at every line." }] },
+            {
+                rotateEveryMinutes: 9,
+                stations: [
+                    {
+                        drill: "starter-skate-corner-attacks",
+                        minutes: 9,
+                        instructions: "The goalie is in net only while their own group is here; a volunteer in quick-change gear covers the other rotations. The goalie's reset releases the next attacker, never a clock.",
+                    },
+                    { drill: "starter-skate-edge-circuit", minutes: 9, instructions: "Add a puck on the second time through." },
+                    { drill: "starter-skate-keep-away-1v1", minutes: 9 },
+                ],
+            },
+            {
+                stations: [
+                    {
+                        drill: "starter-game-4v4-cross-ice",
+                        minutes: 15,
+                        instructions: "Two games, intermediate nets and blue pucks, 60-second shifts. The goalie is in net for two of every three shifts; a volunteer in quick-change gear covers the other net, or run one game and a skill zone.",
+                    },
+                ],
+            },
+            { stations: [{ drill: "starter-skate-breakaway-relay", minutes: 5, instructions: "A coach covers the net so the goalie takes a breakaway too." }] },
+            { block: "cooldown", minutes: 1, note: "Huddle at center ice: each player names one thing a teammate did well." },
+        ]),
+    },
 ];
 
 /** The template as a plan document from the running app, ready for the import flow. */

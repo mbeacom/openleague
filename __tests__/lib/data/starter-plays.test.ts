@@ -192,6 +192,29 @@ describe("Starter play ice areas", () => {
         "starter-skate-forecheck-breakout": "zone-left",
         "starter-skate-chariot-relay": "zone-neutral",
         "starter-skate-musical-pucks": "zone-right",
+        "starter-goalie-border-tag": "custom",
+        "starter-goalie-stick-save-progression": "custom",
+        "starter-goalie-ghost-warmup": "custom",
+        "starter-goalie-blocker-save-foundation": "zone-left",
+        "starter-goalie-clifford-box": "zone-left",
+        "starter-goalie-glove-save-foundation": "zone-left",
+        "starter-goalie-5-point-ladder": "zone-left",
+        "starter-goalie-butterfly-save-progression": "custom",
+        "starter-goalie-adaptive-skating": "zone-left",
+        "starter-goalie-fundamental-save-progression": "custom",
+        "starter-goalie-soccer-coach-outlet": "zone-left-top",
+        "starter-goalie-gloves-tracking": "zone-left",
+        "starter-goalie-two-goalie-fundamental-save": "zone-left",
+        "starter-goalie-vp-save": "custom",
+        "starter-goalie-base-depth-shuffle": "custom",
+        "starter-goalie-starman-stick-save": "custom",
+        "starter-skate-in-out-circles": undefined,
+        "starter-face-offs": "zone-left",
+        "starter-skate-gap-up": "custom",
+        "starter-skate-foxhunt": "half-left",
+        "starter-skate-corner-attacks": "zone-right",
+        "starter-skate-keep-away-1v1": "zone-neutral",
+        "starter-skate-breakaway-relay": "half-left",
     };
 
     it("gives the obvious set plays an explicit area and leaves full-ice drills unset", () => {
@@ -253,18 +276,34 @@ describe("Starter drill tags", () => {
         });
     });
 
-    it("ships ten goalie drills, every one needing a goalie", () => {
+    it("ships twenty-six goalie drills, every one needing a goalie", () => {
         const goalieDrills = STARTER_PLAYS.filter((p) => p.focus === "goalies");
         expect(goalieDrills.map((p) => p.id).sort()).toEqual([
+            "starter-goalie-5-point-ladder",
+            "starter-goalie-adaptive-skating",
             "starter-goalie-angles-depth",
+            "starter-goalie-base-depth-shuffle",
+            "starter-goalie-blocker-save-foundation",
+            "starter-goalie-border-tag",
             "starter-goalie-breakaways",
             "starter-goalie-butterfly-recovery",
+            "starter-goalie-butterfly-save-progression",
+            "starter-goalie-clifford-box",
             "starter-goalie-crease-pattern",
+            "starter-goalie-fundamental-save-progression",
+            "starter-goalie-ghost-warmup",
+            "starter-goalie-glove-save-foundation",
+            "starter-goalie-gloves-tracking",
             "starter-goalie-post-to-post",
             "starter-goalie-puck-handling",
             "starter-goalie-quarter-station",
             "starter-goalie-rebound-control",
             "starter-goalie-screens",
+            "starter-goalie-soccer-coach-outlet",
+            "starter-goalie-starman-stick-save",
+            "starter-goalie-stick-save-progression",
+            "starter-goalie-two-goalie-fundamental-save",
+            "starter-goalie-vp-save",
             "starter-goalie-warmup",
         ]);
         expect(goalieDrills.every((p) => p.goalies === "required")).toBe(true);
@@ -288,10 +327,10 @@ describe("Starter drill tags", () => {
         }
     });
 
-    it("ships twenty-two skater drills, three small-area games and 44 starters in all", () => {
-        expect(STARTER_PLAYS.filter((p) => p.id.startsWith("starter-skate-")).map((p) => p.focus)).toEqual(Array(22).fill("skaters"));
+    it("ships twenty-eight skater drills, three small-area games and 67 starters in all", () => {
+        expect(STARTER_PLAYS.filter((p) => p.id.startsWith("starter-skate-")).map((p) => p.focus)).toEqual(Array(28).fill("skaters"));
         expect(STARTER_PLAYS.filter((p) => p.id.startsWith("starter-game-")).map((p) => p.focus)).toEqual(["team", "team", "team"]);
-        expect(STARTER_PLAYS).toHaveLength(44);
+        expect(STARTER_PLAYS).toHaveLength(67);
     });
 
     it("puts every small-area drill on a quarter-ice or zone preset", () => {
@@ -364,6 +403,71 @@ describe("8U partner puck control and forecheck drills", () => {
     });
 });
 
+describe("Foundation Stage goalie drills and the 8U goaltender-integration drills", () => {
+    const find = (id: string) => {
+        const play = STARTER_PLAYS.find((p) => p.id === id);
+        if (!play) throw new Error(`${id} is missing`);
+        return play;
+    };
+    const goalieCount = (id: string) => find(id).playData.players.filter((p) => p.role === "G").length;
+    const FOUNDATION = [
+        "starter-goalie-border-tag",
+        "starter-goalie-stick-save-progression",
+        "starter-goalie-ghost-warmup",
+        "starter-goalie-blocker-save-foundation",
+        "starter-goalie-clifford-box",
+        "starter-goalie-glove-save-foundation",
+        "starter-goalie-5-point-ladder",
+        "starter-goalie-butterfly-save-progression",
+        "starter-goalie-adaptive-skating",
+        "starter-goalie-fundamental-save-progression",
+        "starter-goalie-soccer-coach-outlet",
+        "starter-goalie-gloves-tracking",
+        "starter-goalie-two-goalie-fundamental-save",
+        "starter-goalie-vp-save",
+        "starter-goalie-base-depth-shuffle",
+        "starter-goalie-starman-stick-save",
+    ];
+
+    it("adds all sixteen Foundation Stage drills, in the source's order", () => {
+        expect(FOUNDATION).toHaveLength(16);
+        const ids = STARTER_PLAYS.map((p) => p.id);
+        const at = FOUNDATION.map((id) => ids.indexOf(id));
+        expect(at).toEqual([...at].sort((a, b) => a - b));
+        expect(at.every((i) => i >= 0)).toBe(true);
+    });
+
+    it("adapts every Foundation drill to 8U except the two that need a second goalie reading a second puck", () => {
+        for (const id of FOUNDATION) {
+            const play = find(id);
+            const advanced = id === "starter-goalie-vp-save" || id === "starter-goalie-starman-stick-save";
+            expect(play.ageGroups.includes("u8"), id).toBe(!advanced);
+            expect(/ 8U: /.test(play.description), id).toBe(!advanced);
+        }
+    });
+
+    it("draws one goalie unless the drill is built for two", () => {
+        const pairs = ["border-tag", "blocker-save-foundation", "clifford-box", "glove-save-foundation", "adaptive-skating",
+            "soccer-coach-outlet", "two-goalie-fundamental-save", "vp-save", "starman-stick-save"].map((s) => `starter-goalie-${s}`);
+        for (const id of FOUNDATION) {
+            if (pairs.includes(id)) expect(goalieCount(id), id).toBeGreaterThanOrEqual(2);
+            else expect(goalieCount(id), id).toBe(1);
+        }
+    });
+
+    it("puts the corner attacks on the right net with a goalie, so it can share the ice with the left-end edge circuit", () => {
+        const play = find("starter-skate-corner-attacks");
+        expect([play.focus, play.goalies, play.playData.area?.kind]).toEqual(["skaters", "required", "zone-right"]);
+        expect(play.playData.equipment.filter((e) => e.kind === "net").map((n) => [n.position.x, n.position.y])).toEqual([[189, 42.5]]);
+    });
+
+    it("plays in and out of circles and the 1-on-1 keep-away box without a goalie", () => {
+        expect(goalieCount("starter-skate-in-out-circles")).toBe(0);
+        expect(goalieCount("starter-skate-keep-away-1v1")).toBe(0);
+        expect(find("starter-skate-in-out-circles").description).toMatch(/sharks and minnows/i);
+    });
+});
+
 describe("Starter age groups (age-group templates R2)", () => {
     const AGES: Record<string, string[]> = {
         "starter-breakout-5man": ["u10", "u12", "u14", "u16plus"],
@@ -410,6 +514,29 @@ describe("Starter age groups (age-group templates R2)", () => {
         "starter-skate-forecheck-breakout": ["u8", "u10", "u12"],
         "starter-skate-chariot-relay": ["u6", "u8", "u10"],
         "starter-skate-musical-pucks": ["u6", "u8", "u10"],
+        "starter-goalie-border-tag": ["u8",  "u10",  "u12",  "u14",  "u16plus"],
+        "starter-goalie-stick-save-progression": ["u8",  "u10",  "u12",  "u14",  "u16plus"],
+        "starter-goalie-ghost-warmup": ["u8",  "u10",  "u12",  "u14",  "u16plus"],
+        "starter-goalie-blocker-save-foundation": ["u8",  "u10",  "u12",  "u14",  "u16plus"],
+        "starter-goalie-clifford-box": ["u8",  "u10",  "u12",  "u14",  "u16plus"],
+        "starter-goalie-glove-save-foundation": ["u8",  "u10",  "u12",  "u14",  "u16plus"],
+        "starter-goalie-5-point-ladder": ["u8",  "u10",  "u12",  "u14",  "u16plus"],
+        "starter-goalie-butterfly-save-progression": ["u8",  "u10",  "u12",  "u14",  "u16plus"],
+        "starter-goalie-adaptive-skating": ["u8",  "u10",  "u12",  "u14",  "u16plus"],
+        "starter-goalie-fundamental-save-progression": ["u8",  "u10",  "u12",  "u14",  "u16plus"],
+        "starter-goalie-soccer-coach-outlet": ["u8",  "u10",  "u12",  "u14",  "u16plus"],
+        "starter-goalie-gloves-tracking": ["u8",  "u10",  "u12",  "u14",  "u16plus"],
+        "starter-goalie-two-goalie-fundamental-save": ["u8",  "u10",  "u12",  "u14",  "u16plus"],
+        "starter-goalie-vp-save": ["u10",  "u12",  "u14",  "u16plus"],
+        "starter-goalie-base-depth-shuffle": ["u8",  "u10",  "u12",  "u14",  "u16plus"],
+        "starter-goalie-starman-stick-save": ["u10",  "u12",  "u14",  "u16plus"],
+        "starter-skate-in-out-circles": ["u6",  "u8",  "u10"],
+        "starter-face-offs": ["u8",  "u10",  "u12"],
+        "starter-skate-gap-up": ["u8",  "u10",  "u12"],
+        "starter-skate-foxhunt": ["u6",  "u8",  "u10"],
+        "starter-skate-corner-attacks": ["u6",  "u8",  "u10"],
+        "starter-skate-keep-away-1v1": ["u6",  "u8",  "u10"],
+        "starter-skate-breakaway-relay": ["u6",  "u8",  "u10"],
     };
 
     it("tags every starter, leaving drills that suit every age untagged", () => {

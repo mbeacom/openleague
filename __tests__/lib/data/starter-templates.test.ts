@@ -21,7 +21,7 @@ const NOW = new Date("2026-10-03T18:00:00.000Z");
 const GOALIE_WARMUP = STARTER_PLAYS.find((play) => play.id === "starter-goalie-warmup")?.name;
 
 describe("starter templates", () => {
-    it("ships nine templates with stable unique ids and names, the age-group templates last", () => {
+    it("ships ten templates with stable unique ids and names, the age-group templates last", () => {
         expect(STARTER_TEMPLATES.map((t) => t.id)).toEqual([
             "template-skills-stations",
             "template-goalie-skater-rotation",
@@ -32,8 +32,9 @@ describe("starter templates", () => {
             "template-8u-tag-stops-battles",
             "template-8u-partner-puck-forecheck",
             "template-8u-musical-pucks-forecheck",
+            "template-8u-goaltender-integration",
         ]);
-        expect(new Set(STARTER_TEMPLATES.map((t) => t.name)).size).toBe(9);
+        expect(new Set(STARTER_TEMPLATES.map((t) => t.name)).size).toBe(10);
     });
 
     it("tags every template with its own age groups (never derived from its drills)", () => {
@@ -47,11 +48,12 @@ describe("starter templates", () => {
             "template-8u-tag-stops-battles": ["u8"],
             "template-8u-partner-puck-forecheck": ["u8"],
             "template-8u-musical-pucks-forecheck": ["u8"],
+            "template-8u-goaltender-integration": ["u8"],
         });
         for (const template of STARTER_TEMPLATES) expect(toAgeGroups(template.ageGroups)).toEqual([...template.ageGroups]);
     });
 
-    it.each(["template-8u-stations", "template-10u-stations", "template-12u-skills-games"])("%s fills 60 minutes exactly", (id) => {
+    it.each(["template-8u-stations", "template-10u-stations", "template-12u-skills-games", "template-8u-goaltender-integration"])("%s fills 60 minutes exactly", (id) => {
         const template = STARTER_TEMPLATES.find((t) => t.id === id);
         if (!template) throw new Error(`${id} is missing`);
         expect(template.session.durationMinutes).toBe(60);
@@ -70,8 +72,28 @@ describe("starter templates", () => {
         expect(stationAreas("template-8u-tag-stops-battles")).toEqual(["zone-left", "half-right"]);
         expect(stationAreas("template-8u-partner-puck-forecheck")).toEqual(["zone-left", "zone-right"]);
         expect(stationAreas("template-8u-musical-pucks-forecheck")).toEqual(["zone-left", "zone-right"]);
+        expect(stationAreas("template-8u-goaltender-integration")).toEqual(["zone-right", "zone-left-top", "zone-neutral"]);
         // Each quarter is half a zone's height.
         expect(areaRect({ kind: "zone-left-top" }).h).toBe(42.5);
+    });
+
+    it("8U Goaltender Integration keeps the goalie skating out, with one net in the station block, in the coach's order", () => {
+        const template = STARTER_TEMPLATES.find((t) => t.id === "template-8u-goaltender-integration");
+        if (!template) throw new Error("8U Goaltender Integration is missing");
+        expect(template.session.drills.map((row) => (isDrillRow(row) ? row.name : row.kind))).toEqual([
+            "Base Depth Shuffle",
+            "In and Out of Circles",
+            "Alternating Corner Attacks",
+            "Edge Circuit: Circle and Cones",
+            "1-on-1 Keep-Away Box",
+            "4-on-4 Cross-Ice Game",
+            "Breakaway Relay",
+            "cooldown",
+        ]);
+        const rotating = groupStations(template.session.drills).find((group) => group.rotation);
+        expect(rotating?.rotation?.minutes).toBe(9);
+        const nets = drillRows(rotating?.stations ?? []).flatMap((row) => (row.playData?.equipment ?? []).filter((item) => item.kind === "net"));
+        expect(nets).toHaveLength(1);
     });
 
     it("8U Tag, Stops and Battles fills its 50 minutes exactly on one net", () => {
