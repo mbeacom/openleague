@@ -10,8 +10,12 @@
  *   this closure only (never localStorage, IndexedDB, a link or a log); a
  *   reload, an expiry or a 401 means asking again, from a tap.
  * - Drive REST is called with fetch (no gapi client library). Files the app
- *   creates go in an "OpenLeague" folder it creates, tagged with private
- *   appProperties (olKind, olId) so another device can list them.
+ *   creates go in a kind subfolder (Practices/, Rankings/) of the folder the
+ *   coach chose with the Picker, or of an "OpenLeague" folder the app creates
+ *   when none was chosen (storage locations design, decision 3). Files are
+ *   tagged with private appProperties (olKind, olId) so another device can
+ *   list them wherever they are; folders the app creates carry an olFolder
+ *   tag, so renaming one is harmless.
  * - Conflicts: Drive documents no If-Match for updates, so every overwrite
  *   reads the file's metadata immediately before writing and refuses if
  *   headRevisionId moved (check, then write). The revision is headRevisionId,
@@ -23,17 +27,21 @@ import { DOCUMENT_KINDS, ENVELOPE_OVERHEAD_BYTES } from "@/lib/document-envelope
 import { DOCUMENT_FORMAT_INFO, formatFromFileName } from "@/lib/document-formats";
 import type { GoogleCloudSettings } from "../../cloud-config";
 import { connectorFail, connectorOk, type ConnectorError, type RemoteFile, type RemoteRef, type Result, type SaveInput, type StorageConnector } from "./connector";
-import { GOOGLE_DRIVE_CAPABILITIES } from "./google-drive-lazy";
+import { createMemoryLocationStore, type LocationStore } from "../store/locations";
+import { kindFolderOf } from "./folders";
+import { DEFAULT_DRIVE_FOLDER, GOOGLE_DRIVE_CAPABILITIES } from "./google-drive-lazy";
 
 export const DRIVE_FILE_SCOPE = "https://www.googleapis.com/auth/drive.file";
 export const GIS_CLIENT_URL = "https://accounts.google.com/gsi/client";
 export const GAPI_LOADER_URL = "https://apis.google.com/js/api.js";
 export const DRIVE_API = "https://www.googleapis.com/drive/v3";
 export const DRIVE_UPLOAD_API = "https://www.googleapis.com/upload/drive/v3";
-export const DRIVE_FOLDER_NAME = "OpenLeague";
+export const DRIVE_FOLDER_NAME = DEFAULT_DRIVE_FOLDER;
 export const FOLDER_MIME_TYPE = "application/vnd.google-apps.folder";
 /** The folder's own tag, so a folder the coach renames is still found. */
 export const FOLDER_TAG = { key: "olFolder", value: "documents" } as const;
+/** A kind subfolder's tag value is its kind ("openleague.practice-plan"). */
+export const FOLDER_TAG_KEY = FOLDER_TAG.key;
 export const FILE_FIELDS = "id,name,mimeType,headRevisionId,modifiedTime,size,appProperties,trashed,capabilities(canEdit),lastModifyingUser(displayName)";
 
 /** What the Picker offers: the types OpenLeague files are saved as, and what Drive calls a file it can't type. */
@@ -71,14 +79,20 @@ export interface PickedFile {
     name: string;
 }
 
-/** The Google Picker. Resolves [] when the coach cancels. */
+/** The Google Picker. Resolves [] (or null) when the coach cancels. */
 export interface GooglePicker {
     pick: (input: { accessToken: string; apiKey: string; appId: string }) => Promise<PickedFile[]>;
+    /** Folder mode: under drive.file, picking a folder grants the app that folder. */
+    pickFolder?: (input: { accessToken: string; apiKey: string; appId: string }) => Promise<PickedFile | null>;
     prepare?: () => Promise<void>;
 }
 
+/** Where the chosen folder is kept (the store's locations, in the app). */
+export type DriveLocationAccess = Pick<LocationStore, "get" | "set">;
+
 export interface GoogleDriveOptions {
     settings: GoogleCloudSettings;
+    locations?: DriveLocationAccess;
     fetch?: typeof fetch;
     auth?: GoogleAuth;
     picker?: GooglePicker;
@@ -128,6 +142,7 @@ export function createGoogleDriveConnector({
     fetch: doFetch = (input, init) => globalThis.fetch(input, init),
     auth = gisAuth(settings.clientId),
     picker = googlePicker(),
+    locations = createMemoryLocationStore(),
     now = () => Date.now(),
     boundary = () => `openleague-${crypto.randomUUID()}`,
 }: GoogleDriveOptions): StorageConnector {
@@ -135,6 +150,8 @@ export function createGoogleDriveConnector({
     /** Google's sign-in and Picker scripts have loaded (prepare()). */
     let prepared = false;
     let folderId: string | null = null;
+    /** Kind subfolders found or made this session, by `${parent}/${kind}`. */
+    const kindFolderIds = new Map<string, string>();
 
     function accessToken(): string | null {
         if (token && token.expiresAt - EXPIRY_MARGIN_MS > now()) return token.value;
@@ -215,8 +232,8 @@ export function createGoogleDriveConnector({
         return file;
     }
 
-    /** The app's folder: found by its tag, or created on first save. */
-    async function folder(): Promise<Result<string>> {
+    /** The app's default folder: found by its tag, or created on first save. */
+    async function defaultFolder(): Promise<Result<string>> {
         if (folderId) return connectorOk(folderId);
         const q = `mimeType=${driveQuoted(FOLDER_MIME_TYPE)} and ${appPropertyQuery(FOLDER_TAG.key, FOLDER_TAG.value)} and trashed=false`;
         const found = await json<{ files?: Array<{ id: string }> }>(`${DRIVE_API}/files?${new URLSearchParams({ q, fields: "files(id)", pageSize: "1", spaces: "drive" })}`);
@@ -230,6 +247,52 @@ export function createGoogleDriveConnector({
         });
         if (!created.ok) return created;
         return connectorOk((folderId = created.value.id));
+    }
+
+    /** The folder new files go under: the coach's choice, checked each time (it may be trashed), or the default. */
+    async function rootFolder(): Promise<Result<string>> {
+        const chosen = await locations.get("google-drive");
+        if (!chosen) return defaultFolder();
+        const meta = await json<{ id: string; mimeType?: string; trashed?: boolean; capabilities?: { canAddChildren?: boolean } }>(
+            fileUrl(chosen.folderId, { fields: "id,mimeType,trashed,capabilities(canAddChildren)" }),
+        );
+        if (!meta.ok) return meta.error.code === "not-found" || meta.error.code === "forbidden" ? connectorFail({ code: "location-missing" }) : meta;
+        if (meta.value.trashed || meta.value.mimeType !== FOLDER_MIME_TYPE) return connectorFail({ code: "location-missing" });
+        if (meta.value.capabilities?.canAddChildren === false) return connectorFail({ code: "forbidden" });
+        return connectorOk(chosen.folderId);
+    }
+
+    /** `<root>/<Kind>/`: found by its tag inside the root, or created there. */
+    async function folder(kind: string): Promise<Result<string>> {
+        const root = await rootFolder();
+        if (!root.ok) return root;
+        const kindFolder = kindFolderOf(kind);
+        if (!kindFolder) return root;
+        const key = `${root.value}/${kind}`;
+        const cached = kindFolderIds.get(key);
+        if (cached) {
+            // Checked again, cheaply: the coach may have trashed it since, and a file saved into the trash is lost from view.
+            const still = await json<{ trashed?: boolean }>(fileUrl(cached, { fields: "id,trashed" }));
+            if (still.ok && !still.value.trashed) return connectorOk(cached);
+            if (!still.ok && still.error.code !== "not-found") return still;
+            kindFolderIds.delete(key);
+        }
+        const q = `mimeType=${driveQuoted(FOLDER_MIME_TYPE)} and ${driveQuoted(root.value)} in parents and ${appPropertyQuery(FOLDER_TAG_KEY, kind)} and trashed=false`;
+        const found = await json<{ files?: Array<{ id: string }> }>(`${DRIVE_API}/files?${new URLSearchParams({ q, fields: "files(id)", pageSize: "1", spaces: "drive", supportsAllDrives: "true", includeItemsFromAllDrives: "true" })}`);
+        if (!found.ok) return found;
+        const existing = found.value.files?.[0]?.id;
+        if (existing) {
+            kindFolderIds.set(key, existing);
+            return connectorOk(existing);
+        }
+        const created = await json<{ id: string }>(`${DRIVE_API}/files?fields=id&supportsAllDrives=true`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json; charset=UTF-8" },
+            body: JSON.stringify({ name: kindFolder, mimeType: FOLDER_MIME_TYPE, parents: [root.value], appProperties: { [FOLDER_TAG_KEY]: kind } }),
+        });
+        if (!created.ok) return created;
+        kindFolderIds.set(key, created.value.id);
+        return connectorOk(created.value.id);
     }
 
     /** A multipart/related upload body: the metadata, then the text. */
@@ -252,7 +315,7 @@ export function createGoogleDriveConnector({
     const tags = (input: SaveInput) => ({ olKind: input.kind, olId: input.documentId });
 
     async function create(input: SaveInput): Promise<Result<RemoteFile>> {
-        const parent = await folder();
+        const parent = await folder(input.kind);
         if (!parent.ok) return parent;
         const mimeType = mimeTypeOf(input.name);
         const saved = await json<DriveFile>(`${DRIVE_UPLOAD_API}/files?${new URLSearchParams({ uploadType: "multipart", fields: FILE_FIELDS, supportsAllDrives: "true" })}`, {
@@ -301,6 +364,7 @@ export function createGoogleDriveConnector({
             const revoked = token?.value;
             token = null;
             folderId = null;
+            kindFolderIds.clear();
             if (!revoked) return;
             try {
                 await auth.revoke(revoked);
@@ -336,6 +400,30 @@ export function createGoogleDriveConnector({
                 pageToken = page.value.nextPageToken;
             } while (pageToken);
             return connectorOk(files);
+        },
+
+        location: async () => {
+            const chosen = await locations.get("google-drive");
+            return chosen ? { name: chosen.name, chosen: true } : { name: DEFAULT_DRIVE_FOLDER, chosen: false };
+        },
+
+        chooseLocation: async () => {
+            const bearer = accessToken();
+            if (!bearer) return connectorFail({ code: "auth-required" });
+            if (!picker.pickFolder) return connectorFail({ code: "unavailable" });
+            let picked: PickedFile | null;
+            try {
+                picked = await picker.pickFolder({ accessToken: bearer, apiKey: settings.apiKey, appId: settings.appId });
+            } catch {
+                return connectorFail({ code: "unavailable" });
+            }
+            if (!picked) return connectorOk(null);
+            await locations.set("google-drive", { folderId: picked.id, name: picked.name, chosenAt: new Date(now()).toISOString() });
+            return connectorOk({ name: picked.name });
+        },
+
+        resetLocation: async () => {
+            await locations.set("google-drive", undefined);
         },
 
         pickToOpen: async () => {
@@ -421,7 +509,7 @@ interface PickerBuilder {
 interface PickerNamespace {
     DocsView: new (viewId?: unknown) => PickerView;
     PickerBuilder: new () => PickerBuilder;
-    ViewId: { DOCS: unknown };
+    ViewId: { DOCS: unknown; FOLDERS: unknown };
     DocsViewMode: { LIST: unknown };
     Action: { PICKED: unknown; CANCEL: unknown };
 }
@@ -535,6 +623,31 @@ export function googlePicker(): GooglePicker {
                         } else if (data.action === picker.Action.CANCEL) {
                             instance.dispose();
                             resolve([]);
+                        }
+                    })
+                    .build();
+                instance.setVisible(true);
+            });
+        },
+        pickFolder: async ({ accessToken, apiKey, appId }) => {
+            const picker = await pickerNamespace();
+            return new Promise<PickedFile | null>((resolve) => {
+                // Folders only, and a folder can be the choice: drive.file then reaches it (choosing an upload destination).
+                const view = new picker.DocsView(picker.ViewId.FOLDERS).setMimeTypes(FOLDER_MIME_TYPE).setMode(picker.DocsViewMode.LIST).setIncludeFolders(true).setSelectFolderEnabled(true);
+                const instance = new picker.PickerBuilder()
+                    .addView(view)
+                    .setOAuthToken(accessToken)
+                    .setDeveloperKey(apiKey)
+                    .setAppId(appId)
+                    .setTitle("Choose where OpenLeague saves new files")
+                    .setCallback((data) => {
+                        if (data.action === picker.Action.PICKED) {
+                            instance.dispose();
+                            const doc = data.docs?.[0];
+                            resolve(doc && typeof doc.id === "string" && typeof doc.name === "string" ? { id: doc.id, name: doc.name } : null);
+                        } else if (data.action === picker.Action.CANCEL) {
+                            instance.dispose();
+                            resolve(null);
                         }
                     })
                     .build();

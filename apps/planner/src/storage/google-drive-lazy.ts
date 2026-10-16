@@ -7,22 +7,26 @@
  * Google settings; otherwise neither file is in the bundle.
  */
 import type { GoogleCloudSettings } from "../../cloud-config";
+import type { LocationStore } from "../store/locations";
 import { connectorFail, type ConnectorCapabilities, type Result, type StorageConnector } from "./connector";
+
+/** The folder new files go under when the coach chose none (google-drive.ts DRIVE_FOLDER_NAME). */
+export const DEFAULT_DRIVE_FOLDER = "OpenLeague";
 
 /** Lists its own files (appProperties), opens others through the Picker, and checks before it writes (R4). */
 export const GOOGLE_DRIVE_CAPABILITIES: ConnectorCapabilities = { list: true, pick: true, delete: false, conditionalWrite: "check-then-write" };
 
-export type LoadGoogleDrive = (settings: GoogleCloudSettings) => Promise<StorageConnector>;
+export type LoadGoogleDrive = (settings: GoogleCloudSettings, locations?: Pick<LocationStore, "get" | "set">) => Promise<StorageConnector>;
 
-const loadGoogleDrive: LoadGoogleDrive = async (settings) => (await import("./google-drive")).createGoogleDriveConnector({ settings });
+const loadGoogleDrive: LoadGoogleDrive = async (settings, locations) => (await import("./google-drive")).createGoogleDriveConnector({ settings, ...(locations && { locations }) });
 
-export function createLazyGoogleDriveConnector(settings: GoogleCloudSettings, load: LoadGoogleDrive = loadGoogleDrive): StorageConnector {
+export function createLazyGoogleDriveConnector(settings: GoogleCloudSettings, load: LoadGoogleDrive = loadGoogleDrive, locations?: Pick<LocationStore, "get" | "set">): StorageConnector {
     let inner: StorageConnector | null = null;
     let loading: Promise<StorageConnector> | null = null;
 
     function ensure(): Promise<StorageConnector> {
         if (inner) return Promise.resolve(inner);
-        loading ??= load(settings).then(
+        loading ??= load(settings, locations).then(
             (connector) => (inner = connector),
             (error: unknown) => {
                 // A failed chunk load (offline, a new deploy) is retried on the next tap.
@@ -59,6 +63,15 @@ export function createLazyGoogleDriveConnector(settings: GoogleCloudSettings, lo
             } catch {
                 // The tap that follows reports the failure.
             }
+        },
+        // Read without loading the chunk: the choice is kept on this device.
+        location: async () => {
+            const chosen = await locations?.get("google-drive");
+            return chosen ? { name: chosen.name, chosen: true } : { name: DEFAULT_DRIVE_FOLDER, chosen: false };
+        },
+        chooseLocation: () => via((connector) => connector.chooseLocation?.() ?? Promise.resolve(connectorFail({ code: "unavailable" }))),
+        resetLocation: async () => {
+            await locations?.set("google-drive", undefined);
         },
         list: (filter) => via((connector) => connector.list(filter)),
         pickToOpen: (filter) => via((connector) => connector.pickToOpen(filter)),

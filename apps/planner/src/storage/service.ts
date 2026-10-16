@@ -8,6 +8,7 @@
  */
 import { GOOGLE_DRIVE_SETTINGS, ONEDRIVE_SETTINGS } from "../config";
 import type { FileHandleStore } from "../store/file-handles";
+import type { LocationStore } from "../store/locations";
 import type { LocalPlannerStore } from "../store/types";
 import type { ConnectorId, StorageConnector } from "./connector";
 import { createStoreDocuments } from "./documents";
@@ -24,6 +25,8 @@ export interface StorageService {
     /** Connectors that can save here (configured and supported), in menu order. */
     connectors: StorageConnector[];
     connector: (id: ConnectorId) => StorageConnector | undefined;
+    /** Where connectors save new files (storage locations design). */
+    locations: LocationStore;
 }
 
 export interface StorageServiceOptions {
@@ -31,18 +34,20 @@ export interface StorageServiceOptions {
     pickers?: FsaPickers | null;
     /** Where file handles are kept; the store's (IndexedDB) when omitted. */
     handles?: FileHandleStore;
+    /** Where the save locations are kept; the store's (IndexedDB) when omitted. */
+    locations?: LocationStore;
     /** Extra connectors (tests). */
     extra?: StorageConnector[];
     now?: () => Date;
 }
 
-export function createStorageService(store: LocalPlannerStore, { pickers = fileSystemAccess(globalThis), handles = store.fileHandles, extra = [], now }: StorageServiceOptions = {}): StorageService {
+export function createStorageService(store: LocalPlannerStore, { pickers = fileSystemAccess(globalThis), handles = store.fileHandles, locations = store.locations, extra = [], now }: StorageServiceOptions = {}): StorageService {
     // Written against the build constants themselves: unset, a branch folds away and so do that connector's chunks.
-    const google = GOOGLE_DRIVE_SETTINGS ? [createLazyGoogleDriveConnector(GOOGLE_DRIVE_SETTINGS)] : [];
+    const google = GOOGLE_DRIVE_SETTINGS ? [createLazyGoogleDriveConnector(GOOGLE_DRIVE_SETTINGS, undefined, locations)] : [];
     const oneDrive = ONEDRIVE_SETTINGS ? [createLazyOneDriveConnector({ clientId: ONEDRIVE_SETTINGS.clientId, accounts: ONEDRIVE_SETTINGS.accounts })] : [];
-    const all = [createLocalFileConnector({ pickers, handles }), ...google, ...oneDrive, ...extra];
+    const all = [createLocalFileConnector({ pickers, handles, locations }), ...google, ...oneDrive, ...extra];
     const connectors = all.filter((connector) => connector.status() !== "unconfigured");
     const documents = createStoreDocuments(store);
     const engine = createSyncEngine({ connectors, links: store.links, documents, ...(now && { now }) });
-    return { store, engine, documents, connectors, connector: (id) => connectors.find((connector) => connector.id === id) };
+    return { store, engine, documents, connectors, connector: (id) => connectors.find((connector) => connector.id === id), locations };
 }

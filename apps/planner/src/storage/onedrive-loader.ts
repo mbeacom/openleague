@@ -9,6 +9,7 @@
  * taps "OneDrive…", the chunk is loaded and MSAL has read its cache.
  */
 import { connectorFail, type ConnectorStatus, type Result, type StorageConnector } from "./connector";
+import { ONEDRIVE_FOLDER_DESCRIPTION } from "./folders";
 import type { MicrosoftAccounts } from "../../cloud-config";
 import type { MicrosoftAccountType, OneDriveConnector } from "./onedrive";
 
@@ -89,6 +90,7 @@ export function createLazyOneDriveConnector({ clientId, accounts = "personal", r
             const connector = await get();
             await connector?.disconnect();
         },
+        location: async () => ({ name: ONEDRIVE_FOLDER_DESCRIPTION, chosen: false }),
         list: (filter) => call((connector) => connector.list(filter)),
         pickToOpen: (filter) => call((connector) => connector.pickToOpen(filter)),
         open: (ref) => call((connector) => connector.open(ref)),

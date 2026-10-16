@@ -5,6 +5,7 @@
  */
 import { createAiSettingsOps } from "./ai-settings";
 import { createFavoriteOps } from "./favorites";
+import { createLocationStore } from "./locations";
 import { createFileHandleStore } from "./file-handles";
 import { createLinkStore } from "./links";
 import { createLibraryOps } from "./library";
@@ -39,7 +40,9 @@ export async function requestPersistence(
 
 export function createLocalPlannerStore(repo: PlannerRepo, options: LocalStoreOptions = {}): LocalPlannerStore {
     let asked = false;
+    const writeListeners = new Set<() => void>();
     const ctx = createStoreContext(repo, options, () => {
+        for (const listener of writeListeners) listener();
         if (asked || !repo.durable) return;
         asked = true;
         void requestPersistence(repo);
@@ -57,5 +60,10 @@ export function createLocalPlannerStore(repo: PlannerRepo, options: LocalStoreOp
         ...createRecoveredOps(ctx),
         links: createLinkStore(repo),
         fileHandles: createFileHandleStore(repo, ctx.now),
+        locations: createLocationStore(repo),
+        subscribeWrites: (listener) => {
+            writeListeners.add(listener);
+            return () => writeListeners.delete(listener);
+        },
     };
 }

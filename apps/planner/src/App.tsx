@@ -3,7 +3,7 @@
  * in main.tsx, and the platform is a module constant, so neither identity
  * changes between renders (PlayLibrary's loadPlays depends on the store).
  */
-import { Component, Suspense, lazy, useMemo, type ErrorInfo, type ReactNode } from "react";
+import { Component, Suspense, lazy, useEffect, useMemo, type ErrorInfo, type ReactNode } from "react";
 import { Alert, Box, Button, Typography } from "@mui/material";
 import { PlannerProvider } from "@/lib/planner-store";
 import { staticPlannerPlatform, useHashRoute } from "./platform";
@@ -30,6 +30,7 @@ import { YourTeamButton } from "./screens/YourTeam";
 import { StorageProvider } from "./screens/storage/StorageContext";
 import { StaticRankingsScreen } from "./screens/storage/StaticRankingsScreen";
 import { createRankingsFileOps } from "./storage/documents";
+import { startFolderAutosave } from "./storage/planner-folder";
 import { createStorageService, type StorageService } from "./storage/service";
 
 // AI screens and lib/ai load only when opened (ADR-0023): the build check keeps adapter code out of the entry chunk.
@@ -146,6 +147,11 @@ export interface PlannerAppProps {
 export function PlannerApp({ store, durable, stale, storage }: PlannerAppProps) {
     const route = useHashRoute();
     const service = useMemo(() => storage ?? createStorageService(store), [storage, store]);
+    // "Keep the folder up to date" (storage locations design): off unless the coach chose a planner folder with it on.
+    useEffect(() => {
+        const autosave = startFolderAutosave(service);
+        return () => autosave.stop();
+    }, [service]);
     return (
         <StaticThemeProvider>
             <RootErrorBoundary>

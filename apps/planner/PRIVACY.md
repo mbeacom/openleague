@@ -14,10 +14,15 @@ Everything you create is kept in your browser's own storage (IndexedDB) on your 
 - rankings documents: league schedules, scores and team lists you paste or import
 - settings, including which cloud storage you use and your AI assistance setup
 - for each document you save to a file or to cloud storage, a link record: the file's ID, name and the revision this device last read or wrote, so the Planner can save to the same file again and detect changes made elsewhere
+- where new files go, if you choose: the folder on this computer you chose as the planner folder (your browser's own reference to it, which needs your permission again after a reload), and the ID and name of a Google Drive folder you chose
 
 This data never leaves your device unless you take one of the actions described below. Your browser can clear site data, and clearing it deletes this data. You can download plan files at any time to keep a backup.
 
 The Planner uses no cookies, analytics, advertising or tracking.
+
+## Files and folders on this computer
+
+In browsers that support it, you can save to a file on this computer, or choose a folder as the planner folder. The Planner then reads and writes only the files you pick and the files in that folder (it creates "Practices" and "Rankings" folders inside it). With "Keep the folder up to date" on, which is the default once you choose a folder, the Planner saves your changes to the files in that folder a few seconds after you edit, while the page is open and only after you have allowed access in this browser. These files stay on your computer; the Planner sends them nowhere. If you choose a folder that another app syncs, such as a cloud drive's desktop folder, that app handles the files under its own terms.
 
 ## Google Drive
 
@@ -25,14 +30,14 @@ Saving to Google Drive is optional. If you choose it, the Planner connects to yo
 
 **What the Planner accesses.** The Planner asks for one permission, the `drive.file` scope. With it, the Planner can reach only:
 
-- files and the "OpenLeague" folder that the Planner itself creates in your Drive, and
-- files you choose yourself in the Google file picker.
+- files and folders that the Planner itself creates in your Drive: an "OpenLeague" folder, and "Practices" and "Rankings" folders for its files, and
+- files and folders you choose yourself in the Google file picker.
 
 It cannot see, list or open any other file in your Drive. The Planner does not request your email address, contacts or any other Google data.
 
 **What the Planner reads and writes.** Within those files, the Planner:
 
-- creates an "OpenLeague" folder and saves your plan and rankings files in it
+- creates "Practices" and "Rankings" folders inside the "OpenLeague" folder, or inside a folder you choose, and saves your plan and rankings files in them
 - reads, updates and lists those files, and files you pick, so you can open them on another device
 - tags its files with private app properties (a document type and ID) so it can find them again
 - reads file details: name, type, size, modified time, revision and whether you can edit the file. It also reads the display name of the person who last changed a file, which is shown only to you in the file list and when two devices change the same file.
@@ -53,7 +58,7 @@ It cannot see, list or open any other file in your Drive. The Planner does not r
 
 ## Microsoft OneDrive
 
-Saving to OneDrive is optional and works like Google Drive. The Planner requests the `Files.ReadWrite.AppFolder` permission, which limits it to the Planner's own app folder in your OneDrive, and `User.Read` for sign-in. Files travel directly between your browser and Microsoft. Microsoft's sign-in library keeps its tokens in session storage, which is cleared when you close the tab. You can remove the Planner's access in your Microsoft account settings.
+Saving to OneDrive is optional and works like Google Drive. The Planner requests the `Files.ReadWrite.AppFolder` permission, which limits it to the Planner's own app folder in your OneDrive (under Apps), where it saves your files in "Practices" and "Rankings" folders, and `User.Read` for sign-in. Files travel directly between your browser and Microsoft. Microsoft's sign-in library keeps its tokens in session storage, which is cleared when you close the tab. You can remove the Planner's access in your Microsoft account settings.
 
 ## AI assistance
 

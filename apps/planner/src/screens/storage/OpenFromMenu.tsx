@@ -36,6 +36,8 @@ interface Pending {
     match: { id: string; title: string };
 }
 
+export const PLANNER_FOLDER_ITEM = "From the planner folder…";
+
 const nounOf = (kind: DocumentKind) => (kind === PLAN_FORMAT ? "practice plan" : "rankings");
 
 export function OpenFromMenu({ kind, importHref, onOpened }: OpenFromMenuProps) {
@@ -46,6 +48,8 @@ export function OpenFromMenu({ kind, importHref, onOpened }: OpenFromMenuProps) 
     const [pending, setPending] = useState<Pending | null>(null);
     const preparation = useConnectorPreparation();
     const [listing, setListing] = useState<{ connector: StorageConnector; files: RemoteFile[] } | null>(null);
+    /** The planner folder on this computer, when one is chosen (storage locations design): its files are offered as a list. */
+    const [folderName, setFolderName] = useState<string | null>(null);
     if (!storage) return null;
     const { store, engine, connectors } = storage;
 
@@ -93,6 +97,23 @@ export function OpenFromMenu({ kind, importHref, onOpened }: OpenFromMenuProps) 
         await openLinked(crypto.randomUUID(), ref);
     };
 
+    const listFrom = async (connector: StorageConnector, where: string) => {
+        const listed = await connector.list({ kind });
+        if (!listed.ok) {
+            setProblem(syncErrorText(listed.error, where));
+            return;
+        }
+        setListing({ connector, files: listed.value });
+    };
+
+    const local = connectors.find((connector) => connector.id === "local-file");
+
+    const pickFromFolder = () =>
+        attempt(async () => {
+            setAnchor(null);
+            if (local) await listFrom(local, "the planner folder");
+        });
+
     const pick = (connector: StorageConnector) =>
         attempt(async () => {
             setAnchor(null);
@@ -104,12 +125,7 @@ export function OpenFromMenu({ kind, importHref, onOpened }: OpenFromMenuProps) 
             }
             if (!connector.capabilities.pick && connector.capabilities.list) {
                 // No picker (OneDrive's app folder): choose from the connector's own list.
-                const listed = await connector.list({ kind });
-                if (!listed.ok) {
-                    setProblem(syncErrorText(listed.error, CONNECTOR_NAMES[connector.id]));
-                    return;
-                }
-                setListing({ connector, files: listed.value });
+                await listFrom(connector, CONNECTOR_NAMES[connector.id]);
                 return;
             }
             const picked = await connector.pickToOpen({ kind });
@@ -168,12 +184,18 @@ export function OpenFromMenu({ kind, importHref, onOpened }: OpenFromMenuProps) 
                 onClick={(event) => {
                     preparation.prepare(connectors);
                     setAnchor(event.currentTarget);
+                    void local?.location?.().then((location) => setFolderName(location?.name ?? null));
                 }}
                 sx={{ minHeight: 44 }}
             >
                 {OPEN_FROM_LABEL}
             </Button>
             <Menu id={`open-from-${kind}`} anchorEl={anchor} open={anchor !== null} onClose={() => setAnchor(null)}>
+                {folderName !== null && (
+                    <MenuItem onClick={() => void pickFromFolder()} sx={{ minHeight: 44 }}>
+                        <ListItemText primary={PLANNER_FOLDER_ITEM} secondary={`${folderName}. Linked: Save writes back to it`} />
+                    </MenuItem>
+                )}
                 {connectors.map((connector) => {
                     // Held while its sign-in loads, so the popup opens from the tap.
                     const loading = preparation.isPreparing(connector.id);

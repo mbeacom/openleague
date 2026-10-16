@@ -55,7 +55,13 @@ export type ConnectorError =
      * Files.ReadWrite.AppFolder covers those accounts, and a tenant can block
      * it, so this is said plainly rather than as a generic failure.
      */
-    | { code: "app-folder-unavailable" };
+    | { code: "app-folder-unavailable" }
+    /**
+     * The folder the coach chose for new files (storage locations design) is
+     * gone, trashed or out of reach. Nothing was written; the coach chooses
+     * another, or the default, in Saved files.
+     */
+    | { code: "location-missing" };
 
 export type Result<T> = { ok: true; value: T } | { ok: false; error: ConnectorError };
 
@@ -103,6 +109,19 @@ export interface StorageConnector {
      * prepare() they started.
      */
     prepared?: () => boolean;
+    /**
+     * Where new files go (storage locations design): the folder's name, and
+     * whether the coach chose it (false: the connector's default). null when
+     * there is no folder (files on this computer without a planner folder).
+     */
+    location?: () => Promise<{ name: string; chosen: boolean } | null>;
+    /**
+     * Interactive (a tap): the coach chooses where new files go. null when
+     * they cancel. Kept on this device; files already saved don't move.
+     */
+    chooseLocation?: () => Promise<Result<{ name: string } | null>>;
+    /** Back to the connector's default place for new files. */
+    resetLocation?: () => Promise<void>;
     /** Revokes or clears tokens; links are kept. */
     disconnect: () => Promise<void>;
     list: (filter?: { kind?: string }) => Promise<Result<RemoteFile[]>>;
