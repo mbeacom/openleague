@@ -2159,4 +2159,120 @@ export const STARTER_PLAYS: readonly StarterPlay[] = [
             area: { kind: "zone-left" },
         },
     },
+    {
+        id: "starter-skate-pre-game-warm-up",
+        name: "Pre-Game Warm-Up",
+        description:
+            "A game-day shooting warm-up that also warms the goalie up. Two lines stand at the blue line, one on each side. Skaters go one at a time, alternating lines: skate in, take one shot, then curl away without chasing the rebound and join the back of the other line. Teach: one good shot on net, hit the goalie early so the goalie finds pucks, and clear the lane for the next shooter. 5 min.",
+        focus: "skaters",
+        goalies: "required",
+        ageGroups: ["u8", "u10"],
+        playData: {
+            version: PLAY_DATA_VERSION,
+            players: [
+                goalie("pg-g", 17, 42.5),
+                player("pg-a1", "A", 64, 20),
+                player("pg-a2", "A", 64, 8),
+                player("pg-b1", "B", 64, 65),
+                player("pg-b2", "B", 64, 77),
+            ],
+            drawings: [
+                carry("pg-a1-route", [59, 23], [42, 30], [33, 35]),
+                shot("pg-shot", [33, 35], [24, 40]),
+                skate("pg-a1-switch", [33, 35], [22, 24], [6, 30], [5, 55], [20, 70], [44, 74]),
+            ],
+            equipment: [leftNet("pg-net"), pucks("pg-pucks", 68, 42.5)],
+            annotations: [note("pg-note", "One shot, switch lines", 4, 83, "#000000", 4)],
+            area: { kind: "zone-left" },
+        },
+    },
+    // USA Hockey 8U practice-plan stations: names kept, descriptions and diagrams written for this pack.
+    {
+        id: "starter-skate-shooting-technique",
+        name: "Shooting Technique",
+        description:
+            "Wrist-shot technique against the boards, so there is no net and no chasing pucks. Each skater stands sideways to the boards with a tire against the boards as the target. The puck starts behind the back foot and sweeps forward as the weight moves onto the front foot, finishing with the blade pointed at the tire. Teach: head up to see the target, push the puck rather than slap it, and hold the follow-through. 7 min.",
+        focus: "skaters",
+        goalies: "none",
+        ageGroups: ["u6", "u8", "u10"],
+        playData: {
+            version: PLAY_DATA_VERSION,
+            players: [
+                player("st-s1", "S1", 26, 24),
+                player("st-s2", "S2", 46, 24),
+                player("st-s3", "S3", 66, 24),
+            ],
+            drawings: [
+                shot("st-shot1", [26, 18], [26, 9]),
+                shot("st-shot2", [46, 18], [46, 9]),
+                shot("st-shot3", [66, 18], [66, 9]),
+            ],
+            equipment: [
+                gear("tire", "st-tire1", 26, 5),
+                gear("tire", "st-tire2", 46, 5),
+                gear("tire", "st-tire3", 66, 5),
+                pucks("st-pucks", 66, 36),
+            ],
+            annotations: [note("st-note", "Sideways to the boards", 4, 40, "#000000", 4)],
+            area: { kind: "zone-left-top" },
+        },
+    },
+    {
+        id: "starter-skate-1v1-angling",
+        name: "1v1 Angling",
+        description:
+            "The attacker starts with a puck and must skate behind a vacant net before attacking the goalie. The defender angles the attacker coming out from behind that net. No stopping behind the net is required; let the pair play it out. Teach: defenders skate an angle that steers the attacker away from the middle, stick on the puck; attackers come out with speed. 7 min. 8U: angle the attacker into the boards, not the middle, and get a hand on the attacker's hands to lift the stick.",
+        focus: "skaters",
+        goalies: "required",
+        ageGroups: ["u8", "u10"],
+        playData: {
+            version: PLAY_DATA_VERSION,
+            players: [
+                goalie("an-g", 17, 42.5),
+                player("an-a", "A", 68, 26),
+                player("an-d", "D", 48, 26, "them"),
+            ],
+            drawings: [
+                carry("an-a-route", [64, 22], [62, 7], [48, 5], [36, 14], [28, 28]),
+                shot("an-shot", [28, 28], [22, 36]),
+                opponentRoute("an-d-route", [46, 22], [40, 13]),
+            ],
+            equipment: [leftNet("an-net"), smallNet("an-vacant-net", 55, 13, 270), pucks("an-pucks", 70, 40)],
+            annotations: [note("an-note", "Angle to the boards", 24, 83, "#000000", 4)],
+            area: { kind: "zone-left" },
+        },
+    },
+    {
+        id: "starter-game-3-offense-vs-2-defense",
+        name: "3 Offense vs. 2 Defense",
+        description:
+            "A 3-on-2 in one zone. Forwards line up on one side of the blue line, defense on the other, and a coach at the blue line passes in to start each rush. Skaters switch lines as they come off. Teach: forwards use the extra skater, moving to open ice with a lane for a pass or shot and keeping the puck moving; defenders pressure the puck and protect the front of the net. Add a minimum number of passes if the forwards stop passing. 8–10 min.",
+        focus: "team",
+        goalies: "required",
+        ageGroups: ["u8", "u10"],
+        playData: {
+            version: PLAY_DATA_VERSION,
+            players: [
+                goalie("tv-g", 17, 42.5),
+                coach("tv-c", 68, 42.5),
+                player("tv-f1", "F1", 50, 14),
+                player("tv-f2", "F2", 54, 42.5),
+                player("tv-f3", "F3", 48, 70),
+                player("tv-d1", "D1", 36, 28, "them"),
+                player("tv-d2", "D2", 36, 56, "them"),
+            ],
+            drawings: [
+                pass("tv-pass1", [63, 40], [56, 20]),
+                skate("tv-f2-route", [50, 40], [42, 36]),
+                pass("tv-pass2", [48, 18], [43, 30]),
+                shot("tv-shot", [42, 36], [24, 41]),
+                skate("tv-f3-route", [44, 66], [32, 74]),
+                opponentRoute("tv-d1-route", [40, 24], [45, 20]),
+                opponentRoute("tv-d2-route", [32, 52], [26, 48]),
+            ],
+            equipment: [leftNet("tv-net"), pucks("tv-pucks", 70, 30)],
+            annotations: [note("tv-note", "Find the open lane", 4, 83, "#000000", 4)],
+            area: { kind: "zone-left" },
+        },
+    },
 ];

@@ -122,7 +122,9 @@ describe("PlannerApp", () => {
         await store.seedStarterDrills();
         window.location.hash = "#/library";
         render(app(store));
-        expect(await screen.findByText(STARTER_PLAYS[0].name)).toBeInTheDocument();
+        // Seeded together, the starters share a createdAt, so the first page lists them by name.
+        const [firstByName] = STARTER_PLAYS.map((p) => p.name).sort((a, b) => a.localeCompare(b));
+        expect(await screen.findByText(firstByName)).toBeInTheDocument();
     });
 
     it("opens a #plan= link under StrictMode and lands on the new session", async () => {
