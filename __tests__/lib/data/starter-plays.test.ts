@@ -215,6 +215,9 @@ describe("Starter play ice areas", () => {
         "starter-skate-corner-attacks": "zone-right",
         "starter-skate-keep-away-1v1": "zone-neutral",
         "starter-skate-breakaway-relay": "half-left",
+        "starter-game-circle-scoring": "zone-left-top",
+        "starter-skate-edge-control-abcs": "zone-left-top",
+        "starter-skate-around-the-horn": "zone-left",
     };
 
     it("gives the obvious set plays an explicit area and leaves full-ice drills unset", () => {
@@ -327,10 +330,10 @@ describe("Starter drill tags", () => {
         }
     });
 
-    it("ships twenty-eight skater drills, three small-area games and 67 starters in all", () => {
-        expect(STARTER_PLAYS.filter((p) => p.id.startsWith("starter-skate-")).map((p) => p.focus)).toEqual(Array(28).fill("skaters"));
-        expect(STARTER_PLAYS.filter((p) => p.id.startsWith("starter-game-")).map((p) => p.focus)).toEqual(["team", "team", "team"]);
-        expect(STARTER_PLAYS).toHaveLength(67);
+    it("ships thirty skater drills, four small-area games and 70 starters in all", () => {
+        expect(STARTER_PLAYS.filter((p) => p.id.startsWith("starter-skate-")).map((p) => p.focus)).toEqual(Array(30).fill("skaters"));
+        expect(STARTER_PLAYS.filter((p) => p.id.startsWith("starter-game-")).map((p) => p.focus)).toEqual(["team", "team", "team", "team"]);
+        expect(STARTER_PLAYS).toHaveLength(70);
     });
 
     it("puts every small-area drill on a quarter-ice or zone preset", () => {
@@ -468,6 +471,44 @@ describe("Foundation Stage goalie drills and the 8U goaltender-integration drill
     });
 });
 
+describe("Mite circle game, edge ABCs and Around the Horn", () => {
+    const find = (id: string) => {
+        const play = STARTER_PLAYS.find((p) => p.id === id);
+        if (!play) throw new Error(`missing ${id}`);
+        return play;
+    };
+    const goalieCount = (id: string) => find(id).playData.players.filter((p) => p.role === "G").length;
+    const nets = (id: string) => find(id).playData.equipment.filter((e) => e.kind === "net").map((n) => [n.position.x, n.position.y]);
+
+    it("adds the three drills in the plan's order, at the end of the pack", () => {
+        expect(STARTER_PLAYS.slice(-3).map((p) => p.name)).toEqual(["Circle Scoring Game", "Skating Edge Control (ABCs)", "Around the Horn"]);
+    });
+
+    it("plays the circle scoring game on one circle, its net on the goal line beside it, against one goalie and one defender", () => {
+        const play = find("starter-game-circle-scoring");
+        expect([play.focus, play.goalies]).toEqual(["team", "required"]);
+        expect(nets(play.id)).toEqual([[11, 20.5]]);
+        expect(goalieCount(play.id)).toBe(1);
+        expect(play.playData.players.filter((p) => p.role === "O")).toHaveLength(1);
+    });
+
+    it("keeps the edge ABCs as its own goalie-free drill beside the edge circuit", () => {
+        const play = find("starter-skate-edge-control-abcs");
+        expect([play.goalies, goalieCount(play.id), nets(play.id)]).toEqual(["none", 0, []]);
+        expect(play.description).toMatch(/swizzles/);
+        expect(find("starter-skate-edge-circuit").name).not.toBe(play.name);
+    });
+
+    it("draws Around the Horn with one goalie and four passes into a shot, adapted for 8U", () => {
+        const play = find("starter-skate-around-the-horn");
+        expect([goalieCount(play.id), nets(play.id)]).toEqual([1, [[11, 42.5]]]);
+        expect(play.playData.drawings.filter((d) => d.action === "pass")).toHaveLength(4);
+        expect(play.playData.drawings.filter((d) => d.action === "shot")).toHaveLength(1);
+        expect(play.ageGroups).toContain("u8");
+        expect(play.description).toMatch(/ 8U: /);
+    });
+});
+
 describe("Starter age groups (age-group templates R2)", () => {
     const AGES: Record<string, string[]> = {
         "starter-breakout-5man": ["u10", "u12", "u14", "u16plus"],
@@ -537,6 +578,9 @@ describe("Starter age groups (age-group templates R2)", () => {
         "starter-skate-corner-attacks": ["u6",  "u8",  "u10"],
         "starter-skate-keep-away-1v1": ["u6",  "u8",  "u10"],
         "starter-skate-breakaway-relay": ["u6",  "u8",  "u10"],
+        "starter-game-circle-scoring": ["u8", "u10"],
+        "starter-skate-edge-control-abcs": ["u6", "u8", "u10"],
+        "starter-skate-around-the-horn": ["u8", "u10"],
     };
 
     it("tags every starter, leaving drills that suit every age untagged", () => {

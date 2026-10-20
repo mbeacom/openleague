@@ -2070,4 +2070,93 @@ export const STARTER_PLAYS: readonly StarterPlay[] = [
             area: { kind: "half-left" },
         },
     },
+    {
+        id: "starter-game-circle-scoring",
+        name: "Circle Scoring Game",
+        description:
+            "A small game on one faceoff circle, with a net on the goal line beside it and a goalie in it. Three attackers spread around the circle and one defender works inside. Attackers move the puck around the circle to make the goalie move, and shoot only once they see the goalie out of position. The defender keeps pressuring the puck. Rotate every 45 seconds. Teach: pass to move the goalie, look before you shoot; defenders keep the feet moving and the stick on the puck. 8–10 min.",
+        focus: "team",
+        goalies: "required",
+        ageGroups: ["u8", "u10"],
+        playData: {
+            version: PLAY_DATA_VERSION,
+            players: [
+                goalie("cs-g", 17, 20.5),
+                player("cs-a1", "A1", 31, 6),
+                player("cs-a2", "A2", 46, 20.5),
+                player("cs-a3", "A3", 26, 34.5),
+                player("cs-d", "D", 31, 20.5, "them"),
+            ],
+            drawings: [
+                pass("cs-pass1", [34, 10], [41, 15]),
+                pass("cs-pass2", [44, 26], [32, 30.5]),
+                shot("cs-shot", [25, 30], [23, 25]),
+                lateral("cs-g-move", [17, 15], [17, 27]),
+                opponentRoute("cs-d-route", [33, 24], [38, 30]),
+            ],
+            equipment: [goalLineNet("cs-net", 11, 20.5), pucks("cs-pucks", 60, 6)],
+            annotations: [note("cs-note", "Move the goalie", 36, 40.5, "#000000", 4)],
+            area: { kind: "zone-left-top" },
+        },
+    },
+    // USA Hockey 8U practice-plan station: name kept, description and diagram written for this pack.
+    {
+        id: "starter-skate-edge-control-abcs",
+        name: "Skating Edge Control (ABCs)",
+        description:
+            "Skating ABCs in one quarter of the ice. Skaters snake through lanes of cones from the goal line to the blue line and back, and the coach calls a new skill every lap without stopping the group: swizzles, inside edges, outside edges, a two-foot slalom, inside-edge pumps, alternating one-foot edges, power jumps, then swizzle out and jump feet together. Teach: knees and ankles bent, push with the whole blade, quiet arms, eyes up. 7 min.",
+        focus: "skaters",
+        goalies: "none",
+        ageGroups: ["u6", "u8", "u10"],
+        playData: {
+            version: PLAY_DATA_VERSION,
+            players: [
+                player("ab-s1", "S1", 20, 7),
+                player("ab-s2", "S2", 50, 21.5),
+                player("ab-s3", "S3", 30, 35),
+            ],
+            drawings: [
+                skate("ab-lane1", [26, 7], [64, 7], [71, 14], [64, 21]),
+                skate("ab-lane2", [44, 21.5], [22, 21.5], [15, 28], [22, 35]),
+                skate("ab-lane3", [36, 35], [66, 35], [71, 38]),
+            ],
+            equipment: [cone("ab-cone1", 65, 14), cone("ab-cone2", 21, 28), cone("ab-cone3", 21, 14), cone("ab-cone4", 65, 28)],
+            annotations: [],
+            area: { kind: "zone-left-top" },
+        },
+    },
+    {
+        id: "starter-skate-around-the-horn",
+        name: "Around the Horn",
+        description:
+            "A passing chain that ends in a shot, with one group in each end: the goalie in one net, a coach in the other. The puck starts in the corner and goes up to the blue line, across, down to the far corner, then into the slot for the shooter. Each passer follows the pass to the next spot, and the shooter joins the back of the line. Teach: stick on the ice as a target, pass to the forehand, pass and move. 8–10 min. 8U: keep the spots inside the zone so the passes stay short.",
+        focus: "skaters",
+        goalies: "required",
+        ageGroups: ["u8", "u10"],
+        playData: {
+            version: PLAY_DATA_VERSION,
+            players: [
+                goalie("ah-g", 17, 42.5),
+                player("ah-s1", "1", 22, 72),
+                player("ah-s2", "2", 62, 64),
+                player("ah-s3", "3", 62, 22),
+                player("ah-s4", "4", 24, 12),
+                player("ah-s5", "5", 40, 42.5),
+            ],
+            drawings: [
+                pass("ah-pass1", [28, 71], [55, 66]),
+                skate("ah-s1-follow", [26, 75], [54, 71]),
+                pass("ah-pass2", [62, 58], [62, 29]),
+                skate("ah-s2-follow", [67, 59], [67, 30]),
+                pass("ah-pass3", [56, 21], [31, 13]),
+                skate("ah-s3-follow", [58, 17], [32, 8]),
+                pass("ah-pass4", [28, 17], [35, 36]),
+                skate("ah-s4-follow", [22, 18], [29, 37]),
+                shot("ah-shot", [35, 42.5], [24, 42.5]),
+            ],
+            equipment: [leftNet("ah-net"), pucks("ah-pucks", 12, 78)],
+            annotations: [note("ah-note", "Follow your pass", 32, 83, "#000000", 4)],
+            area: { kind: "zone-left" },
+        },
+    },
 ];
