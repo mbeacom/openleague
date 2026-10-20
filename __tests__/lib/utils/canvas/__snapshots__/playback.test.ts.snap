@@ -404,6 +404,167 @@ exports[`starter drills > matches the golden schedules and step poses 1`] = `
       },
     },
   },
+  "starter-game-3-offense-vs-2-defense": {
+    "durationMs": 2706,
+    "poses": [
+      {
+        "atMs": 0,
+        "players": {
+          "tv-c": {
+            "x": 68,
+            "y": 42.5,
+          },
+          "tv-d1": {
+            "x": 36,
+            "y": 28,
+          },
+          "tv-d2": {
+            "x": 36,
+            "y": 56,
+          },
+          "tv-f1": {
+            "x": 50,
+            "y": 14,
+          },
+          "tv-f2": {
+            "x": 54,
+            "y": 42.5,
+          },
+          "tv-f3": {
+            "x": 48,
+            "y": 70,
+          },
+          "tv-g": {
+            "x": 17,
+            "y": 42.5,
+          },
+        },
+        "pucks": {},
+      },
+      {
+        "atMs": 1106,
+        "players": {
+          "tv-c": {
+            "x": 68,
+            "y": 42.5,
+          },
+          "tv-d1": {
+            "x": 36,
+            "y": 28,
+          },
+          "tv-d2": {
+            "x": 26,
+            "y": 48,
+          },
+          "tv-f1": {
+            "x": 50,
+            "y": 14,
+          },
+          "tv-f2": {
+            "x": 42,
+            "y": 36,
+          },
+          "tv-f3": {
+            "x": 32.3,
+            "y": 73.8,
+          },
+          "tv-g": {
+            "x": 17,
+            "y": 42.5,
+          },
+        },
+        "pucks": {
+          "playback-puck-tv-pass1": {
+            "x": 56,
+            "y": 20,
+          },
+        },
+      },
+      {
+        "atMs": 2106,
+        "players": {
+          "tv-c": {
+            "x": 68,
+            "y": 42.5,
+          },
+          "tv-d1": {
+            "x": 36,
+            "y": 28,
+          },
+          "tv-d2": {
+            "x": 26,
+            "y": 48,
+          },
+          "tv-f1": {
+            "x": 50,
+            "y": 14,
+          },
+          "tv-f2": {
+            "x": 42,
+            "y": 36,
+          },
+          "tv-f3": {
+            "x": 32,
+            "y": 74,
+          },
+          "tv-g": {
+            "x": 17,
+            "y": 42.5,
+          },
+        },
+        "pucks": {
+          "playback-puck-tv-pass1": {
+            "x": 43,
+            "y": 30,
+          },
+        },
+      },
+    ],
+    "strokes": {
+      "tv-d1-route": {
+        "actorId": "tv-d1",
+        "endMs": 2706,
+        "puckId": null,
+        "startMs": 2106,
+      },
+      "tv-d2-route": {
+        "actorId": "tv-d2",
+        "endMs": 601,
+        "puckId": null,
+        "startMs": 0,
+      },
+      "tv-f2-route": {
+        "actorId": "tv-f2",
+        "endMs": 745,
+        "puckId": null,
+        "startMs": 0,
+      },
+      "tv-f3-route": {
+        "actorId": "tv-f3",
+        "endMs": 1202,
+        "puckId": null,
+        "startMs": 0,
+      },
+      "tv-pass1": {
+        "actorId": "tv-c",
+        "endMs": 706,
+        "puckId": "playback-puck-tv-pass1",
+        "startMs": 0,
+      },
+      "tv-pass2": {
+        "actorId": "tv-f1",
+        "endMs": 1706,
+        "puckId": "playback-puck-tv-pass1",
+        "startMs": 1106,
+      },
+      "tv-shot": {
+        "actorId": "tv-f2",
+        "endMs": 2706,
+        "puckId": "playback-puck-tv-pass1",
+        "startMs": 2106,
+      },
+    },
+  },
   "starter-game-3v3-cross-ice": {
     "durationMs": 3000,
     "poses": [
@@ -3838,6 +3999,72 @@ exports[`starter drills > matches the golden schedules and step poses 1`] = `
       },
     },
   },
+  "starter-skate-1v1-angling": {
+    "durationMs": 7027,
+    "poses": [
+      {
+        "atMs": 0,
+        "players": {
+          "an-a": {
+            "x": 68,
+            "y": 26,
+          },
+          "an-d": {
+            "x": 48,
+            "y": 26,
+          },
+          "an-g": {
+            "x": 17,
+            "y": 42.5,
+          },
+        },
+        "pucks": {},
+      },
+      {
+        "atMs": 6427,
+        "players": {
+          "an-a": {
+            "x": 28,
+            "y": 28,
+          },
+          "an-d": {
+            "x": 40,
+            "y": 13,
+          },
+          "an-g": {
+            "x": 17,
+            "y": 42.5,
+          },
+        },
+        "pucks": {
+          "playback-puck-an-a-route": {
+            "x": 27,
+            "y": 29.7,
+          },
+        },
+      },
+    ],
+    "strokes": {
+      "an-a-route": {
+        "actorId": "an-a",
+        "endMs": 6027,
+        "puckId": "playback-puck-an-a-route",
+        "startMs": 0,
+      },
+      "an-d-route": {
+        "actorId": "an-d",
+        "endMs": 901,
+        "puckId": null,
+        "startMs": 0,
+      },
+      "an-shot": {
+        "actorId": "an-a",
+        "endMs": 7027,
+        "puckId": "playback-puck-an-a-route",
+        "startMs": 6427,
+      },
+    },
+  },
   "starter-skate-around-the-horn": {
     "durationMs": 3732,
     "poses": [
@@ -6067,6 +6294,119 @@ exports[`starter drills > matches the golden schedules and step poses 1`] = `
       },
     },
   },
+  "starter-skate-pre-game-warm-up": {
+    "durationMs": 12261,
+    "poses": [
+      {
+        "atMs": 0,
+        "players": {
+          "pg-a1": {
+            "x": 64,
+            "y": 20,
+          },
+          "pg-a2": {
+            "x": 64,
+            "y": 8,
+          },
+          "pg-b1": {
+            "x": 64,
+            "y": 65,
+          },
+          "pg-b2": {
+            "x": 64,
+            "y": 77,
+          },
+          "pg-g": {
+            "x": 17,
+            "y": 42.5,
+          },
+        },
+        "pucks": {},
+      },
+      {
+        "atMs": 3268,
+        "players": {
+          "pg-a1": {
+            "x": 33,
+            "y": 35,
+          },
+          "pg-a2": {
+            "x": 64,
+            "y": 8,
+          },
+          "pg-b1": {
+            "x": 64,
+            "y": 65,
+          },
+          "pg-b2": {
+            "x": 64,
+            "y": 77,
+          },
+          "pg-g": {
+            "x": 17,
+            "y": 42.5,
+          },
+        },
+        "pucks": {
+          "playback-puck-pg-a1-route": {
+            "x": 31.3,
+            "y": 36,
+          },
+        },
+      },
+      {
+        "atMs": 3668,
+        "players": {
+          "pg-a1": {
+            "x": 33,
+            "y": 35,
+          },
+          "pg-a2": {
+            "x": 64,
+            "y": 8,
+          },
+          "pg-b1": {
+            "x": 64,
+            "y": 65,
+          },
+          "pg-b2": {
+            "x": 64,
+            "y": 77,
+          },
+          "pg-g": {
+            "x": 17,
+            "y": 42.5,
+          },
+        },
+        "pucks": {
+          "playback-puck-pg-a1-route": {
+            "x": 27.6,
+            "y": 38,
+          },
+        },
+      },
+    ],
+    "strokes": {
+      "pg-a1-route": {
+        "actorId": "pg-a1",
+        "endMs": 2868,
+        "puckId": "playback-puck-pg-a1-route",
+        "startMs": 0,
+      },
+      "pg-a1-switch": {
+        "actorId": "pg-a1",
+        "endMs": 12261,
+        "puckId": null,
+        "startMs": 3668,
+      },
+      "pg-shot": {
+        "actorId": "pg-a1",
+        "endMs": 3868,
+        "puckId": "playback-puck-pg-a1-route",
+        "startMs": 3268,
+      },
+    },
+  },
   "starter-skate-puck-protection": {
     "durationMs": 4304,
     "poses": [
@@ -6354,6 +6694,49 @@ exports[`starter drills > matches the golden schedules and step poses 1`] = `
         "endMs": 1687,
         "puckId": "playback-puck-qr-pass",
         "startMs": 1087,
+      },
+    },
+  },
+  "starter-skate-shooting-technique": {
+    "durationMs": 600,
+    "poses": [
+      {
+        "atMs": 0,
+        "players": {
+          "st-s1": {
+            "x": 26,
+            "y": 24,
+          },
+          "st-s2": {
+            "x": 46,
+            "y": 24,
+          },
+          "st-s3": {
+            "x": 66,
+            "y": 24,
+          },
+        },
+        "pucks": {},
+      },
+    ],
+    "strokes": {
+      "st-shot1": {
+        "actorId": "st-s1",
+        "endMs": 600,
+        "puckId": "playback-puck-st-shot1",
+        "startMs": 0,
+      },
+      "st-shot2": {
+        "actorId": "st-s2",
+        "endMs": 600,
+        "puckId": "playback-puck-st-shot2",
+        "startMs": 0,
+      },
+      "st-shot3": {
+        "actorId": "st-s3",
+        "endMs": 600,
+        "puckId": "playback-puck-st-shot3",
+        "startMs": 0,
       },
     },
   },
