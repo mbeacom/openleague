@@ -920,6 +920,104 @@ exports[`starter drills > matches the golden schedules and step poses 1`] = `
       },
     },
   },
+  "starter-game-circle-scoring": {
+    "durationMs": 1600,
+    "poses": [
+      {
+        "atMs": 0,
+        "players": {
+          "cs-a1": {
+            "x": 31,
+            "y": 6,
+          },
+          "cs-a2": {
+            "x": 46,
+            "y": 20.5,
+          },
+          "cs-a3": {
+            "x": 26,
+            "y": 34.5,
+          },
+          "cs-d": {
+            "x": 31,
+            "y": 20.5,
+          },
+          "cs-g": {
+            "x": 17,
+            "y": 20.5,
+          },
+        },
+        "pucks": {},
+      },
+      {
+        "atMs": 1000,
+        "players": {
+          "cs-a1": {
+            "x": 31,
+            "y": 6,
+          },
+          "cs-a2": {
+            "x": 46,
+            "y": 20.5,
+          },
+          "cs-a3": {
+            "x": 26,
+            "y": 34.5,
+          },
+          "cs-d": {
+            "x": 38,
+            "y": 30,
+          },
+          "cs-g": {
+            "x": 17,
+            "y": 24.4,
+          },
+        },
+        "pucks": {
+          "playback-puck-cs-pass1": {
+            "x": 41,
+            "y": 15,
+          },
+          "playback-puck-cs-pass2": {
+            "x": 32,
+            "y": 30.5,
+          },
+        },
+      },
+    ],
+    "strokes": {
+      "cs-d-route": {
+        "actorId": "cs-d",
+        "endMs": 651,
+        "puckId": null,
+        "startMs": 0,
+      },
+      "cs-g-move": {
+        "actorId": "cs-g",
+        "endMs": 1333,
+        "puckId": null,
+        "startMs": 0,
+      },
+      "cs-pass1": {
+        "actorId": "cs-a1",
+        "endMs": 600,
+        "puckId": "playback-puck-cs-pass1",
+        "startMs": 0,
+      },
+      "cs-pass2": {
+        "actorId": "cs-a2",
+        "endMs": 600,
+        "puckId": "playback-puck-cs-pass2",
+        "startMs": 0,
+      },
+      "cs-shot": {
+        "actorId": "cs-a3",
+        "endMs": 1600,
+        "puckId": "playback-puck-cs-pass2",
+        "startMs": 1000,
+      },
+    },
+  },
   "starter-goalie-5-point-ladder": {
     "durationMs": 13096,
     "poses": [
@@ -3740,6 +3838,355 @@ exports[`starter drills > matches the golden schedules and step poses 1`] = `
       },
     },
   },
+  "starter-skate-around-the-horn": {
+    "durationMs": 3732,
+    "poses": [
+      {
+        "atMs": 0,
+        "players": {
+          "ah-g": {
+            "x": 17,
+            "y": 42.5,
+          },
+          "ah-s1": {
+            "x": 22,
+            "y": 72,
+          },
+          "ah-s2": {
+            "x": 62,
+            "y": 64,
+          },
+          "ah-s3": {
+            "x": 62,
+            "y": 22,
+          },
+          "ah-s4": {
+            "x": 24,
+            "y": 12,
+          },
+          "ah-s5": {
+            "x": 40,
+            "y": 42.5,
+          },
+        },
+        "pucks": {},
+      },
+      {
+        "atMs": 400,
+        "players": {
+          "ah-g": {
+            "x": 17,
+            "y": 42.5,
+          },
+          "ah-s1": {
+            "x": 22,
+            "y": 72,
+          },
+          "ah-s2": {
+            "x": 62,
+            "y": 64,
+          },
+          "ah-s3": {
+            "x": 62,
+            "y": 22,
+          },
+          "ah-s4": {
+            "x": 24,
+            "y": 12,
+          },
+          "ah-s5": {
+            "x": 40,
+            "y": 42.5,
+          },
+        },
+        "pucks": {
+          "playback-puck-ah-pass1": {
+            "x": 39.8,
+            "y": 68.8,
+          },
+          "playback-puck-ah-pass2": {
+            "x": 62,
+            "y": 46,
+          },
+          "playback-puck-ah-pass3": {
+            "x": 44.6,
+            "y": 17.3,
+          },
+        },
+      },
+      {
+        "atMs": 1275,
+        "players": {
+          "ah-g": {
+            "x": 17,
+            "y": 42.5,
+          },
+          "ah-s1": {
+            "x": 31,
+            "y": 74.3,
+          },
+          "ah-s2": {
+            "x": 62,
+            "y": 64,
+          },
+          "ah-s3": {
+            "x": 62,
+            "y": 22,
+          },
+          "ah-s4": {
+            "x": 24,
+            "y": 12,
+          },
+          "ah-s5": {
+            "x": 40,
+            "y": 42.5,
+          },
+        },
+        "pucks": {
+          "playback-puck-ah-pass1": {
+            "x": 55,
+            "y": 66,
+          },
+          "playback-puck-ah-pass2": {
+            "x": 62,
+            "y": 29,
+          },
+          "playback-puck-ah-pass3": {
+            "x": 31,
+            "y": 13,
+          },
+        },
+      },
+      {
+        "atMs": 1315,
+        "players": {
+          "ah-g": {
+            "x": 17,
+            "y": 42.5,
+          },
+          "ah-s1": {
+            "x": 31.9,
+            "y": 74.2,
+          },
+          "ah-s2": {
+            "x": 62,
+            "y": 64,
+          },
+          "ah-s3": {
+            "x": 62,
+            "y": 22,
+          },
+          "ah-s4": {
+            "x": 24,
+            "y": 12,
+          },
+          "ah-s5": {
+            "x": 40,
+            "y": 42.5,
+          },
+        },
+        "pucks": {
+          "playback-puck-ah-pass1": {
+            "x": 55,
+            "y": 66,
+          },
+          "playback-puck-ah-pass2": {
+            "x": 62,
+            "y": 29,
+          },
+          "playback-puck-ah-pass3": {
+            "x": 30.1,
+            "y": 14.2,
+          },
+        },
+      },
+      {
+        "atMs": 1367,
+        "players": {
+          "ah-g": {
+            "x": 17,
+            "y": 42.5,
+          },
+          "ah-s1": {
+            "x": 32.9,
+            "y": 74,
+          },
+          "ah-s2": {
+            "x": 62,
+            "y": 64,
+          },
+          "ah-s3": {
+            "x": 62,
+            "y": 22,
+          },
+          "ah-s4": {
+            "x": 24,
+            "y": 12,
+          },
+          "ah-s5": {
+            "x": 40,
+            "y": 42.5,
+          },
+        },
+        "pucks": {
+          "playback-puck-ah-pass1": {
+            "x": 55,
+            "y": 66,
+          },
+          "playback-puck-ah-pass2": {
+            "x": 62,
+            "y": 29,
+          },
+          "playback-puck-ah-pass3": {
+            "x": 28.9,
+            "y": 15.8,
+          },
+        },
+      },
+      {
+        "atMs": 1675,
+        "players": {
+          "ah-g": {
+            "x": 17,
+            "y": 42.5,
+          },
+          "ah-s1": {
+            "x": 39.6,
+            "y": 73.1,
+          },
+          "ah-s2": {
+            "x": 63.4,
+            "y": 62.6,
+          },
+          "ah-s3": {
+            "x": 61.1,
+            "y": 20.8,
+          },
+          "ah-s4": {
+            "x": 24,
+            "y": 12,
+          },
+          "ah-s5": {
+            "x": 40,
+            "y": 42.5,
+          },
+        },
+        "pucks": {
+          "playback-puck-ah-pass1": {
+            "x": 55,
+            "y": 66,
+          },
+          "playback-puck-ah-pass2": {
+            "x": 62,
+            "y": 29,
+          },
+          "playback-puck-ah-pass3": {
+            "x": 31.4,
+            "y": 26.4,
+          },
+        },
+      },
+      {
+        "atMs": 2350,
+        "players": {
+          "ah-g": {
+            "x": 17,
+            "y": 42.5,
+          },
+          "ah-s1": {
+            "x": 51.6,
+            "y": 71.3,
+          },
+          "ah-s2": {
+            "x": 67,
+            "y": 52.1,
+          },
+          "ah-s3": {
+            "x": 51.6,
+            "y": 14.8,
+          },
+          "ah-s4": {
+            "x": 23,
+            "y": 20.7,
+          },
+          "ah-s5": {
+            "x": 40,
+            "y": 42.5,
+          },
+        },
+        "pucks": {
+          "playback-puck-ah-pass1": {
+            "x": 55,
+            "y": 66,
+          },
+          "playback-puck-ah-pass2": {
+            "x": 62,
+            "y": 29,
+          },
+          "playback-puck-ah-pass3": {
+            "x": 35,
+            "y": 36,
+          },
+        },
+      },
+    ],
+    "strokes": {
+      "ah-pass1": {
+        "actorId": "ah-s1",
+        "endMs": 915,
+        "puckId": "playback-puck-ah-pass1",
+        "startMs": 0,
+      },
+      "ah-pass2": {
+        "actorId": "ah-s2",
+        "endMs": 967,
+        "puckId": "playback-puck-ah-pass2",
+        "startMs": 0,
+      },
+      "ah-pass3": {
+        "actorId": "ah-s3",
+        "endMs": 875,
+        "puckId": "playback-puck-ah-pass3",
+        "startMs": 0,
+      },
+      "ah-pass4": {
+        "actorId": "ah-s4",
+        "endMs": 1950,
+        "puckId": "playback-puck-ah-pass3",
+        "startMs": 1275,
+      },
+      "ah-s1-follow": {
+        "actorId": "ah-s1",
+        "endMs": 2757,
+        "puckId": null,
+        "startMs": 400,
+      },
+      "ah-s2-follow": {
+        "actorId": "ah-s2",
+        "endMs": 3732,
+        "puckId": null,
+        "startMs": 1315,
+      },
+      "ah-s3-follow": {
+        "actorId": "ah-s3",
+        "endMs": 3660,
+        "puckId": null,
+        "startMs": 1367,
+      },
+      "ah-s4-follow": {
+        "actorId": "ah-s4",
+        "endMs": 3362,
+        "puckId": null,
+        "startMs": 1675,
+      },
+      "ah-shot": {
+        "actorId": "ah-s5",
+        "endMs": 2950,
+        "puckId": "playback-puck-ah-pass3",
+        "startMs": 2350,
+      },
+    },
+  },
   "starter-skate-backward-tag": {
     "durationMs": 1953,
     "poses": [
@@ -4168,6 +4615,49 @@ exports[`starter drills > matches the golden schedules and step poses 1`] = `
       "ci-weave": {
         "actorId": "ci-s3",
         "endMs": 3728,
+        "puckId": null,
+        "startMs": 0,
+      },
+    },
+  },
+  "starter-skate-edge-control-abcs": {
+    "durationMs": 4809,
+    "poses": [
+      {
+        "atMs": 0,
+        "players": {
+          "ab-s1": {
+            "x": 20,
+            "y": 7,
+          },
+          "ab-s2": {
+            "x": 50,
+            "y": 21.5,
+          },
+          "ab-s3": {
+            "x": 30,
+            "y": 35,
+          },
+        },
+        "pucks": {},
+      },
+    ],
+    "strokes": {
+      "ab-lane1": {
+        "actorId": "ab-s1",
+        "endMs": 4809,
+        "puckId": null,
+        "startMs": 0,
+      },
+      "ab-lane2": {
+        "actorId": "ab-s2",
+        "endMs": 3447,
+        "puckId": null,
+        "startMs": 0,
+      },
+      "ab-lane3": {
+        "actorId": "ab-s3",
+        "endMs": 2985,
         "puckId": null,
         "startMs": 0,
       },
