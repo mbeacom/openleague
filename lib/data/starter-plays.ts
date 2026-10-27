@@ -2275,4 +2275,93 @@ export const STARTER_PLAYS: readonly StarterPlay[] = [
             area: { kind: "zone-left" },
         },
     },
+    // USA Hockey 8U practice-plan stations: names kept, descriptions and diagrams written for this pack.
+    {
+        id: "starter-skate-backward-crossovers",
+        name: "Backward Cross-Overs",
+        description:
+            "Tires spread around one quarter of the ice, one skater to a tire. Skate backward around the tire with crossovers, the stick on the inside, then switch direction so both sides get the same work. Coaches move between tires and correct one skater at a time. Teach: knees bent, the outside leg crossing over in front, the inside leg pushing out under the body, shoulders level. Progress to pivots: forward into the tire, pivot to backward around it. 7 min.",
+        focus: "skaters",
+        goalies: "none",
+        ageGroups: ["u8", "u10"],
+        playData: {
+            version: PLAY_DATA_VERSION,
+            players: [
+                player("bx-s1", "S1", 30, 9),
+                player("bx-s2", "S2", 60, 9),
+                player("bx-s3", "S3", 30, 28),
+                player("bx-s4", "S4", 60, 28),
+            ],
+            drawings: [
+                backskate("bx-s1-loop", [24, 9], [18, 15], [12, 9], [18, 3], [23, 6]),
+                backskate("bx-s2-loop", [54, 9], [48, 3], [42, 9], [48, 15], [53, 12]),
+                backskate("bx-s3-loop", [24, 28], [18, 34], [12, 28], [18, 22], [23, 25]),
+                backskate("bx-s4-loop", [54, 28], [48, 22], [42, 28], [48, 34], [53, 31]),
+            ],
+            equipment: [
+                gear("tire", "bx-tire1", 18, 9),
+                gear("tire", "bx-tire2", 48, 9),
+                gear("tire", "bx-tire3", 18, 28),
+                gear("tire", "bx-tire4", 48, 28),
+            ],
+            annotations: [note("bx-note", "Stick inside, both ways", 4, 40, "#000000", 4)],
+            area: { kind: "zone-left-top" },
+        },
+    },
+    {
+        id: "starter-skate-offense-defense-out",
+        name: "Offense, Defense, Out",
+        description:
+            "A 1-on-1 to a net in one quarter of the ice, with each team's line waiting at the far side. When the defender wins the puck, they pass to the first skater in their own line, who attacks. The old attacker turns and defends, and the old defender goes to the back of their line. A goal ends the rep too, and the defender's line sends the next attacker. Teach: defenders skate and take the puck, then move it quickly; attackers protect the puck and get to the net. 7 min.",
+        focus: "skaters",
+        goalies: "optional",
+        ageGroups: ["u8", "u10"],
+        playData: {
+            version: PLAY_DATA_VERSION,
+            players: [
+                player("od-a", "A", 42, 18),
+                player("od-d", "D", 30, 30, "them"),
+                player("od-d2", "D2", 62, 6, "them"),
+                player("od-a2", "A2", 62, 28),
+            ],
+            drawings: [
+                carry("od-a-route", [38, 21], [32, 24]),
+                opponentRoute("od-d-route", [31, 26], [31, 23]),
+                pass("od-pass", [34, 21], [56, 10]),
+                carry("od-d2-route", [56, 8], [44, 8], [26, 14], [18, 19]),
+                opponentRoute("od-d-exit", [36, 31], [52, 26], [70, 14]),
+            ],
+            equipment: [goalLineNet("od-net", 11, 20.5), pucks("od-pucks", 70, 24)],
+            annotations: [note("od-note", "Win it? Pass to your line", 4, 40, "#000000", 4)],
+            area: { kind: "zone-left-top" },
+        },
+    },
+    // A common relay game; description and diagram written for this pack.
+    {
+        id: "starter-skate-puck-stack-races",
+        name: "Puck Stack Races",
+        description:
+            "A team relay in two lanes. Each team lines up at the blue line, with a pile of pucks on the goal line at the end of its lane. On the whistle the first skater races down, picks up one puck by hand, races back and stacks it on the blue line, and the next skater goes. The tower must stand: if it falls, the team restacks before the next skater leaves. First team with every puck stacked wins. Teach: quick starts, a hockey stop at the pile, and a careful stack. 5 min.",
+        focus: "skaters",
+        goalies: "none",
+        ageGroups: ["u6", "u8"],
+        playData: {
+            version: PLAY_DATA_VERSION,
+            players: [
+                player("ps-a1", "A1", 64, 26),
+                player("ps-a2", "A2", 64, 14),
+                player("ps-b1", "B1", 64, 59, "them"),
+                player("ps-b2", "B2", 64, 71, "them"),
+            ],
+            drawings: [
+                skateStop("ps-a1-out", [58, 26], [18, 26]),
+                skate("ps-a1-back", [18, 29], [58, 30]),
+                opponentRoute("ps-b1-out", [58, 59], [18, 59]),
+                opponentRoute("ps-b1-back", [18, 56], [58, 55]),
+            ],
+            equipment: [pucks("ps-pucks-a", 12, 26), pucks("ps-pucks-b", 12, 59)],
+            annotations: [note("ps-note", "Stack it on the blue line", 4, 83, "#000000", 4)],
+            area: { kind: "zone-left" },
+        },
+    },
 ];
