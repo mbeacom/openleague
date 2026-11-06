@@ -2364,4 +2364,102 @@ export const STARTER_PLAYS: readonly StarterPlay[] = [
             area: { kind: "zone-left" },
         },
     },
+    // A common keep-away game; description and diagram written for this pack.
+    {
+        id: "starter-skate-rondo-circle-keep-away",
+        name: "Rondo Circle Keep Away",
+        description:
+            "Six skaters spread around the rim of a face-off circle and pass the puck among themselves while one defender in the middle tries to touch it. When the defender gets a stick on the puck, the skater who made that pass swaps into the middle. Teach: move along the rim to open a lane, call for the puck, pass across the circle past the defender, and receive with soft hands; the defender skates and keeps the stick on the ice. 5–8 min.",
+        focus: "skaters",
+        goalies: "none",
+        ageGroups: ["u8", "u10"],
+        playData: {
+            version: PLAY_DATA_VERSION,
+            players: [
+                player("rc-f1", "F", 31, 5.5),
+                player("rc-f2", "F", 44, 13),
+                player("rc-f3", "F", 44, 28),
+                player("rc-f4", "F", 31, 35.5),
+                player("rc-f5", "F", 18, 28),
+                player("rc-f6", "F", 18, 13),
+                player("rc-d", "D", 31, 20.5, "them"),
+            ],
+            drawings: [
+                pass("rc-pass1", [20, 24], [28, 11.5]),
+                pass("rc-pass2", [35, 7], [38.5, 9.5]),
+                pass("rc-pass3", [44, 17], [44, 21.5]),
+                opponentRoute("rc-d-route", [33, 19], [38, 15]),
+            ],
+            equipment: [pucks("rc-pucks", 60, 20)],
+            annotations: [note("rc-note", "Lose it? Swap with the D", 4, 50, "#000000", 4)],
+            area: { kind: "zone-left" },
+        },
+    },
+    // Own the Middle and Pit Support credit the USA Hockey station practice
+    // plans; their descriptions and diagrams are written for this pack.
+    {
+        id: "starter-skate-own-the-middle",
+        name: "Own the Middle",
+        description:
+            "Two skaters start beside a coach at the blue line. The coach spots a puck into the corner for a 1-on-1 battle; whoever wins it passes back to the coach. Both then race outside-in around their own cone while the coach slides a puck up the middle. The winner of that race attacks the net, and every change of possession goes back to the coach for a new race. Teach: win body position first, a quick pass, and tight turns at the cone. 30–40 second shifts. 9 min.",
+        focus: "skaters",
+        goalies: "optional",
+        ageGroups: ["u8", "u10"],
+        playData: {
+            version: PLAY_DATA_VERSION,
+            players: [
+                coach("om-c", 64, 42.5),
+                player("om-a", "A", 54, 32),
+                player("om-b", "B", 54, 53, "them"),
+            ],
+            drawings: [
+                pass("om-pass-spot", [60, 40], [26, 14]),
+                skate("om-a-chase", [50, 30], [30, 16]),
+                opponentRoute("om-b-chase", [50, 50], [34, 22]),
+                pass("om-pass-back", [30, 18], [56, 38]),
+                skate("om-a-cone", [30, 16], [52, 10], [68, 18], [64, 30], [50, 40]),
+                opponentRoute("om-b-cone", [34, 22], [30, 50], [50, 76], [68, 68], [64, 56], [52, 46]),
+                pass("om-pass-middle", [60, 42.5], [44, 42.5]),
+                carry("om-a-attack", [50, 40], [26, 42]),
+                shot("om-shot", [24, 42], [14, 42.5]),
+            ],
+            equipment: [leftNet("om-net"), cone("om-cone-a", 62, 24), cone("om-cone-b", 62, 61), pucks("om-pucks", 70, 50)],
+            annotations: [note("om-note", "Turnover? Pass to the coach", 4, 82, "#000000", 4)],
+            area: { kind: "zone-left" },
+        },
+    },
+    {
+        id: "starter-skate-pit-support",
+        name: "Pit Support",
+        description:
+            "A 2-on-2 inside a face-off circle, the pit, with one support skater on each side of it, along the boards and across the circle. A coach spots the puck in the pit. Whoever wins it must pass to a support skater at least once before attacking the net. Support skaters play offense for whichever pair has the puck but can't shoot. Teach: get open for the support pass, move the puck, then attack the net hard. 30–40 second shifts. 8 min.",
+        focus: "skaters",
+        goalies: "optional",
+        ageGroups: ["u8", "u10"],
+        playData: {
+            version: PLAY_DATA_VERSION,
+            players: [
+                player("pt-a1", "A1", 24, 16),
+                player("pt-a2", "A2", 38, 26),
+                player("pt-o1", "O1", 36, 12, "them"),
+                player("pt-o2", "O2", 24, 29, "them"),
+                player("pt-s1", "S", 52, 5),
+                player("pt-s2", "S", 52, 38),
+                coach("pt-c", 64, 22),
+            ],
+            drawings: [
+                pass("pt-pass-spot", [60, 21], [34, 20]),
+                lateral("pt-s1-slide", [46, 5], [26, 5]),
+                lateral("pt-s2-slide", [46, 38], [26, 38]),
+                carry("pt-a1-turn", [26, 19], [30, 26]),
+                pass("pt-pass-support", [31, 28], [44, 37]),
+                skate("pt-a2-net", [36, 23], [22, 22]),
+                pass("pt-pass-return", [46, 36], [23, 22.5]),
+                shot("pt-shot", [20, 21], [14, 20.5]),
+            ],
+            equipment: [goalLineNet("pt-net", 11, 20.5), pucks("pt-pucks", 68, 32)],
+            annotations: [note("pt-note", "Support skaters can't shoot", 4, 50, "#000000", 4)],
+            area: { kind: "zone-left" },
+        },
+    },
 ];

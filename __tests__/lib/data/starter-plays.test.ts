@@ -225,6 +225,9 @@ describe("Starter play ice areas", () => {
         "starter-skate-backward-crossovers": "zone-left-top",
         "starter-skate-offense-defense-out": "zone-left-top",
         "starter-skate-puck-stack-races": "zone-left",
+        "starter-skate-rondo-circle-keep-away": "zone-left",
+        "starter-skate-own-the-middle": "zone-left",
+        "starter-skate-pit-support": "zone-left",
     };
 
     it("gives the obvious set plays an explicit area and leaves full-ice drills unset", () => {
@@ -337,10 +340,10 @@ describe("Starter drill tags", () => {
         }
     });
 
-    it("ships thirty-six skater drills, five games and 77 starters in all", () => {
-        expect(STARTER_PLAYS.filter((p) => p.id.startsWith("starter-skate-")).map((p) => p.focus)).toEqual(Array(36).fill("skaters"));
+    it("ships thirty-nine skater drills, five games and 80 starters in all", () => {
+        expect(STARTER_PLAYS.filter((p) => p.id.startsWith("starter-skate-")).map((p) => p.focus)).toEqual(Array(39).fill("skaters"));
         expect(STARTER_PLAYS.filter((p) => p.id.startsWith("starter-game-")).map((p) => p.focus)).toEqual(Array(5).fill("team"));
-        expect(STARTER_PLAYS).toHaveLength(77);
+        expect(STARTER_PLAYS).toHaveLength(80);
     });
 
     it("puts every small-area drill on a quarter-ice or zone preset", () => {
@@ -488,7 +491,7 @@ describe("Mite circle game, edge ABCs and Around the Horn", () => {
     const nets = (id: string) => find(id).playData.equipment.filter((e) => e.kind === "net").map((n) => [n.position.x, n.position.y]);
 
     it("adds the three drills in the plan's order, before the second Mite plan's drills", () => {
-        expect(STARTER_PLAYS.slice(-10, -7).map((p) => p.name)).toEqual(["Circle Scoring Game", "Skating Edge Control (ABCs)", "Around the Horn"]);
+        expect(STARTER_PLAYS.slice(-13, -10).map((p) => p.name)).toEqual(["Circle Scoring Game", "Skating Edge Control (ABCs)", "Around the Horn"]);
     });
 
     it("plays the circle scoring game on one circle, its net on the goal line beside it, against one goalie and one defender", () => {
@@ -526,7 +529,7 @@ describe("Mite pre-game warm-up, 8U stations and 3-on-2", () => {
     const nets = (id: string) => find(id).playData.equipment.filter((e) => e.kind === "net").map((n) => [n.position.x, n.position.y]);
 
     it("adds the four drills in the plan's order, before the third Mite plan's drills", () => {
-        expect(STARTER_PLAYS.slice(-7, -3).map((p) => p.name)).toEqual(["Pre-Game Warm-Up", "Shooting Technique", "1v1 Angling", "3 Offense vs. 2 Defense"]);
+        expect(STARTER_PLAYS.slice(-10, -6).map((p) => p.name)).toEqual(["Pre-Game Warm-Up", "Shooting Technique", "1v1 Angling", "3 Offense vs. 2 Defense"]);
     });
 
     it("warms one goalie up with one shot per skater from two lines", () => {
@@ -567,8 +570,8 @@ describe("Mite backward cross-overs, offense-defense-out and puck stack races", 
     const roleCount = (id: string, role: string) => find(id).playData.players.filter((p) => p.role === role).length;
     const kinds = (id: string, kind: string) => find(id).playData.equipment.filter((e) => e.kind === kind);
 
-    it("adds the three new drills in the plan's order, at the end of the pack", () => {
-        expect(STARTER_PLAYS.slice(-3).map((p) => p.name)).toEqual(["Backward Cross-Overs", "Offense, Defense, Out", "Puck Stack Races"]);
+    it("adds the three new drills in the plan's order", () => {
+        expect(STARTER_PLAYS.slice(-6, -3).map((p) => p.name)).toEqual(["Backward Cross-Overs", "Offense, Defense, Out", "Puck Stack Races"]);
     });
 
     it("maps the plan's opening drill to the existing Trucks and Trailers rather than adding a copy", () => {
@@ -595,6 +598,48 @@ describe("Mite backward cross-overs, offense-defense-out and puck stack races", 
         expect([play.goalies, roleCount(play.id, "F"), roleCount(play.id, "O")]).toEqual(["none", 2, 2]);
         expect(kinds(play.id, "puckPile").map((p) => p.position.x)).toEqual([12, 12]);
         expect(play.description).toMatch(/restack/);
+    });
+});
+
+describe("Mite rondo, Own the Middle and Pit Support drills", () => {
+    const find = (id: string) => {
+        const play = STARTER_PLAYS.find((p) => p.id === id);
+        if (!play) throw new Error(`missing ${id}`);
+        return play;
+    };
+    const roleCount = (id: string, role: string) => find(id).playData.players.filter((p) => p.role === role).length;
+    const kinds = (id: string, kind: string) => find(id).playData.equipment.filter((e) => e.kind === kind);
+
+    it("adds the three new drills in the plan's order, at the end of the pack", () => {
+        expect(STARTER_PLAYS.slice(-3).map((p) => p.name)).toEqual(["Rondo Circle Keep Away", "Own the Middle", "Pit Support"]);
+    });
+
+    it("maps the plan's warm-up to the existing In and Out of Circles rather than adding a copy", () => {
+        expect(STARTER_PLAYS.filter((p) => p.name === "In and Out of Circles")).toHaveLength(1);
+    });
+
+    it("rings one face-off circle with six passers around a lone defender, with no net", () => {
+        const play = find("starter-skate-rondo-circle-keep-away");
+        expect([play.goalies, roleCount(play.id, "F"), roleCount(play.id, "O"), kinds(play.id, "net")]).toEqual(["none", 6, 1, []]);
+        const d = play.playData.players.find((p) => p.role === "O")!;
+        expect(d.position).toEqual({ x: 31, y: 20.5 });
+        expect(play.playData.drawings.filter((x) => x.action === "pass").length).toBeGreaterThanOrEqual(2);
+    });
+
+    it("races two skaters around their own cones after a 1-on-1, fed by a coach, to one net", () => {
+        const play = find("starter-skate-own-the-middle");
+        expect([roleCount(play.id, "G"), roleCount(play.id, "C"), roleCount(play.id, "F"), roleCount(play.id, "O")]).toEqual([0, 1, 1, 1]);
+        expect(kinds(play.id, "cone")).toHaveLength(2);
+        expect(kinds(play.id, "net")).toHaveLength(1);
+        expect(play.playData.drawings.filter((d) => d.action === "shot")).toHaveLength(1);
+    });
+
+    it("plays 2-on-2 in the pit with two support skaters who never shoot", () => {
+        const play = find("starter-skate-pit-support");
+        expect([roleCount(play.id, "G"), roleCount(play.id, "F"), roleCount(play.id, "O"), roleCount(play.id, "C")]).toEqual([0, 4, 2, 1]);
+        expect(play.playData.drawings.filter((d) => d.action === "lateral")).toHaveLength(2);
+        expect(play.playData.drawings.filter((d) => d.action === "shot")).toHaveLength(1);
+        expect(play.description).toMatch(/can't shoot/);
     });
 });
 
@@ -677,6 +722,9 @@ describe("Starter age groups (age-group templates R2)", () => {
         "starter-skate-backward-crossovers": ["u8", "u10"],
         "starter-skate-offense-defense-out": ["u8", "u10"],
         "starter-skate-puck-stack-races": ["u6", "u8"],
+        "starter-skate-rondo-circle-keep-away": ["u8", "u10"],
+        "starter-skate-own-the-middle": ["u8", "u10"],
+        "starter-skate-pit-support": ["u8", "u10"],
     };
 
     it("tags every starter, leaving drills that suit every age untagged", () => {
