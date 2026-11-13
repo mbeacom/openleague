@@ -4540,6 +4540,73 @@ exports[`starter drills > matches the golden schedules and step poses 1`] = `
       },
     },
   },
+  "starter-skate-backwards-freeze-tag": {
+    "durationMs": 1414,
+    "poses": [
+      {
+        "atMs": 0,
+        "players": {
+          "fz-it": {
+            "x": 40,
+            "y": 42,
+          },
+          "fz-s1": {
+            "x": 24,
+            "y": 26,
+          },
+          "fz-s2": {
+            "x": 56,
+            "y": 20,
+          },
+          "fz-s3": {
+            "x": 26,
+            "y": 64,
+          },
+          "fz-s4": {
+            "x": 52,
+            "y": 62,
+          },
+          "fz-s5": {
+            "x": 66,
+            "y": 78,
+          },
+        },
+        "pucks": {},
+      },
+    ],
+    "strokes": {
+      "fz-it-chase": {
+        "actorId": "fz-it",
+        "endMs": 651,
+        "puckId": null,
+        "startMs": 0,
+      },
+      "fz-s1-route": {
+        "actorId": "fz-s1",
+        "endMs": 1414,
+        "puckId": null,
+        "startMs": 0,
+      },
+      "fz-s2-route": {
+        "actorId": "fz-s2",
+        "endMs": 1414,
+        "puckId": null,
+        "startMs": 0,
+      },
+      "fz-s3-route": {
+        "actorId": "fz-s3",
+        "endMs": 1414,
+        "puckId": null,
+        "startMs": 0,
+      },
+      "fz-s5-free": {
+        "actorId": "fz-s5",
+        "endMs": 1152,
+        "puckId": null,
+        "startMs": 0,
+      },
+    },
+  },
   "starter-skate-breakaway-relay": {
     "durationMs": 11180,
     "poses": [
@@ -4938,6 +5005,59 @@ exports[`starter drills > matches the golden schedules and step poses 1`] = `
       "ab-lane3": {
         "actorId": "ab-s3",
         "endMs": 2985,
+        "puckId": null,
+        "startMs": 0,
+      },
+    },
+  },
+  "starter-skate-edges-around-sticks": {
+    "durationMs": 3228,
+    "poses": [
+      {
+        "atMs": 0,
+        "players": {
+          "es-s1": {
+            "x": 12,
+            "y": 10,
+          },
+          "es-s2": {
+            "x": 48,
+            "y": 10,
+          },
+          "es-s3": {
+            "x": 12,
+            "y": 32,
+          },
+          "es-s4": {
+            "x": 48,
+            "y": 32,
+          },
+        },
+        "pucks": {},
+      },
+    ],
+    "strokes": {
+      "es-s1-loop": {
+        "actorId": "es-s1",
+        "endMs": 3228,
+        "puckId": null,
+        "startMs": 0,
+      },
+      "es-s2-loop": {
+        "actorId": "es-s2",
+        "endMs": 3228,
+        "puckId": null,
+        "startMs": 0,
+      },
+      "es-s3-hops": {
+        "actorId": "es-s3",
+        "endMs": 2940,
+        "puckId": null,
+        "startMs": 0,
+      },
+      "es-s4-loop": {
+        "actorId": "es-s4",
+        "endMs": 3228,
         "puckId": null,
         "startMs": 0,
       },
@@ -5977,6 +6097,208 @@ exports[`starter drills > matches the golden schedules and step poses 1`] = `
         "endMs": 1477,
         "puckId": "playback-puck-mpk-s5-route",
         "startMs": 0,
+      },
+    },
+  },
+  "starter-skate-nobles-2v2": {
+    "durationMs": 5970,
+    "poses": [
+      {
+        "atMs": 0,
+        "players": {
+          "nb-a1": {
+            "x": 40,
+            "y": 28,
+          },
+          "nb-a2": {
+            "x": 46,
+            "y": 56,
+          },
+          "nb-c": {
+            "x": 66,
+            "y": 72,
+          },
+          "nb-o1": {
+            "x": 26,
+            "y": 36,
+          },
+          "nb-o2": {
+            "x": 30,
+            "y": 56,
+          },
+          "nb-wa": {
+            "x": 68,
+            "y": 10,
+          },
+          "nb-wb": {
+            "x": 5,
+            "y": 14,
+          },
+        },
+        "pucks": {},
+      },
+      {
+        "atMs": 1000,
+        "players": {
+          "nb-a1": {
+            "x": 31,
+            "y": 24.7,
+          },
+          "nb-a2": {
+            "x": 46,
+            "y": 56,
+          },
+          "nb-c": {
+            "x": 66,
+            "y": 72,
+          },
+          "nb-o1": {
+            "x": 29.1,
+            "y": 43.4,
+          },
+          "nb-o2": {
+            "x": 30,
+            "y": 56,
+          },
+          "nb-wa": {
+            "x": 68,
+            "y": 10,
+          },
+          "nb-wb": {
+            "x": 5,
+            "y": 14,
+          },
+        },
+        "pucks": {
+          "playback-puck-nb-pass-start": {
+            "x": 52,
+            "y": 62,
+          },
+        },
+      },
+      {
+        "atMs": 2681,
+        "players": {
+          "nb-a1": {
+            "x": 30,
+            "y": 24,
+          },
+          "nb-a2": {
+            "x": 34,
+            "y": 46,
+          },
+          "nb-c": {
+            "x": 66,
+            "y": 72,
+          },
+          "nb-o1": {
+            "x": 48.7,
+            "y": 70.1,
+          },
+          "nb-o2": {
+            "x": 30,
+            "y": 56,
+          },
+          "nb-wa": {
+            "x": 68,
+            "y": 10,
+          },
+          "nb-wb": {
+            "x": 5,
+            "y": 14,
+          },
+        },
+        "pucks": {
+          "playback-puck-nb-a2-carry": {
+            "x": 32.4,
+            "y": 44.8,
+          },
+          "playback-puck-nb-pass-start": {
+            "x": 52,
+            "y": 62,
+          },
+        },
+      },
+      {
+        "atMs": 4321,
+        "players": {
+          "nb-a1": {
+            "x": 30,
+            "y": 24,
+          },
+          "nb-a2": {
+            "x": 34,
+            "y": 46,
+          },
+          "nb-c": {
+            "x": 66,
+            "y": 72,
+          },
+          "nb-o1": {
+            "x": 56,
+            "y": 80,
+          },
+          "nb-o2": {
+            "x": 30,
+            "y": 56,
+          },
+          "nb-wa": {
+            "x": 68,
+            "y": 10,
+          },
+          "nb-wb": {
+            "x": 5,
+            "y": 14,
+          },
+        },
+        "pucks": {
+          "playback-puck-nb-a2-carry": {
+            "x": 8,
+            "y": 22,
+          },
+          "playback-puck-nb-pass-start": {
+            "x": 52,
+            "y": 62,
+          },
+        },
+      },
+    ],
+    "strokes": {
+      "nb-a1-defend": {
+        "actorId": "nb-a1",
+        "endMs": 1250,
+        "puckId": null,
+        "startMs": 0,
+      },
+      "nb-a2-carry": {
+        "actorId": "nb-a2",
+        "endMs": 2281,
+        "puckId": "playback-puck-nb-a2-carry",
+        "startMs": 1000,
+      },
+      "nb-o1-exit": {
+        "actorId": "nb-o1",
+        "endMs": 3933,
+        "puckId": null,
+        "startMs": 0,
+      },
+      "nb-pass-out": {
+        "actorId": "nb-o2",
+        "endMs": 3921,
+        "puckId": "playback-puck-nb-a2-carry",
+        "startMs": 2681,
+      },
+      "nb-pass-start": {
+        "actorId": "nb-c",
+        "endMs": 600,
+        "puckId": "playback-puck-nb-pass-start",
+        "startMs": 0,
+      },
+      "nb-wb-attack": {
+        "actorId": "nb-wb",
+        "endMs": 5970,
+        "puckId": "playback-puck-nb-a2-carry",
+        "startMs": 4321,
       },
     },
   },
