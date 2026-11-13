@@ -1,6 +1,6 @@
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import {
   MALFORMED_STRINGS,
   buildArgs,
@@ -188,12 +188,23 @@ const exportedActions = Object.entries(modules)
   )
   .sort();
 
+// The table's sample values carry absolute dates (2026-11-01), and some actions
+// reject dates in the past. Pin the clock before them so those templates keep
+// passing validation as real time moves on. Only Date is faked; timers stay real.
+const PINNED_NOW = new Date("2026-10-01T00:00:00.000Z");
+
 beforeEach(() => {
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(PINNED_NOW);
   recorder.reset();
   authCalls.length = 0;
   vi.spyOn(console, "error").mockImplementation(() => {});
   vi.spyOn(console, "warn").mockImplementation(() => {});
   vi.spyOn(console, "log").mockImplementation(() => {});
+});
+
+afterEach(() => {
+  vi.useRealTimers();
 });
 
 describe("server action id sweep: coverage", () => {
