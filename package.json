@@ -89,8 +89,8 @@
     "zod": "^4.6.7"
   },
   "devDependencies": {
-    "@adrkit/cli": "0.13.0",
-    "@adrkit/mcp": "0.13.0",
+    "@adrkit/cli": "0.20.0",
+    "@adrkit/mcp": "0.20.0",
     "@eslint/eslintrc": "^3.3.7",
     "@tailwindcss/postcss": "^4.3.5",
     "@testing-library/jest-dom": "^6.10.0",
@@ -119,7 +119,6 @@
     "vitest": "^4.1.12"
   },
   "overrides": {
-    "@adrkit/mcp>@modelcontextprotocol/server": "2.3.1",
     "@vercel/cli-config>zod": "^4.6.7",
     "@sentry/bundler-plugins>glob": "^14.0.4",
     "@typescript-eslint/typescript-estree>minimatch": "^11.0.5"
