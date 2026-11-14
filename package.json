@@ -70,7 +70,7 @@
     "@prisma/adapter-neon": "^7.10.1",
     "@prisma/adapter-pg": "^7.10.1",
     "@prisma/client": "^7.10.1",
-    "@sentry/nextjs": "^10.78.0",
+    "@sentry/nextjs": "^11.12.0",
     "@vercel/blob": "^2.9.0",
     "@vercel/oidc-aws-credentials-provider": "^3.3.19",
     "bcryptjs": "^3.0.3",
@@ -120,7 +120,6 @@
   },
   "overrides": {
     "@vercel/cli-config>zod": "^4.6.7",
-    "@sentry/bundler-plugins>glob": "^14.0.4",
     "@typescript-eslint/typescript-estree>minimatch": "^11.0.5"
   }
 }

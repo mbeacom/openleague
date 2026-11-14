@@ -57,7 +57,10 @@ We will use Sentry for error and performance telemetry, wired so that the
 - `instrumentation.ts` registers the Node or edge config by `NEXT_RUNTIME`, and
   exports `onRequestError` as a "safe no-op without a DSN", so nested Server
   Component errors are captured when configured and cost nothing when not.
-- `sendDefaultPii: false`. Personal data is not sent by default.
+- `dataCollection: restrictedDataCollection`. Personal data is not sent by
+  default. Sentry v11 replaced `sendDefaultPii: false` with per-category
+  `dataCollection`, whose unset default is permissive, so the v10-equivalent
+  values are set explicitly in `lib/telemetry/sentry-privacy.ts`.
 - `tracesSampleRate: 0.1`.
 - Every runtime spreads `capabilityTokenPrivacyOptions`, the redaction bundle
   required by ADR-0011, so no capability credential leaves the process.
@@ -115,7 +118,7 @@ a service associations depend on is not acceptable.
   self-hoster gets a working application with no error tracking and no migration
   path to an alternative — there is no provider seam here of the kind
   `lib/email/**` has. ADR-0008's portability is satisfied in the weaker sense.
-- **`sendDefaultPii: false` costs debuggability.** Reports arrive without user
+- **Restricted data collection costs debuggability.** Reports arrive without user
   context, which is the right default and does make some issues harder to trace.
 - **A 10% trace sample** means most performance data is absent; the rationale
   for that specific figure is unrecorded.

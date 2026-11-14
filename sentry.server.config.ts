@@ -1,6 +1,9 @@
 import * as Sentry from "@sentry/nextjs";
 
-import { capabilityTokenPrivacyOptions } from "@/lib/telemetry/sentry-privacy";
+import {
+  capabilityTokenPrivacyOptions,
+  restrictedDataCollection,
+} from "@/lib/telemetry/sentry-privacy";
 
 const dsn = process.env.NEXT_PUBLIC_SENTRY_DSN?.trim();
 
@@ -10,7 +13,9 @@ if (dsn) {
     dsn,
     environment: process.env.VERCEL_ENV ?? process.env.NODE_ENV,
     tracesSampleRate: 0.1,
-    sendDefaultPii: false,
+    // v11 collects cookies, bodies, user info and query data unless told not
+    // to; this keeps the restrictive v10 defaults.
+    dataCollection: restrictedDataCollection,
     // Redacts /gear-wishlist/<token> from every server envelope -- the request
     // URL captured by onRequestError, HTTP transactions, spans, and breadcrumbs
     // -- before it is exported.
