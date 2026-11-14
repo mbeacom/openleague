@@ -95,6 +95,58 @@ describe("sendPracticePlanNotifications league scoping", () => {
   });
 });
 
+describe("sendPracticePlanNotifications actor exclusion", () => {
+  const prefs = [{ leagueId: null, practicePlanNotifications: true, emailEnabled: true }];
+
+  beforeEach(() => {
+    mockPrisma.practiceSession.findUnique.mockResolvedValue({
+      id: "sess1",
+      title: "Skills",
+      date: new Date("2026-01-01T15:00:00Z"),
+      duration: 60,
+      teamId: "team1",
+      team: {
+        name: "Sharks",
+        leagueId: null,
+        members: [
+          { user: { id: "coach", email: "coach@example.com", notificationPreferences: prefs } },
+          { user: { id: "u2", email: "u2@example.com", notificationPreferences: prefs } },
+        ],
+      },
+      _count: { plays: 3 },
+      plays: [],
+    });
+  });
+
+  function sentTo(): string[] {
+    return mockSendEmail.mock.calls.flatMap(([message]) =>
+      (message.to as Array<{ email: string }>).map((recipient) => recipient.email),
+    );
+  }
+
+  it.each(["shared", "updated"] as const)("leaves the acting coach out of a %s email", async (type) => {
+    await sendPracticePlanNotifications("sess1", "team1", type, "coach");
+
+    expect(sentTo()).toEqual(["u2@example.com"]);
+  });
+
+  it("sends nothing when the actor is the only member", async () => {
+    const session = await mockPrisma.practiceSession.findUnique();
+    session.team.members = session.team.members.slice(0, 1);
+    mockPrisma.practiceSession.findUnique.mockResolvedValue(session);
+
+    await sendPracticePlanNotifications("sess1", "team1", "shared", "coach");
+
+    expect(mockSendEmail).not.toHaveBeenCalled();
+  });
+
+  it("keeps every member when no actor is given", async () => {
+    await sendPracticePlanNotifications("sess1", "team1", "shared");
+
+    expect(sentTo().sort()).toEqual(["coach@example.com", "u2@example.com"]);
+  });
+});
+
 describe("sendGameProposalNotifications league scoping", () => {
   function buildProposal() {
     return {
