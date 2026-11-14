@@ -48,7 +48,7 @@ describe("static planner platform", () => {
             routes: staticRoutes,
             planGenerator: "openleague-static",
             planLinks: [
-                { label: "Copy link", mode: "copy", baseUrl: window.location.href.split("#")[0] },
+                { label: "Copy link", mode: "copy", baseUrl: `${window.location.origin}${window.location.pathname}` },
                 { label: "Open in OpenLeague", mode: "open", baseUrl: HOSTED_IMPORT_URL },
             ],
         });

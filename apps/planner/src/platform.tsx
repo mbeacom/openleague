@@ -39,7 +39,7 @@ export function replaceHash(href: string): void {
 }
 
 /** This planner's own address, so a copied link opens the plan right here. */
-const PLANNER_URL = typeof window === "undefined" ? "" : window.location.href.split("#")[0];
+const PLANNER_URL = typeof window === "undefined" ? "" : `${window.location.origin}${window.location.pathname}`;
 
 export const staticPlannerPlatform: PlannerPlatform = {
     Link: StaticLink,
