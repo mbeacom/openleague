@@ -101,8 +101,8 @@
     "@types/node": "^25.9.9",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
-    "@vitejs/plugin-react": "^4.7.0",
-    "@vitest/ui": "^4.1.12",
+    "@vitejs/plugin-react": "^5.2.0",
+    "@vitest/ui": "^5.1.0",
     "autoprefixer": "^10.6.2",
     "eslint": "^9.39.5",
     "eslint-config-next": "16.4.6",
@@ -116,7 +116,7 @@
     "tsx": "^4.23.15",
     "typescript": "^5.9.3",
     "vite": "^7.3.8",
-    "vitest": "^4.1.12"
+    "vitest": "^5.1.0"
   },
   "overrides": {
     "@vercel/cli-config>zod": "^4.6.7",
