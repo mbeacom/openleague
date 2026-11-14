@@ -85,7 +85,10 @@ export default async function GearReservationDetailPage({ params }: GearReservat
             ) : reservation.allocations.map((allocation) => (
               <Stack key={allocation.id} spacing={0.25} sx={{ py: 0.5 }}>
                 <Typography>
-                  {allocation.assetTag ?? allocation.locationName ?? "Pooled stock"}: {allocation.status.replace("_", " ")} ({allocation.returnedQty}/{allocation.pickedUpQty} returned)
+                  {allocation.assetTag ?? allocation.locationName ?? "Pooled stock"}: {allocation.status.replace("_", " ")}{" "}
+                  {allocation.pickedUpQty > 0
+                    ? `(${allocation.returnedQty}/${allocation.pickedUpQty} returned)`
+                    : `(${allocation.allocatedQty} allocated)`}
                 </Typography>
                 {allocation.effectiveStartDate && allocation.effectiveEndDate && (
                   <Typography variant="body2" color={allocation.overdue ? "error.main" : "text.secondary"}>
