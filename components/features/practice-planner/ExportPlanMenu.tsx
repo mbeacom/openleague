@@ -2,7 +2,7 @@
 
 /**
  * "Export plan" (ADR-0020). Downloads the session as a portable plan file and,
- * when the platform offers one (PlannerPlatform.planLink), hands the plan off
+ * when the platform offers them (PlannerPlatform.planLinks), hands the plan off
  * through a #plan= link: hosted copies an "Open in planner" link, the static
  * planner opens the hosted import page. Built from the page's own session data:
  * no new server read.
@@ -188,7 +188,7 @@ export const DOCX_LOAD_FAILED_NOTICE =
 export const EXPORT_FAILED_NOTICE = "Couldn't create the file. Try again, or use Print bench sheet.";
 
 export function ExportPlanMenu({ session, size = "medium" }: ExportPlanMenuProps) {
-    const { planGenerator, planLink, navigate } = usePlannerPlatform();
+    const { planGenerator, planLinks, navigate } = usePlannerPlatform();
     const store = usePlannerStore();
     const [anchor, setAnchor] = useState<HTMLElement | null>(null);
     const [notice, setNotice] = useState<Notice | null>(null);
@@ -334,14 +334,14 @@ export function ExportPlanMenu({ session, size = "medium" }: ExportPlanMenuProps
                     </ListItemIcon>
                     <ListItemText>Download Word document (.docx)</ListItemText>
                 </MenuItem>
-                {planLink && (
-                    <MenuItem onClick={() => void handOff(planLink)}>
+                {planLinks.map((planLink) => (
+                    <MenuItem key={planLink.label} onClick={() => void handOff(planLink)}>
                         <ListItemIcon>
                             {planLink.mode === "open" ? <OpenIcon fontSize="small" /> : <LinkIcon fontSize="small" />}
                         </ListItemIcon>
                         <ListItemText>{planLink.label}</ListItemText>
                     </MenuItem>
-                )}
+                ))}
             </Menu>
             {notice && (
                 <Snackbar

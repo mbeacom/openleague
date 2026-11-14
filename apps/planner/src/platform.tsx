@@ -38,13 +38,19 @@ export function replaceHash(href: string): void {
     window.dispatchEvent(new Event("hashchange"));
 }
 
+/** This planner's own address, so a copied link opens the plan right here. */
+const PLANNER_URL = typeof window === "undefined" ? "" : window.location.href.split("#")[0];
+
 export const staticPlannerPlatform: PlannerPlatform = {
     Link: StaticLink,
     Image: StaticImage,
     navigate: navigateTo,
     routes: staticRoutes,
     planGenerator: "openleague-static",
-    planLink: { label: "Open in OpenLeague", mode: "open", baseUrl: HOSTED_IMPORT_URL },
+    planLinks: [
+        ...(PLANNER_URL ? [{ label: "Copy link", mode: "copy", baseUrl: PLANNER_URL } as const] : []),
+        { label: "Open in OpenLeague", mode: "open", baseUrl: HOSTED_IMPORT_URL },
+    ],
 };
 
 function subscribe(onChange: () => void): () => void {

@@ -38,9 +38,9 @@ export function HostedImage({ src, alt, fit }: PlannerImageProps) {
  * The Export menu's "Open in planner" item, only when the static planner's URL
  * is configured. Next inlines NEXT_PUBLIC_* at build; tests stub the env.
  */
-export function hostedPlanLink(url: string | undefined = process.env.NEXT_PUBLIC_STATIC_PLANNER_URL): PlannerPlanLink | null {
+export function hostedPlanLinks(url: string | undefined = process.env.NEXT_PUBLIC_STATIC_PLANNER_URL): PlannerPlanLink[] {
     const baseUrl = url?.trim();
-    return baseUrl ? { label: "Copy “Open in planner” link", mode: "copy", baseUrl } : null;
+    return baseUrl ? [{ label: "Copy “Open in planner” link", mode: "copy", baseUrl }] : [];
 }
 
 export function useHostedPlannerPlatform(): PlannerPlatform {
@@ -52,7 +52,7 @@ export function useHostedPlannerPlatform(): PlannerPlatform {
             navigate: (href: string) => router.push(href),
             routes: hostedPlannerRoutes,
             planGenerator: "openleague-hosted",
-            planLink: hostedPlanLink(),
+            planLinks: hostedPlanLinks(),
         }),
         [router],
     );

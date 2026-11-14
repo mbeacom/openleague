@@ -40,14 +40,17 @@ describe("static planner platform", () => {
         expect(assign).toHaveBeenCalledExactlyOnceWith("https://openl.app/practice-planner/import#plan=x");
     });
 
-    it("is a module constant with the static generator and the hosted import hand-off", () => {
+    it("is a module constant with the static generator, a copy link to itself, and the hosted import hand-off", () => {
         expect(staticPlannerPlatform).toMatchObject({
             Link: StaticLink,
             Image: StaticImage,
             navigate: navigateTo,
             routes: staticRoutes,
             planGenerator: "openleague-static",
-            planLink: { label: "Open in OpenLeague", mode: "open", baseUrl: HOSTED_IMPORT_URL },
+            planLinks: [
+                { label: "Copy link", mode: "copy", baseUrl: window.location.href.split("#")[0] },
+                { label: "Open in OpenLeague", mode: "open", baseUrl: HOSTED_IMPORT_URL },
+            ],
         });
         expect(HOSTED_IMPORT_URL).toBe("https://openl.app/practice-planner/import");
     });
