@@ -171,14 +171,30 @@ const serverActionModules = sourceFiles(ACTIONS_DIR)
   .map((file) => path.relative(ACTIONS_DIR, file).split(path.sep).join("/").replace(/\.tsx?$/, ""))
   .sort();
 
-const modules = Object.fromEntries(
-  await Promise.all(
-    serverActionModules.map(async (name) => [
-      name,
-      (await import(`../../../lib/actions/${name}.ts`)) as Record<string, unknown>,
-    ]),
-  ),
-) as Record<string, Record<string, unknown>>;
+// The spied modules are loaded one at a time, dependencies first, before any
+// action, and then the actions one at a time: the spied modules import one
+// another, and resolving their mock factories concurrently can leave one of
+// them with no exports.
+const spiedModules = [
+  ["session", () => import("@/lib/auth/session")],
+  ["security", () => import("@/lib/utils/security")],
+  ["permissions", () => import("@/lib/utils/permissions")],
+  ["capabilities", () => import("@/lib/auth/capabilities")],
+  ["league-access", () => import("@/lib/auth/league-access")],
+  ["branding-access", () => import("@/lib/auth/branding-access")],
+  ["venue-access", () => import("@/lib/auth/venue-access")],
+  ["team-access", () => import("@/lib/auth/team-access")],
+  ["season-access", () => import("@/lib/auth/season-access")],
+] as const;
+const emptySpiedModules: string[] = [];
+for (const [name, load] of spiedModules) {
+  if (Object.keys(await load()).length === 0) emptySpiedModules.push(name);
+}
+
+const modules: Record<string, Record<string, unknown>> = {};
+for (const name of serverActionModules) {
+  modules[name] = (await import(`../../../lib/actions/${name}.ts`)) as Record<string, unknown>;
+}
 
 const exportedActions = Object.entries(modules)
   .flatMap(([name, mod]) =>
@@ -208,6 +224,10 @@ afterEach(() => {
 });
 
 describe("server action id sweep: coverage", () => {
+  it("loads every spied authorization module with its exports", () => {
+    expect(emptySpiedModules).toEqual([]);
+  });
+
   it("finds the server action modules", () => {
     expect(serverActionModules.length).toBeGreaterThan(50);
   });
