@@ -525,8 +525,9 @@ export async function createGearReservation(
           custodianPhoneSnapshot: validated.custodianPhoneSnapshot || null,
           requestNotes: validated.requestNotes || null,
           requestedById: userId,
+          // Lines inherit leagueId from this reservation through the compound
+          // [leagueId, reservationId] relation; a nested create rejects it.
           lines: { create: trustedLines.map((line) => ({
-            leagueId: validated.leagueId,
             catalogItemId: line.catalogItemId || null,
             needLineId: line.needLineId || null,
             nameSnapshot: line.nameSnapshot,
