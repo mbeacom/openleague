@@ -51,6 +51,10 @@ describe("createGearReservation", () => {
         },
       }),
     }));
+    // Prisma rejects leagueId in a nested line create: the compound
+    // reservation relation supplies it from the parent.
+    const lineData = mockTx.gearReservation.create.mock.calls[0][0].data.lines.create[0];
+    expect(lineData).not.toHaveProperty("leagueId");
   });
 });
 
