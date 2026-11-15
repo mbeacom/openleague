@@ -1,6 +1,7 @@
 /**
  * "Your team" (practice logo spec R4): the device's team name, logo and
- * colors, shown on every practice on this device. Plan files never include it.
+ * colors, shown on every practice on this device. Plan files never include it;
+ * a team file (R4a) carries it to another device.
  */
 import { useCallback, useRef, useState, type ChangeEvent } from "react";
 import {
@@ -17,9 +18,18 @@ import {
     useMediaQuery,
 } from "@mui/material";
 import { useTheme } from "@mui/material/styles";
-import { DeleteOutline as RemoveIcon, FileUploadOutlined as UploadIcon, GroupsOutlined as TeamIcon } from "@mui/icons-material";
+import {
+    DeleteOutline as RemoveIcon,
+    FileDownloadOutlined as ExportIcon,
+    FileOpenOutlined as ImportIcon,
+    FileUploadOutlined as UploadIcon,
+    GroupsOutlined as TeamIcon,
+} from "@mui/icons-material";
+import { downloadBlob } from "@/components/features/practice-planner/export/download";
 import { Crest } from "@/components/ui/Crest";
+import { DOCUMENT_FILE_ACCEPT } from "@/lib/document-formats";
 import { LOGO_ACCEPT } from "@/lib/media/logo-rules";
+import { createTeamProfileDocument, readTeamProfileFile, serializeTeamProfileDocument, teamProfileFileName } from "@/lib/team-profile-document";
 import { LOGO_UNREADABLE_MESSAGE, normalizeLogoFile } from "@/lib/utils/canvas/logo-file";
 import { TEAM_NAME_MAX, isTeamColor, teamProfileErrors, type TeamProfileField, type TeamProfileInput } from "@/lib/utils/team-mark";
 import type { LogoImage, TeamProfile } from "@/types/practice-planner";
@@ -30,6 +40,8 @@ import { useStoreResult } from "./useStoreResult";
 import { useTeamProfileVersion } from "./useTeamProfile";
 
 export const YOUR_TEAM_INTRO = "Shown on your practices, bench sheets and exports on this device. Plan files never include it.";
+export const TEAM_FILE_HINT = "To use this team on another device, export a team file here and import it there.";
+export const teamFileLoadedNotice = (name: string) => `Loaded ${name} from the team file. Save to use it on this device.`;
 export const CLEAR_TEAM_PROMPT = "Clear team? This removes the name, logo and colors from this device.";
 export const CLEAR_TEAM_CONFIRM = "Clear";
 export const CLEAR_TEAM_KEEP = "Keep";
@@ -122,6 +134,7 @@ export function TeamProfileDialog({
     const theme = useTheme();
     const fullScreen = useMediaQuery(theme.breakpoints.down("sm"));
     const fileInput = useRef<HTMLInputElement>(null);
+    const teamFileInput = useRef<HTMLInputElement>(null);
     const [name, setName] = useState(initial?.name ?? "");
     const [logo, setLogo] = useState<LogoImage | null>(initial?.logo ?? null);
     const [primary, setPrimary] = useState(initial?.primaryColor ?? "");
@@ -132,6 +145,7 @@ export function TeamProfileDialog({
     const [logoError, setLogoError] = useState<string | null>(null);
     const [saveError, setSaveError] = useState<string | null>(null);
     const [confirmingClear, setConfirmingClear] = useState(false);
+    const [teamFileNotice, setTeamFileNotice] = useState<{ severity: "success" | "error"; text: string } | null>(null);
 
     const input: TeamProfileInput = { name, logo, primaryColor: primary.trim() || null, secondaryColor: secondary.trim() || null };
     const errors: Partial<Record<TeamProfileField, string>> = submitted ? teamProfileErrors(input) : {};
@@ -154,6 +168,38 @@ export function TeamProfileDialog({
         } finally {
             setReading(false);
         }
+    };
+
+    /** Fills the form from a team file; nothing is stored until Save. */
+    const importTeamFile = async (event: ChangeEvent<HTMLInputElement>) => {
+        const file = event.target.files?.[0];
+        event.target.value = "";
+        if (!file) return;
+        setReading(true);
+        try {
+            const result = await readTeamProfileFile(file);
+            if (!result.ok) {
+                setTeamFileNotice({ severity: "error", text: result.error.message });
+                return;
+            }
+            const { team } = result.doc;
+            setName(team.name);
+            setLogo(team.logo);
+            setPrimary(team.primaryColor ?? "");
+            setSecondary(team.secondaryColor ?? "");
+            setLogoError(null);
+            setSubmitted(false);
+            setTeamFileNotice({ severity: "success", text: teamFileLoadedNotice(team.name) });
+        } finally {
+            setReading(false);
+        }
+    };
+
+    /** The saved team, not unsaved edits: a team file always matches what this device shows. */
+    const exportTeamFile = () => {
+        if (!initial) return;
+        const doc = createTeamProfileDocument(initial);
+        downloadBlob(new Blob([serializeTeamProfileDocument(doc)], { type: "application/json" }), teamProfileFileName(initial));
     };
 
     const save = async () => {
@@ -244,6 +290,28 @@ export function TeamProfileDialog({
                     {(logoError || errors.logo) && <Alert severity="error">{logoError ?? errors.logo}</Alert>}
                     <ColorField label="Primary color" value={primary} onChange={setPrimary} error={errors.primaryColor} />
                     <ColorField label="Secondary color" value={secondary} onChange={setSecondary} error={errors.secondaryColor} />
+                    <Stack spacing={1}>
+                        <Typography variant="body2" color="text.secondary">
+                            {TEAM_FILE_HINT}
+                        </Typography>
+                        <Stack direction="row" spacing={1} useFlexGap sx={{ flexWrap: "wrap" }}>
+                            <Button variant="outlined" startIcon={<ExportIcon />} onClick={exportTeamFile} disabled={!initial || busy} sx={TARGET}>
+                                Export team file
+                            </Button>
+                            <Button variant="outlined" startIcon={<ImportIcon />} onClick={() => teamFileInput.current?.click()} disabled={reading || busy} sx={TARGET}>
+                                Import team file
+                            </Button>
+                        </Stack>
+                        <input
+                            ref={teamFileInput}
+                            type="file"
+                            hidden
+                            accept={DOCUMENT_FILE_ACCEPT}
+                            data-testid="team-file-input"
+                            onChange={(event) => void importTeamFile(event)}
+                        />
+                        {teamFileNotice && <Alert severity={teamFileNotice.severity}>{teamFileNotice.text}</Alert>}
+                    </Stack>
                     {saveError && <Alert severity="error">{saveError}</Alert>}
                 </Stack>
             </DialogContent>

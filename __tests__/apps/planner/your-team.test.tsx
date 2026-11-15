@@ -7,13 +7,18 @@ import { memoryStore, renderScreen } from "./render-screen";
 
 const PNG = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
 const LOGO = { dataUrl: PNG, width: 1, height: 1 };
-const { mockNormalize } = vi.hoisted(() => ({ mockNormalize: vi.fn() }));
+const { mockNormalize, mockDownload } = vi.hoisted(() => ({ mockNormalize: vi.fn(), mockDownload: vi.fn() }));
+vi.mock("@/components/features/practice-planner/export/download", async (importOriginal) => ({
+    ...(await importOriginal<typeof import("@/components/features/practice-planner/export/download")>()),
+    downloadBlob: mockDownload,
+}));
 vi.mock("@/lib/utils/canvas/logo-file", async (importOriginal) => ({
     ...(await importOriginal<typeof import("@/lib/utils/canvas/logo-file")>()),
     normalizeLogoFile: mockNormalize,
 }));
 
-import { CLEAR_TEAM_PROMPT, YourTeamButton } from "@/apps/planner/src/screens/YourTeam";
+import { CLEAR_TEAM_PROMPT, YourTeamButton, teamFileLoadedNotice } from "@/apps/planner/src/screens/YourTeam";
+import { NEWER_TEAM_FILE_MESSAGE, createTeamProfileDocument, parseTeamProfileDocument, serializeTeamProfileDocument } from "@/lib/team-profile-document";
 import { TEAM_PROFILE_LOAD_FAILED } from "@/apps/planner/src/store/team-profile";
 import { useStoreResult } from "@/apps/planner/src/screens/useStoreResult";
 import { LOGO_TYPE_MESSAGE, LOGO_UNREADABLE_MESSAGE } from "@/lib/utils/canvas/logo-file";
@@ -109,7 +114,7 @@ describe("YourTeamButton and the Your team dialog", () => {
         expect(getComputedStyle(await screen.findByRole("button", { name: "Your team" })).minHeight).toBe("44px");
         await openDialog();
         const minHeight = (name: string) => getComputedStyle(screen.getByRole("button", { name })).minHeight;
-        for (const name of ["Replace logo", "Remove logo", "Clear team", "Cancel", "Save"]) {
+        for (const name of ["Replace logo", "Remove logo", "Export team file", "Import team file", "Clear team", "Cancel", "Save"]) {
             expect(minHeight(name), name).toBe("44px");
         }
         fireEvent.click(screen.getByRole("button", { name: "Clear team" }));
@@ -208,5 +213,61 @@ describe("useStoreResult refresh key", () => {
         expect(screen.getByText("first")).toBeInTheDocument();
         expect(await screen.findByText("second")).toBeInTheDocument();
         expect(load).toHaveBeenCalledTimes(2);
+    });
+});
+
+const pickTeamFile = (text: string, name = "ice-hawks.team.json") =>
+    fireEvent.change(screen.getByTestId("team-file-input"), { target: { files: [new File([text], name, { type: "application/json" })] } });
+
+describe("team files (practice logo spec R4a)", () => {
+    const TEAM = { name: "Ice Hawks", logo: LOGO, primaryColor: "#9B1B30", secondaryColor: "#FFFFFF" };
+
+    it("exports the saved team, and only once one is saved", async () => {
+        mockDownload.mockClear();
+        const { store } = memoryStore();
+        renderScreen(<YourTeamButton store={store} />, store);
+        await openDialog();
+        expect(screen.getByRole("button", { name: "Export team file" })).toBeDisabled();
+        fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+
+        await act(async () => {
+            await store.saveTeamProfile(TEAM);
+        });
+        await openDialog();
+        // An unsaved edit is not exported: the file matches what this device shows.
+        fireEvent.change(screen.getByRole("textbox", { name: "Team name" }), { target: { value: "Renamed" } });
+        fireEvent.click(screen.getByRole("button", { name: "Export team file" }));
+        expect(mockDownload).toHaveBeenCalledTimes(1);
+        const [blob, fileName] = mockDownload.mock.calls[0] as [Blob, string];
+        expect(fileName).toBe("ice-hawks.team.json");
+        const parsed = parseTeamProfileDocument(JSON.parse(await blob.text()));
+        expect(parsed.ok && parsed.doc.team).toEqual(TEAM);
+    });
+
+    it("fills the form from a team file and stores it only on Save", async () => {
+        const { store } = memoryStore();
+        renderScreen(<YourTeamButton store={store} />, store);
+        await openDialog();
+        pickTeamFile(serializeTeamProfileDocument(createTeamProfileDocument(TEAM)));
+        expect(await screen.findByText(teamFileLoadedNotice("Ice Hawks"))).toBeInTheDocument();
+        expect(screen.getByRole("textbox", { name: "Team name" })).toHaveValue("Ice Hawks");
+        expect(screen.getByRole("textbox", { name: "Secondary color" })).toHaveValue("#FFFFFF");
+        expect(screen.getByRole("button", { name: "Replace logo" })).toBeInTheDocument();
+        const before = await store.getTeamProfile();
+        expect(before.success && before.data).toBeNull();
+        fireEvent.click(screen.getByRole("button", { name: "Save" }));
+        await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+        const saved = await store.getTeamProfile();
+        expect(saved.success && saved.data).toEqual(TEAM);
+    });
+
+    it("says why a team file was refused and leaves the form as it was", async () => {
+        const { store } = memoryStore();
+        await store.saveTeamProfile(TEAM);
+        renderScreen(<YourTeamButton store={store} />, store);
+        await openDialog();
+        pickTeamFile(JSON.stringify({ ...createTeamProfileDocument({ ...TEAM, name: "Other" }), version: 2 }));
+        expect(await screen.findByText(NEWER_TEAM_FILE_MESSAGE)).toBeInTheDocument();
+        expect(screen.getByRole("textbox", { name: "Team name" })).toHaveValue("Ice Hawks");
     });
 });
