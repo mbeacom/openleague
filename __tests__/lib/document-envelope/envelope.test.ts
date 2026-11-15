@@ -51,8 +51,8 @@ const wrappedPlan = () => raw(wrapDocument(PLAN_FORMAT, PLAN, { id: ID, updatedA
 const wrappedRankings = () => raw(wrapDocument(RANKINGS_FORMAT, RANKINGS, { id: ID, updatedAt: SAVED_AT, generator: "openleague-static" }));
 
 describe("the kind registry", () => {
-    it("knows practice plans and rankings", () => {
-        expect(Object.keys(DOCUMENT_KINDS).sort()).toEqual([PLAN_FORMAT, RANKINGS_FORMAT]);
+    it("knows practice plans, rankings and team files", () => {
+        expect(Object.keys(DOCUMENT_KINDS).sort()).toEqual([PLAN_FORMAT, RANKINGS_FORMAT, "openleague.team-profile"]);
         expect(isDocumentKind(PLAN_FORMAT)).toBe(true);
         expect(isDocumentKind("openleague.goalie-rotation")).toBe(false);
         expect(isDocumentKind(DOCUMENT_ENVELOPE_FORMAT)).toBe(false);

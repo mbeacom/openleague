@@ -20,11 +20,20 @@ import {
     parseRankings,
     type RankingsDocument,
 } from "@/lib/rankings-document/document";
+import {
+    MAX_TEAM_PROFILE_FILE_BYTES,
+    NOT_A_TEAM_FILE_MESSAGE,
+    TEAM_FILE_TOO_LARGE_MESSAGE,
+    TEAM_PROFILE_FORMAT,
+    parseTeamProfileDocument,
+    type TeamProfileDocument,
+} from "@/lib/team-profile-document/document";
 
 /** Each known kind's `format`, mapped to its parsed document. */
 export interface DocumentPayloads {
     "openleague.practice-plan": PlanDocument;
     "openleague.rankings": RankingsDocument;
+    "openleague.team-profile": TeamProfileDocument;
 }
 
 export type DocumentKind = keyof DocumentPayloads;
@@ -80,6 +89,17 @@ export const DOCUMENT_KINDS: { readonly [K in DocumentKind]: DocumentKindEntry<K
             const result = parseRankings(raw);
             return result.ok ? { ok: true, payload: result.doc } : { ok: false, error: kindError(result.error) };
         },
+    },
+    [TEAM_PROFILE_FORMAT]: {
+        kind: TEAM_PROFILE_FORMAT,
+        maxBytes: MAX_TEAM_PROFILE_FILE_BYTES,
+        notThisKindMessage: NOT_A_TEAM_FILE_MESSAGE,
+        tooLargeMessage: TEAM_FILE_TOO_LARGE_MESSAGE,
+        parse: (raw) => {
+            const result = parseTeamProfileDocument(raw);
+            return result.ok ? { ok: true, payload: result.doc } : { ok: false, error: kindError(result.error) };
+        },
+        updatedAtOf: (doc) => doc.exportedAt,
     },
 };
 

@@ -76,6 +76,17 @@ Every logo used in a bench sheet or export is a PNG data URL that fits 512×512:
 - **Bench sheet and exports:** the team name replaces the current leave-out-"This device" rule.
 - **Plan files:** never carry the profile. Importing a file doesn't change it, and exporting doesn't include it.
 
+### R4a. Team files
+
+Added 2026-11-15 (#525). A coach who plans on more than one device can carry the profile in its own file.
+
+- **Document.** An `openleague.team-profile` version 1 document: `{ format, version, exportedAt, team }`, where `team` is the R4 record. It is registered in the ADR-0022 envelope, so it can be read bare or wrapped, in any of the document formats. The bare file is at most 300 KB, which fits the largest logo R4 allows.
+- **Parsing.** Unknown keys are dropped. A newer version is refused with its own message. The team is held to the same rules as the dialog (name, PNG logo bounds, `#RRGGBB` colours); a missing logo or colour reads as none.
+- **Export.** "Export team file" in the Your team dialog downloads the saved profile as `<team-name>.team.json`. It is disabled until a team is saved, and never includes unsaved edits.
+- **Import.** "Import team file" reads the file and fills the dialog's fields. Nothing is stored until the coach presses Save. A refused file shows its message and leaves the fields as they were.
+- **Not included.** People, rosters and plans. Storage connectors do not save team files.
+- **Relation to ADR-0026.** ADR-0026 (proposed) plans an `openleague.team-directory` document that "Your team" could reference. If that ships, readers keep accepting team files, and an import could also offer to add the team to a directory.
+
 ### R5. Where the mark appears
 
 **Session page header.** The team mark appears before the title, at Crest `md` size:
@@ -124,5 +135,5 @@ Every logo used in a bench sheet or export is a PNG data URL that fits 512×512:
 
 - Logos for leagues or venues on practices.
 - Changing the hosted logo upload flow.
-- Syncing the static profile to hosted, or carrying it in plan files.
+- Syncing the static profile to hosted, or carrying it in plan files. (A separate team file, R4a, carries it between devices.)
 - Logos in emails.
