@@ -1725,12 +1725,14 @@ async function practiceStationLines(
 
 /**
  * Helper function to send practice plan notifications to all team members
+ * except the one who shared or saved the plan (`actorUserId`).
  * Requirements: 6.1, 6.3, 6.4
  */
 export async function sendPracticePlanNotifications(
   sessionId: string,
   teamId: string,
-  type: "shared" | "updated"
+  type: "shared" | "updated",
+  actorUserId?: string
 ): Promise<void> {
   // Fetch session with team members and their notification preferences
   const session = await prisma.practiceSession.findUnique({
@@ -1776,6 +1778,7 @@ export async function sendPracticePlanNotifications(
   // override else global); an unrelated league opt-out must not suppress here.
   const teamLeagueId = session.team.leagueId;
   const recipients = session.team.members
+    .filter((member: { user: { id: string } }) => member.user.id !== actorUserId)
     .filter((member: { user: { notificationPreferences: Array<{ leagueId: string | null; practicePlanNotifications: boolean; emailEnabled: boolean }> } }) => {
       const pref = pickPreference(member.user.notificationPreferences, teamLeagueId);
       if (!pref) return true;

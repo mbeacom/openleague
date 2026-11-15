@@ -1141,7 +1141,7 @@ export async function updatePracticeSession(
         if (existingSession.isShared && validated.notify) {
             const { sendPracticePlanNotifications } = await import("@/lib/email/templates");
 
-            sendPracticePlanNotifications(validated.id, validated.teamId, "updated").catch((error) => {
+            sendPracticePlanNotifications(validated.id, validated.teamId, "updated", userId).catch((error) => {
                 console.error("Failed to send practice plan update notification emails:", error);
             });
         }
@@ -1616,7 +1616,7 @@ export async function sharePracticeSession(
         }
 
         // Authorize against the session's actual teamId - only ADMIN can share
-        await requireTeamAdmin(existingSession.teamId);
+        const userId = await requireTeamAdmin(existingSession.teamId);
 
         // Verify the teamId in the request matches the session's actual teamId
         if (existingSession.teamId !== validated.teamId) {
@@ -1648,7 +1648,7 @@ export async function sharePracticeSession(
             const { sendPracticePlanNotifications } = await import("@/lib/email/templates");
 
             // Send notifications asynchronously (don't block response)
-            sendPracticePlanNotifications(validated.id, validated.teamId, "shared").catch((error) => {
+            sendPracticePlanNotifications(validated.id, validated.teamId, "shared", userId).catch((error) => {
                 console.error("Failed to send practice plan notification emails:", error);
             });
         }

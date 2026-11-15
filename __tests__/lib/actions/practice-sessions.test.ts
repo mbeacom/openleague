@@ -93,6 +93,7 @@ import {
   deletePracticeSession,
   getPracticeSessionById,
   getPracticeSessionsByTeam,
+  sharePracticeSession,
   updatePracticeSession,
 } from "@/lib/actions/practice-sessions";
 
@@ -468,6 +469,29 @@ describe("deletePracticeSession coordinated cleanup", () => {
   });
 });
 
+describe("sharePracticeSession notifications", () => {
+  beforeEach(() => {
+    mockPrisma.practiceSession.update.mockResolvedValue({ id: SESSION_ID, isShared: true });
+  });
+
+  it("notifies the team, minus the sharer, when a plan is first shared", async () => {
+    mockPrisma.practiceSession.findUnique.mockResolvedValue({ teamId: TEAM_ID, isShared: false });
+
+    const result = await sharePracticeSession({ id: SESSION_ID, teamId: TEAM_ID, isShared: true });
+
+    expect(result.success).toBe(true);
+    expect(mockSendNotifications).toHaveBeenCalledWith(SESSION_ID, TEAM_ID, "shared", USER_ID);
+  });
+
+  it("does not notify when the plan was already shared", async () => {
+    mockPrisma.practiceSession.findUnique.mockResolvedValue({ teamId: TEAM_ID, isShared: true });
+
+    await sharePracticeSession({ id: SESSION_ID, teamId: TEAM_ID, isShared: true });
+
+    expect(mockSendNotifications).not.toHaveBeenCalled();
+  });
+});
+
 describe("updatePracticeSession update notifications", () => {
   beforeEach(() => {
     mockTx.practiceSession.findUnique.mockResolvedValue({
@@ -486,7 +510,7 @@ describe("updatePracticeSession update notifications", () => {
     });
 
     expect(result.success).toBe(true);
-    expect(mockSendNotifications).toHaveBeenCalledWith(SESSION_ID, TEAM_ID, "updated");
+    expect(mockSendNotifications).toHaveBeenCalledWith(SESSION_ID, TEAM_ID, "updated", USER_ID);
   });
 
   it("does not notify on a shared session when notify is omitted (autosave)", async () => {
