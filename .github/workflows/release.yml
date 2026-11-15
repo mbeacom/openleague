@@ -20,6 +20,10 @@ permissions:
   pull-requests: write
   issues: write
   discussions: write
+  # Only to start a Release run on main when this one is superseded (see
+  # "Create Git tag"). A workflow_dispatch is the one event this token may
+  # start a run with.
+  actions: write
 
 # Two merges landing close together start two runs that compute the SAME next
 # version from the same latest tag, then race to create it -- exactly what
@@ -146,7 +150,10 @@ jobs:
       # version from the newest tag or the GitHub release, not from the file.
 
       - name: Create Git tag
+        id: tag
         if: steps.tag_check.outputs.exists == 'false'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           VERSION=${{ steps.version.outputs.version }}
           # `git tag -a` is annotated, so it writes a tagger ident and fails with
@@ -156,10 +163,33 @@ jobs:
           git config user.name  'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git tag -a "v$VERSION" -m "Release v$VERSION"
-          git push origin "v$VERSION"
+
+          # Seen on 2026-11-15: this push was refused ("refusing to allow a
+          # GitHub App to create or update workflow ... without `workflows`
+          # permission") after a merge that edited workflow files landed on
+          # main while the run was in progress. Main's tip has no such
+          # difference from itself, so on that refusal this run steps aside and
+          # starts a Release run on main, which tags a version that includes
+          # this commit. A push-triggered run can't be relied on for that:
+          # pushes touching only .github/** don't trigger this workflow.
+          # Granting the token workflow write access would let any step here
+          # rewrite workflows, so it is deliberately not the fix.
+          if git push origin "v$VERSION" 2> push-error.log; then
+            exit 0
+          fi
+          cat push-error.log >&2
+          git fetch --quiet origin main
+          # shellcheck disable=SC2016 # the backticks are literal text in GitHub's message
+          if grep -qF 'without `workflows` permission' push-error.log && [ "$(git rev-parse origin/main)" != "$GITHUB_SHA" ]; then
+            echo "superseded=true" >> "$GITHUB_OUTPUT"
+            gh workflow run release.yml --ref main
+            echo "::warning::Release v$VERSION skipped: main has moved past $GITHUB_SHA with workflow changes. Started a Release run on main, which includes this commit."
+            exit 0
+          fi
+          exit 1
 
       - name: Create GitHub Release
-        if: steps.tag_check.outputs.exists == 'false'
+        if: steps.tag_check.outputs.exists == 'false' && steps.tag.outputs.superseded != 'true'
         uses: softprops/action-gh-release@62c96d0c4e8a889135c1f3a25910db8dbe0e85f7 # v2.3.4
         with:
           tag_name: v${{ steps.version.outputs.version }}
@@ -172,7 +202,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Notify success
-        if: success() && steps.tag_check.outputs.exists == 'false'
+        if: success() && steps.tag_check.outputs.exists == 'false' && steps.tag.outputs.superseded != 'true'
         run: |
           echo "✅ Release v${{ steps.version.outputs.version }} created successfully!"
           echo "🔗 View release: https://github.com/${{ github.repository }}/releases/tag/v${{ steps.version.outputs.version }}"
