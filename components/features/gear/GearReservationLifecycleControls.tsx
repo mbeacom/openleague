@@ -103,12 +103,31 @@ export function GearReservationLifecycleControls({
   const blockedPickups = reservation.allocations.filter((allocation) =>
     allocation.status === "ALLOCATED" && !allocation.capabilities.canRecordPickup && allocation.capabilities.canRelease,
   );
-  const allocationLabel = (allocation: Reservation["allocations"][number]) =>
-    allocation.assetTag ?? allocation.locationName ?? "pooled";
+  // Pooled allocations from the same location are otherwise indistinguishable,
+  // so pooled labels carry the quantity the action applies to.
+  const allocationLabel = (allocation: Reservation["allocations"][number], quantity: number) =>
+    allocation.assetTag ?? `${allocation.locationName ?? "pooled"}, ${quantity}`;
+  const dialogOpen = allocationOpen || Boolean(selectedReturn);
+  const errorAlert = error && <Alert severity="error" onClose={() => setError(null)}>{error}</Alert>;
+  const maxAllocatable = allocatable.find((option) => option.value === resource)?.maxQuantity;
+  const allocationQuantity = resource.startsWith("unit:") ? 1 : Number(quantity);
+  const allocationQuantityError = !resource.startsWith("unit:") && quantity !== "" && (
+    !Number.isInteger(allocationQuantity) || allocationQuantity < 1
+      ? "Enter a whole number of at least 1."
+      : maxAllocatable !== undefined && allocationQuantity > maxAllocatable
+        ? `Only ${maxAllocatable} available at this location for these dates.`
+        : null
+  );
+  const returnQuantity = Number(quantity);
+  const returnQuantityError = selectedReturn && quantity !== "" && (
+    !Number.isInteger(returnQuantity) || returnQuantity < 1 || returnQuantity > selectedReturn.outstandingQty
+      ? `Enter between 1 and ${selectedReturn.outstandingQty}.`
+      : null
+  );
 
   return (
     <Stack spacing={1}>
-      {error && <Alert severity="error" onClose={() => setError(null)}>{error}</Alert>}
+      {!dialogOpen && errorAlert}
       {blockedPickups.length > 0 && (
         <Alert severity="warning">
           {blockedPickups.length === 1 ? "An allocation is" : `${blockedPickups.length} allocations are`}
@@ -140,14 +159,14 @@ export function GearReservationLifecycleControls({
             <Button key={`pickup-${allocation.id}`} variant="outlined" disabled={pending} onClick={() => run(() => recordGearPickup({
               leagueId, allocationId: allocation.id, expectedVersion: allocation.version, quantity: allocation.allocatedQty,
             }))} sx={{ minHeight: 44 }}>
-              Confirm pickup ({allocationLabel(allocation)})
+              Confirm pickup ({allocationLabel(allocation, allocation.allocatedQty)})
             </Button>
           ))}
           {releasableAllocations.map((allocation) => (
             <Button key={`release-${allocation.id}`} color="inherit" disabled={pending} onClick={() => run(() => releaseGearAllocation({
               leagueId, allocationId: allocation.id, expectedVersion: allocation.version,
             }))} sx={{ minHeight: 44 }}>
-              Release ({allocationLabel(allocation)})
+              Release ({allocationLabel(allocation, allocation.allocatedQty)})
             </Button>
           ))}
         </Stack>
@@ -159,7 +178,7 @@ export function GearReservationLifecycleControls({
               setQuantity(String(allocation.outstandingQty));
               setReturnAllocationId(allocation.id);
             }} sx={{ minHeight: 44 }}>
-              Record return ({allocationLabel(allocation)})
+              Record return ({allocationLabel(allocation, allocation.outstandingQty)})
             </Button>
           ))}
         </Stack>
@@ -176,6 +195,7 @@ export function GearReservationLifecycleControls({
         <DialogTitle id="gear-allocate-title">Review and allocate gear</DialogTitle>
         <DialogContent>
           <Stack spacing={2} sx={{ pt: 1 }}>
+            {errorAlert}
             <Typography variant="body2" color="text.secondary">Choose a pooled location and condition quantity, or one available tagged unit.</Typography>
             <TextField select label="Reservation line" value={lineId} onChange={(event) => {
               setResource("");
@@ -211,17 +231,19 @@ export function GearReservationLifecycleControls({
             <TextField
               label="Quantity"
               type="number"
-              inputProps={{ min: 1, max: allocatable.find((option) => option.value === resource)?.maxQuantity }}
+              inputProps={{ min: 1, max: maxAllocatable }}
               value={resource.startsWith("unit:") ? "1" : quantity}
               onChange={(event) => setQuantity(event.target.value)}
               disabled={resource.startsWith("unit:")}
+              error={Boolean(allocationQuantityError)}
+              helperText={allocationQuantityError || (maxAllocatable !== undefined ? `${maxAllocatable} available` : undefined)}
               required
             />
           </Stack>
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setAllocationOpen(false)} disabled={pending}>Cancel</Button>
-          <Button variant="contained" disabled={pending || loadingAvailability || !resource || !lineId} onClick={() => {
+          <Button variant="contained" disabled={pending || loadingAvailability || !resource || !lineId || quantity === "" || Boolean(allocationQuantityError)} onClick={() => {
             const [kind, id] = resource.split(":");
             run(() => approveAndAllocateGearReservation({
               leagueId,
@@ -231,7 +253,7 @@ export function GearReservationLifecycleControls({
               approvedEndDate,
               allocations: [{
                 reservationLineId: lineId,
-                quantity: resource.startsWith("unit:") ? 1 : Number(quantity),
+                quantity: allocationQuantity,
                 ...(kind === "pool" ? { poolStockId: id } : { gearUnitId: id }),
               }],
             }));
@@ -243,7 +265,16 @@ export function GearReservationLifecycleControls({
         <DialogTitle id="gear-return-title">Record gear return</DialogTitle>
         <DialogContent>
           <Stack spacing={2} sx={{ pt: 1 }}>
-            <TextField label="Quantity returned" type="number" inputProps={{ min: 1, max: selectedReturn?.outstandingQty ?? 1 }} value={quantity} onChange={(event) => setQuantity(event.target.value)} />
+            {errorAlert}
+            <TextField
+              label="Quantity returned"
+              type="number"
+              inputProps={{ min: 1, max: selectedReturn?.outstandingQty ?? 1 }}
+              value={quantity}
+              onChange={(event) => setQuantity(event.target.value)}
+              error={Boolean(returnQuantityError)}
+              helperText={returnQuantityError || undefined}
+            />
             <TextField select label="Disposition" value={disposition} onChange={(event) => setDisposition(event.target.value as typeof disposition)}>
               {["GOOD", "DAMAGED", "LOST", "CONSUMED"].map((value) => <MenuItem key={value} value={value}>{value.replace("_", " ")}</MenuItem>)}
             </TextField>
@@ -251,7 +282,7 @@ export function GearReservationLifecycleControls({
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setReturnAllocationId(null)} disabled={pending}>Cancel</Button>
-          <Button variant="contained" disabled={pending || !selectedReturn} onClick={() => selectedReturn && run(() => recordGearReturn({
+          <Button variant="contained" disabled={pending || !selectedReturn || quantity === "" || Boolean(returnQuantityError)} onClick={() => selectedReturn && run(() => recordGearReturn({
             leagueId,
             allocationId: selectedReturn.id,
             expectedVersion: selectedReturn.version,
