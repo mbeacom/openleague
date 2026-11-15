@@ -104,7 +104,8 @@ jobs:
       # This also removes the reason this job was uneasy about itself: it no
       # longer writes to the default branch at all.
       #
-      # The branch holds nothing but these two generated files and has no
+      # The branch holds nothing but these two generated files (plus a vercel.json
+      # that turns off Vercel deployments for it) and has no
       # history worth keeping, so each run rebuilds it as a single orphan commit
       # and force-pushes. That is race-free by construction, which rebasing onto
       # a shared branch never was. `[skip ci]` is gone with it -- no workflow
@@ -126,7 +127,14 @@ jobs:
           # silently gets everything.
           git checkout --quiet --orphan badge-reports
           git reset --quiet
-          git add .adrkit/lint.json .adrkit/queue.json
+
+          # Vercel's Git integration builds every pushed branch and reads its
+          # settings from the vercel.json in the pushed commit, so main's config
+          # never applies here. With no app in the tree, every push produced a
+          # failed Preview deployment. This one-line config turns deployments
+          # off for the badges commit only.
+          printf '%s\n' '{ "git": { "deploymentEnabled": false } }' > vercel.json
+          git add .adrkit/lint.json .adrkit/queue.json vercel.json
           git commit --quiet -m 'chore(adr): refresh corpus badge reports'
 
           git push --force origin HEAD:badges
