@@ -56,6 +56,7 @@ import { generateThumbnail } from "@/lib/utils/canvas/thumbnail-generator";
 import { STORED_THUMBNAIL_PIXEL_RATIO } from "@/lib/utils/thumbnail-rules";
 import { waitForDiagramFont } from "@/lib/utils/canvas/diagram-fonts";
 import { PlayDiagram } from "./PlayDiagram";
+import { DrillFileActions } from "./DrillFileActions";
 import { formatDistanceToNow } from "date-fns";
 import { useDebouncedCallback } from "use-debounce";
 import { DrillFilterChips, type DrillFilters } from "./DrillFilterChips";
@@ -866,6 +867,15 @@ export function PlayLibrary({
                     </Button>
                 )}
             </Stack>
+            {mode === "manage" && (
+                <Box sx={{ mb: 3, mt: -1.5 }}>
+                    <DrillFileActions
+                        teamId={teamId}
+                        libraryNames={libraryNames}
+                        onImported={() => void loadPlays(searchQuery, dateFilter, queryFilters, true)}
+                    />
+                </Box>
+            )}
 
             {/* Search and Filter Bar */}
             {/* Requirements: 8.4 - Search input for play names, filter by creation date */}

@@ -232,6 +232,18 @@ const planRosterSchema = z
 
 const sequenceSchema = z.number({ message: "Sequence must be a number" }).int("Sequence must be a whole number").min(0, "Sequence can't be negative");
 
+/** A drill's own content: name, description, tags and diagram. The drill file (lib/drill-document) reads drills with it too. */
+export const planDrillContentSchema = z.object({
+    name: requiredText(MAX_DRILL_NAME_LENGTH, "Drill name"),
+    description: optionalText(MAX_DRILL_DESCRIPTION_LENGTH, "Description"),
+    focus: focusSchema,
+    goalies: goaliesSchema,
+    ageGroups: planAgeGroupsSchema,
+    playData: diagramSchema,
+});
+
+export type PlanDrillContent = z.output<typeof planDrillContentSchema>;
+
 const planDrillSchema = z.object({
     kind: z.literal("drill"),
     sequence: sequenceSchema,
@@ -241,14 +253,7 @@ const planDrillSchema = z.object({
     stays: staysSchema,
     rotateEveryMinutes: rotateEveryMinutesSchema,
     staff: planStaffSchema(MAX_ROW_STAFF, ROW_STAFF_LIMIT_MESSAGE),
-    drill: z.object({
-        name: requiredText(MAX_DRILL_NAME_LENGTH, "Drill name"),
-        description: optionalText(MAX_DRILL_DESCRIPTION_LENGTH, "Description"),
-        focus: focusSchema,
-        goalies: goaliesSchema,
-        ageGroups: planAgeGroupsSchema,
-        playData: diagramSchema,
-    }),
+    drill: planDrillContentSchema,
 });
 
 /** A warm-up, break, transition or cool-down: no drill, no diagram, no tags (unknown keys are stripped). */

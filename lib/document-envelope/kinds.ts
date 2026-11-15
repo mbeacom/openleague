@@ -21,6 +21,14 @@ import {
     type RankingsDocument,
 } from "@/lib/rankings-document/document";
 import {
+    DRILLS_FILE_TOO_LARGE_MESSAGE,
+    DRILLS_FORMAT,
+    MAX_DRILLS_FILE_BYTES,
+    NOT_A_DRILLS_FILE_MESSAGE,
+    parseDrillsDocument,
+    type DrillsDocument,
+} from "@/lib/drill-document/document";
+import {
     MAX_TEAM_PROFILE_FILE_BYTES,
     NOT_A_TEAM_FILE_MESSAGE,
     TEAM_FILE_TOO_LARGE_MESSAGE,
@@ -34,6 +42,7 @@ export interface DocumentPayloads {
     "openleague.practice-plan": PlanDocument;
     "openleague.rankings": RankingsDocument;
     "openleague.team-profile": TeamProfileDocument;
+    "openleague.drills": DrillsDocument;
 }
 
 export type DocumentKind = keyof DocumentPayloads;
@@ -97,6 +106,17 @@ export const DOCUMENT_KINDS: { readonly [K in DocumentKind]: DocumentKindEntry<K
         tooLargeMessage: TEAM_FILE_TOO_LARGE_MESSAGE,
         parse: (raw) => {
             const result = parseTeamProfileDocument(raw);
+            return result.ok ? { ok: true, payload: result.doc } : { ok: false, error: kindError(result.error) };
+        },
+        updatedAtOf: (doc) => doc.exportedAt,
+    },
+    [DRILLS_FORMAT]: {
+        kind: DRILLS_FORMAT,
+        maxBytes: MAX_DRILLS_FILE_BYTES,
+        notThisKindMessage: NOT_A_DRILLS_FILE_MESSAGE,
+        tooLargeMessage: DRILLS_FILE_TOO_LARGE_MESSAGE,
+        parse: (raw) => {
+            const result = parseDrillsDocument(raw);
             return result.ok ? { ok: true, payload: result.doc } : { ok: false, error: kindError(result.error) };
         },
         updatedAtOf: (doc) => doc.exportedAt,
