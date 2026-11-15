@@ -72,6 +72,10 @@ const KIND_HEADERS: Record<string, { noun: string; open: string }> = {
         noun: "OpenLeague team file",
         open: "To open it, choose Import team file under Your team in the OpenLeague planner (openleague.dev/planner).",
     },
+    "openleague.drills": {
+        noun: "OpenLeague drill file",
+        open: "To open it, choose Import drills in the play library of the OpenLeague planner (openleague.dev/planner).",
+    },
 };
 
 /** The kind and version, read from a bare document or an envelope. */
@@ -137,6 +141,7 @@ export const TOML_OMITTABLE_NULLS: Readonly<Record<string, readonly string[]>> =
         "sources.snakeChart.lastReadAt",
     ],
     "openleague.team-profile": ["exportedAt", "team.logo", "team.primaryColor", "team.secondaryColor"],
+    "openleague.drills": ["drills.*.description", "drills.*.ageGroups", "drills.*.playData.equipmentNeeds"],
 };
 
 /** The paths a document's nulls may be left out at: its kind's, under `payload.` when wrapped; none for an unknown kind. */

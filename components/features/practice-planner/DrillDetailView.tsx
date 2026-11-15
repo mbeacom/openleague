@@ -14,6 +14,7 @@ import {
     ContentCopy as DuplicateIcon,
     Edit as EditIcon,
     FileDownloadOutlined as DownloadIcon,
+    IosShare as ShareFileIcon,
 } from "@mui/icons-material";
 import { usePlannerPlatform, usePlannerStore, type LibraryPlay } from "@/lib/planner-store";
 import { FOCUS_LABELS, GOALIES_LABELS, drillTags } from "@/lib/utils/drill-tags";
@@ -30,6 +31,7 @@ import {
     usedInLabel,
 } from "@/lib/utils/drill-details";
 import { downloadBlob } from "./export/download";
+import { downloadDrillFile } from "./DrillFileActions";
 import { PRINT_DIAGRAM_SIZE } from "./print/PrintDiagram";
 import { PlayableDiagram } from "./PlayableDiagram";
 import { PlayLegend } from "./PlayLegend";
@@ -65,7 +67,7 @@ function DetailRow({ label, children }: { label: string; children: ReactNode }) 
 
 export function DrillDetailView({ play, teamId, canEdit, usageCount, extras }: DrillDetailViewProps) {
     const store = usePlannerStore();
-    const { Link, navigate, routes } = usePlannerPlatform();
+    const { Link, navigate, routes, planGenerator } = usePlannerPlatform();
     const [error, setError] = useState<string | null>(null);
     const [duplicating, setDuplicating] = useState(false);
 
@@ -116,6 +118,17 @@ export function DrillDetailView({ play, teamId, canEdit, usageCount, extras }: D
             setError("Couldn't download the diagram. Please try again.");
         }
     }, [play]);
+
+    /** The drill as a drill file (#523), for another coach's library. */
+    const handleShare = useCallback(async () => {
+        setError(null);
+        try {
+            await downloadDrillFile([play], planGenerator);
+        } catch (err) {
+            console.error("Error creating the drill file:", err);
+            setError("Couldn't create the drill file. Please try again.");
+        }
+    }, [play, planGenerator]);
 
     return (
         <Box sx={{ display: "flex", flexDirection: "column", gap: 3 }}>
@@ -201,6 +214,9 @@ export function DrillDetailView({ play, teamId, canEdit, usageCount, extras }: D
                         )}
                         <Button variant="outlined" startIcon={<DownloadIcon />} onClick={handleDownload} sx={{ minHeight: 44 }}>
                             Download diagram
+                        </Button>
+                        <Button variant="outlined" startIcon={<ShareFileIcon />} onClick={() => void handleShare()} sx={{ minHeight: 44 }}>
+                            Download drill file
                         </Button>
                     </Stack>
                 </Stack>
