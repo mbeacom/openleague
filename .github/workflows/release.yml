@@ -20,6 +20,10 @@ permissions:
   pull-requests: write
   issues: write
   discussions: write
+  # Only to start a Release run on main when this one is superseded (see
+  # "Create Git tag"). A workflow_dispatch is the one event this token may
+  # start a run with.
+  actions: write
 
 # Two merges landing close together start two runs that compute the SAME next
 # version from the same latest tag, then race to create it -- exactly what
@@ -148,6 +152,8 @@ jobs:
       - name: Create Git tag
         id: tag
         if: steps.tag_check.outputs.exists == 'false'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           VERSION=${{ steps.version.outputs.version }}
           # `git tag -a` is annotated, so it writes a tagger ident and fails with
@@ -158,15 +164,16 @@ jobs:
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git tag -a "v$VERSION" -m "Release v$VERSION"
 
-          # GitHub refuses a tag pushed with this token when the tagged commit
-          # differs from main's tip in workflow files ("refusing to allow a
+          # Seen on 2026-11-15: this push was refused ("refusing to allow a
           # GitHub App to create or update workflow ... without `workflows`
-          # permission"). That happens when a merge that edits a workflow lands
-          # on main while this run waits or builds. The newer commit's own
-          # release run then tags a version that includes this commit, so this
-          # run steps aside instead of failing. Granting the token workflow
-          # write access would let any step here rewrite workflows, so it is
-          # deliberately not the fix.
+          # permission") after a merge that edited workflow files landed on
+          # main while the run was in progress. Main's tip has no such
+          # difference from itself, so on that refusal this run steps aside and
+          # starts a Release run on main, which tags a version that includes
+          # this commit. A push-triggered run can't be relied on for that:
+          # pushes touching only .github/** don't trigger this workflow.
+          # Granting the token workflow write access would let any step here
+          # rewrite workflows, so it is deliberately not the fix.
           if git push origin "v$VERSION" 2> push-error.log; then
             exit 0
           fi
@@ -175,7 +182,8 @@ jobs:
           # shellcheck disable=SC2016 # the backticks are literal text in GitHub's message
           if grep -qF 'without `workflows` permission' push-error.log && [ "$(git rev-parse origin/main)" != "$GITHUB_SHA" ]; then
             echo "superseded=true" >> "$GITHUB_OUTPUT"
-            echo "::warning::Release v$VERSION skipped: main has moved past $GITHUB_SHA and changed workflow files. The release run for main's newer commit includes this commit."
+            gh workflow run release.yml --ref main
+            echo "::warning::Release v$VERSION skipped: main has moved past $GITHUB_SHA with workflow changes. Started a Release run on main, which includes this commit."
             exit 0
           fi
           exit 1
