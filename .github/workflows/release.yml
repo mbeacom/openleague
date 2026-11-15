@@ -146,6 +146,7 @@ jobs:
       # version from the newest tag or the GitHub release, not from the file.
 
       - name: Create Git tag
+        id: tag
         if: steps.tag_check.outputs.exists == 'false'
         run: |
           VERSION=${{ steps.version.outputs.version }}
@@ -156,10 +157,31 @@ jobs:
           git config user.name  'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git tag -a "v$VERSION" -m "Release v$VERSION"
-          git push origin "v$VERSION"
+
+          # GitHub refuses a tag pushed with this token when the tagged commit
+          # differs from main's tip in workflow files ("refusing to allow a
+          # GitHub App to create or update workflow ... without `workflows`
+          # permission"). That happens when a merge that edits a workflow lands
+          # on main while this run waits or builds. The newer commit's own
+          # release run then tags a version that includes this commit, so this
+          # run steps aside instead of failing. Granting the token workflow
+          # write access would let any step here rewrite workflows, so it is
+          # deliberately not the fix.
+          if git push origin "v$VERSION" 2> push-error.log; then
+            exit 0
+          fi
+          cat push-error.log >&2
+          git fetch --quiet origin main
+          # shellcheck disable=SC2016 # the backticks are literal text in GitHub's message
+          if grep -qF 'without `workflows` permission' push-error.log && [ "$(git rev-parse origin/main)" != "$GITHUB_SHA" ]; then
+            echo "superseded=true" >> "$GITHUB_OUTPUT"
+            echo "::warning::Release v$VERSION skipped: main has moved past $GITHUB_SHA and changed workflow files. The release run for main's newer commit includes this commit."
+            exit 0
+          fi
+          exit 1
 
       - name: Create GitHub Release
-        if: steps.tag_check.outputs.exists == 'false'
+        if: steps.tag_check.outputs.exists == 'false' && steps.tag.outputs.superseded != 'true'
         uses: softprops/action-gh-release@62c96d0c4e8a889135c1f3a25910db8dbe0e85f7 # v2.3.4
         with:
           tag_name: v${{ steps.version.outputs.version }}
@@ -172,7 +194,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Notify success
-        if: success() && steps.tag_check.outputs.exists == 'false'
+        if: success() && steps.tag_check.outputs.exists == 'false' && steps.tag.outputs.superseded != 'true'
         run: |
           echo "✅ Release v${{ steps.version.outputs.version }} created successfully!"
           echo "🔗 View release: https://github.com/${{ github.repository }}/releases/tag/v${{ steps.version.outputs.version }}"
