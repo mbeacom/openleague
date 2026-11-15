@@ -158,3 +158,37 @@ describe("RSC boundary guard: function-valued sx properties", () => {
     ).toEqual([]);
   });
 });
+
+/**
+ * `<Stack divider={…}>` from a server component. The divider element reaches
+ * MUI's client Stack as a client reference, and Stack clones it between
+ * children. With two or more children the server render then hits an undefined
+ * element type ("Element type is invalid … got: undefined") and React falls
+ * back to client rendering. A one-child Stack never shows it, so it only
+ * appears with real data. Server components use `components/ui/DividedStack`.
+ */
+describe("RSC boundary guard: Stack divider from a server component", () => {
+  it("no server component passes a divider element to Stack", () => {
+    const violations: string[] = [];
+
+    for (const root of SCAN_ROOTS) {
+      for (const file of collectTsxFiles(join(REPO_ROOT, root))) {
+        const source = readFileSync(file, "utf8");
+        if (hasUseClientDirective(source)) continue;
+
+        if (/<Stack\b[^>]*\bdivider=\{/.test(source)) {
+          violations.push(file.replace(`${REPO_ROOT}/`, ""));
+        }
+      }
+    }
+
+    expect(
+      violations,
+      `Stack divider passed from server component(s):\n  ${violations.join("\n  ")}\n` +
+        `With two or more children this breaks server rendering ("Element type is ` +
+        `invalid ... got: undefined"). Use DividedStack from ` +
+        `components/ui/DividedStack.tsx, or add "use client" if the file is ` +
+        `genuinely a client component.`
+    ).toEqual([]);
+  });
+});

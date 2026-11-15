@@ -1,5 +1,6 @@
 import { ArrowBackOutlined } from "@mui/icons-material";
-import { Alert, Card, Chip, Divider, Stack, Typography } from "@mui/material";
+import { DividedStack } from "@/components/ui/DividedStack";
+import { Alert, Card, Chip, Stack, Typography } from "@mui/material";
 import { notFound } from "next/navigation";
 import { LinkButton } from "@/components/ui/NextLinkComposites";
 import { PageContainer } from "@/components/ui/PageContainer";
@@ -69,17 +70,17 @@ export default async function GearReservationDetailPage({ params }: GearReservat
         />
         <Card variant="outlined" sx={{ p: 2 }}>
           <Typography variant="h6" gutterBottom>Requested items</Typography>
-          <Stack divider={<Divider flexItem />}>
+          <DividedStack>
             {reservation.lines.map((line) => (
               <Typography key={line.id}>
                 {line.name}: {line.allocatedQty}/{line.approvedQty || line.requestedQty} allocated
               </Typography>
             ))}
-          </Stack>
+          </DividedStack>
         </Card>
         <Card variant="outlined" sx={{ p: 2 }}>
           <Typography variant="h6" gutterBottom>Custody and ledger</Typography>
-          <Stack divider={<Divider flexItem />}>
+          <DividedStack>
             {reservation.allocations.length === 0 ? (
               <Typography color="text.secondary">No inventory has been allocated.</Typography>
             ) : reservation.allocations.map((allocation) => (
@@ -98,7 +99,7 @@ export default async function GearReservationDetailPage({ params }: GearReservat
                 )}
               </Stack>
             ))}
-          </Stack>
+          </DividedStack>
         </Card>
       </Stack>
     </PageContainer>

@@ -4,10 +4,10 @@ import {
   Card,
   CardContent,
   Chip,
-  Divider,
   Stack,
   Typography,
 } from "@mui/material";
+import { DividedStack } from "@/components/ui/DividedStack";
 import { LinkMuiLink } from "@/components/ui/NextLinkComposites";
 import type { AssociationOperationsData, OperationsAction } from "@/lib/data/association-operations";
 
@@ -33,7 +33,7 @@ function ActionList({ items }: { items: OperationsAction[] }) {
     return <Typography color="text.secondary" variant="body2">Nothing needs attention.</Typography>;
   }
   return (
-    <Stack divider={<Divider flexItem />} spacing={0}>
+    <DividedStack spacing={0}>
       {items.slice(0, 5).map((item) => (
         <Box key={item.id} sx={{ py: 1 }}>
           <LinkMuiLink
@@ -46,7 +46,7 @@ function ActionList({ items }: { items: OperationsAction[] }) {
           {item.detail && <Typography color="text.secondary" variant="caption" display="block">{item.detail}</Typography>}
         </Box>
       ))}
-    </Stack>
+    </DividedStack>
   );
 }
 
