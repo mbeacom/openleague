@@ -1,6 +1,6 @@
 import type { NextConfig } from "next";
 import createMDX from "@next/mdx";
-import { withSentryConfig } from "@sentry/nextjs";
+import { withSentryConfig } from "@sentry/nextjs/config";
 
 const gaEnabled = Boolean(process.env.NEXT_PUBLIC_GA_MEASUREMENT_ID?.trim());
 const sentryEnabled = Boolean(process.env.NEXT_PUBLIC_SENTRY_DSN?.trim());
@@ -182,7 +182,9 @@ export default withSentryConfig(withMDX(nextConfig), {
   authToken: process.env.SENTRY_AUTH_TOKEN,
   silent: true,
   telemetry: false,
-  disableLogger: true,
+  // Strips the SDK's own debug logging from the bundle (v10's `disableLogger`);
+  // the top-level option covers Turbopack builds as well as webpack.
+  bundleSizeOptimizations: { excludeDebugStatements: true },
   sourcemaps: {
     disable: !process.env.SENTRY_AUTH_TOKEN,
   },

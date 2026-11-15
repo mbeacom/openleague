@@ -31,6 +31,12 @@ export function getStripeClient(): Stripe {
 
   if (!globalForStripe.stripe) {
     globalForStripe.stripe = new Stripe(env.STRIPE_SECRET_KEY, {
+      // Pinned so an SDK upgrade does not move the API version that payment,
+      // refund and Connect requests use. The SDK types only the latest
+      // version, so an older pin needs the escape Stripe documents for it.
+      // Move this deliberately, after checking Stripe's changelog.
+      // @ts-expect-error -- older than the SDK's LatestApiVersion
+      apiVersion: "2026-08-26.dahlia",
       appInfo: { name: "OpenLeague", url: "https://openl.app" },
       typescript: true,
     });

@@ -19,6 +19,7 @@ const RUNTIMES = [
 
 type SentryOptions = {
   sendDefaultPii?: boolean;
+  dataCollection?: Record<string, unknown>;
   beforeSend: (event: Record<string, unknown>, hint?: unknown) => Record<string, unknown>;
   beforeSendTransaction: (
     event: Record<string, unknown>,
@@ -51,10 +52,25 @@ describe('Sentry capability-token scrubbing', () => {
   });
 
   describe.each(RUNTIMES)('$name runtime', ({ module }) => {
-    it('registers every export hook and disables default PII', async () => {
+    it('registers every export hook and keeps data collection restricted', async () => {
       const options = await loadRuntime(module);
 
-      expect(options.sendDefaultPii).toBe(false);
+      // Sentry v11 replaced sendDefaultPii with dataCollection, whose unset
+      // default collects user info, cookies, bodies and query data.
+      expect(options.sendDefaultPii).toBeUndefined();
+      expect(options.dataCollection).toMatchObject({
+        userInfo: false,
+        cookies: false,
+        httpBodies: [],
+        databaseQueryData: false,
+        queues: false,
+        genAI: { inputs: false, outputs: false },
+        graphQL: { document: false, variables: false },
+      });
+      expect(options.dataCollection?.httpHeaders).toMatchObject({
+        request: { deny: expect.arrayContaining(['-ip', '-user']) },
+        response: { deny: expect.arrayContaining(['-ip', '-user']) },
+      });
       expect(typeof options.beforeSend).toBe('function');
       expect(typeof options.beforeSendTransaction).toBe('function');
       expect(typeof options.beforeSendSpan).toBe('function');
@@ -115,6 +131,28 @@ describe('Sentry capability-token scrubbing', () => {
       expect(scrubbed).toBeTruthy();
       expect(JSON.stringify(scrubbed)).not.toContain(TOKEN);
       expect((scrubbed.data as Record<string, string>)['http.method']).toBe('GET');
+    });
+
+    it('redacts the token from a v11 streamed span without dropping it', async () => {
+      const options = await loadRuntime(module);
+      const span = {
+        span_id: 'abc123',
+        is_segment: true,
+        name: `/gear-wishlist/${TOKEN}`,
+        status: 'ok',
+        attributes: {
+          'sentry.op': 'navigation',
+          'url.full': `https://openleague.app/gear-wishlist/${TOKEN}?token=${TOKEN}`,
+          'http.request.method': 'GET',
+        },
+      };
+
+      const scrubbed = options.beforeSendSpan(span);
+
+      expect(scrubbed).toBeTruthy();
+      expect(JSON.stringify(scrubbed)).not.toContain(TOKEN);
+      expect(scrubbed.name).toBe(`/gear-wishlist/${REDACTED}`);
+      expect((scrubbed.attributes as Record<string, string>)['http.request.method']).toBe('GET');
     });
 
     it('redacts the token from a navigation breadcrumb', async () => {

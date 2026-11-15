@@ -195,8 +195,11 @@ jobs:
             exit 1
           fi
 
+      # The directory is named explicitly: Vitest 5 moved the default from
+      # .vitest-reports to .vitest/blob, which is not where the shards' results
+      # are downloaded.
       - name: Merge the test reports
-        run: bunx vitest run --merge-reports
+        run: bunx vitest run --merge-reports .vitest-reports
 
   # ADR-0020: shared planner code also ships in the static planner. A change
   # that breaks its bundle fails here, not in the next Pages deploy.
