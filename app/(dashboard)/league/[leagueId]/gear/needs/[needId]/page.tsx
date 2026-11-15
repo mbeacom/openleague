@@ -1,5 +1,6 @@
 import { ArrowBackOutlined } from "@mui/icons-material";
-import { Alert, Card, Chip, Divider, Stack, Typography } from "@mui/material";
+import { DividedStack } from "@/components/ui/DividedStack";
+import { Alert, Card, Chip, Stack, Typography } from "@mui/material";
 import { notFound } from "next/navigation";
 import { GearNeedActions } from "@/components/features/gear/GearNeedActions";
 import { LinkButton } from "@/components/ui/NextLinkComposites";
@@ -38,7 +39,7 @@ export default async function GearNeedDetailPage({ params }: { params: Promise<{
         </Card>
         <Card variant="outlined" sx={{ p: 2 }}>
           <Typography variant="h6" gutterBottom>Requested items</Typography>
-          <Stack divider={<Divider flexItem />}>
+          <DividedStack>
             {need.lines.map((line) => (
               <Stack key={line.id} direction="row" justifyContent="space-between" gap={2} py={1}>
                 <Stack>
@@ -48,7 +49,7 @@ export default async function GearNeedDetailPage({ params }: { params: Promise<{
                 <Typography>{line.fulfilledQty} / {line.requestedQty}</Typography>
               </Stack>
             ))}
-          </Stack>
+          </DividedStack>
         </Card>
       </Stack>
     </PageContainer>

@@ -1,4 +1,5 @@
-import { Alert, Card, Chip, Divider, Stack, Typography } from "@mui/material";
+import { Alert, Card, Chip, Stack, Typography } from "@mui/material";
+import { DividedStack } from "@/components/ui/DividedStack";
 import { GearWishlistAdminActions } from "@/components/features/gear/GearWishlistAdminActions";
 import { GearWishlistEditor } from "@/components/features/gear/GearWishlistEditor";
 import { GearPledgeAdminActions } from "@/components/features/gear/GearPledgeAdminActions";
@@ -33,14 +34,14 @@ export default async function GearWishlistAdminPage({ params }: { params: Promis
             </Card>
             <Card variant="outlined" sx={{ p: 2 }}>
               <Typography variant="h6" gutterBottom>Curated public items</Typography>
-              <Stack divider={<Divider flexItem />}>
+              <DividedStack>
                 {wishlist.items.filter((item) => item.isActive).map((item) => (
                   <Stack key={item.id} direction="row" justifyContent="space-between" gap={2} py={1}>
                     <Typography>{item.nameSnapshot}</Typography>
                     <Typography color="text.secondary">{item.receivedQty} received / {item.targetQty} target</Typography>
                   </Stack>
                 ))}
-              </Stack>
+              </DividedStack>
             </Card>
           </>
         ) : (
@@ -67,7 +68,7 @@ export default async function GearWishlistAdminPage({ params }: { params: Promis
           <Typography variant="h6" gutterBottom>Private donor pledge queue</Typography>
           <Alert severity="info" sx={{ mb: 1 }}>Donor contact information is visible only to league administrators.</Alert>
           <Alert severity="warning" sx={{ mb: 1 }}>Automatic pledge expiry is intentionally deferred. Review pledge age and use “Expire pledge” when a donor commitment is no longer active.</Alert>
-          <Stack divider={<Divider flexItem />}>
+          <DividedStack>
             {pledges.length === 0 ? <Typography color="text.secondary">No pledges yet.</Typography> : pledges.map((pledge) => (
               <Stack key={pledge.id} spacing={0.5} py={1}>
                 <Stack direction="row" justifyContent="space-between" gap={2}>
@@ -105,7 +106,7 @@ export default async function GearWishlistAdminPage({ params }: { params: Promis
                 />
               </Stack>
             ))}
-          </Stack>
+          </DividedStack>
         </Card>
       </Stack>
     </PageContainer>
