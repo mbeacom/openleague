@@ -18,7 +18,7 @@ vi.mock("next/image", () => ({
     },
 }));
 
-import { HostedImage, HostedLink, hostedPlannerRoutes, useHostedPlannerPlatform } from "@/components/providers/hosted-planner-platform";
+import { HOSTED_IMPORT_LINK_LABEL, HostedImage, HostedLink, hostedPlanLinks, hostedPlannerRoutes, useHostedPlannerPlatform } from "@/components/providers/hosted-planner-platform";
 
 const ID = "csessionxxxxxxxxxxxxxxxxx";
 
@@ -60,21 +60,28 @@ describe("hosted planner platform", () => {
         });
     });
 
-    it("hands plans off with the copy-link item only when NEXT_PUBLIC_STATIC_PLANNER_URL is set", () => {
+    it("offers the open-in-planner link only when NEXT_PUBLIC_STATIC_PLANNER_URL is set, and always this app's import link", () => {
+        const importLink = { label: HOSTED_IMPORT_LINK_LABEL, mode: "copy", baseUrl: `${window.location.origin}/practice-planner/import` };
         try {
             vi.stubEnv("NEXT_PUBLIC_STATIC_PLANNER_URL", "");
             expect(renderHook(() => useHostedPlannerPlatform()).result.current).toMatchObject({
                 planGenerator: "openleague-hosted",
-                planLinks: [],
+                planLinks: [importLink],
             });
             vi.stubEnv("NEXT_PUBLIC_STATIC_PLANNER_URL", " https://openleague.dev/planner/ ");
-            expect(renderHook(() => useHostedPlannerPlatform()).result.current.planLinks).toEqual([{
-                label: "Copy “Open in planner” link",
-                mode: "copy",
-                baseUrl: "https://openleague.dev/planner/",
-            }]);
+            expect(renderHook(() => useHostedPlannerPlatform()).result.current.planLinks).toEqual([
+                { label: "Copy “Open in planner” link", mode: "copy", baseUrl: "https://openleague.dev/planner/" },
+                importLink,
+            ]);
         } finally {
             vi.unstubAllEnvs();
         }
+    });
+
+    it("leaves the import link out where the origin is unknown (server rendering)", () => {
+        expect(hostedPlanLinks("", null)).toEqual([]);
+        expect(hostedPlanLinks("", "https://openl.app")).toEqual([
+            { label: HOSTED_IMPORT_LINK_LABEL, mode: "copy", baseUrl: "https://openl.app/practice-planner/import" },
+        ]);
     });
 });

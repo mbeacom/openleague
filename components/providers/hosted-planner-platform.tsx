@@ -11,6 +11,7 @@ import NextImage from "next/image";
 import NextLink from "next/link";
 import { useRouter } from "next/navigation";
 import type { PlannerImageProps, PlannerLinkProps, PlannerPlanLink, PlannerPlatform, PlannerRoutes } from "@/lib/planner-store";
+import { PLAN_IMPORT_PATH } from "@/lib/plan-document/pending";
 
 export const hostedPlannerRoutes: PlannerRoutes = {
     list: () => "/practice-planner",
@@ -34,13 +35,25 @@ export function HostedImage({ src, alt, fit }: PlannerImageProps) {
     return <NextImage src={src} alt={alt} fill style={{ objectFit: fit }} unoptimized />;
 }
 
+export const HOSTED_IMPORT_LINK_LABEL = "Copy “Import into OpenLeague” link";
+
 /**
- * The Export menu's "Open in planner" item, only when the static planner's URL
- * is configured. Next inlines NEXT_PUBLIC_* at build; tests stub the env.
+ * The Export menu's link items.
+ * - "Open in planner", only when the static planner's URL is configured. Next
+ *   inlines NEXT_PUBLIC_* at build; tests stub the env.
+ * - "Import into OpenLeague", once this app's origin is known (in the browser):
+ *   a coach on another team opens it, signs in, and imports the plan into a
+ *   team they administer.
  */
-export function hostedPlanLinks(url: string | undefined = process.env.NEXT_PUBLIC_STATIC_PLANNER_URL): PlannerPlanLink[] {
+export function hostedPlanLinks(
+    url: string | undefined = process.env.NEXT_PUBLIC_STATIC_PLANNER_URL,
+    origin: string | null = typeof window === "undefined" ? null : window.location.origin,
+): PlannerPlanLink[] {
+    const links: PlannerPlanLink[] = [];
     const baseUrl = url?.trim();
-    return baseUrl ? [{ label: "Copy “Open in planner” link", mode: "copy", baseUrl }] : [];
+    if (baseUrl) links.push({ label: "Copy “Open in planner” link", mode: "copy", baseUrl });
+    if (origin) links.push({ label: HOSTED_IMPORT_LINK_LABEL, mode: "copy", baseUrl: `${origin}${PLAN_IMPORT_PATH}` });
+    return links;
 }
 
 export function useHostedPlannerPlatform(): PlannerPlatform {
