@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, screen, waitFor } from "@testing-library/react";
 import {
     ExportPlanMenu,
+    LINK_COPIED_NOTICE,
     OPENED_IN_HOSTED_NOTICE,
     buildPlanDocument,
     unreadableDiagramNotice,
@@ -266,12 +267,33 @@ describe("ExportPlanMenu in the static planner", () => {
     const STATIC_PLATFORM: PlannerPlatform = {
         ...createHashPlatform(),
         planGenerator: "openleague-static",
-        planLink: { label: "Open in OpenLeague", mode: "open", baseUrl: "https://openl.app/practice-planner/import" },
+        planLinks: [
+            { label: "Copy link", mode: "copy", baseUrl: "https://openleague.dev/planner/" },
+            { label: "Open in OpenLeague", mode: "open", baseUrl: "https://openl.app/practice-planner/import" },
+        ],
     };
 
     function fakeTab() {
         return { opener: {} as unknown, location: { replace: vi.fn() }, close: vi.fn() };
     }
+
+    it("copies a link that opens the plan in this planner", async () => {
+        const writeText = vi.fn().mockResolvedValue(undefined);
+        Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText } });
+        const open = vi.spyOn(window, "open");
+
+        renderWithPlanner(<ExportPlanMenu session={SESSION} />, { platform: STATIC_PLATFORM });
+        openMenu();
+        fireEvent.click(screen.getByRole("menuitem", { name: "Copy link" }));
+
+        await waitFor(() => expect(writeText).toHaveBeenCalledTimes(1));
+        const link = writeText.mock.calls[0][0] as string;
+        expect(link).toMatch(/^https:\/\/openleague\.dev\/planner\/#plan=[A-Za-z0-9_-]+$/);
+        const result = parsePlan(await decodePlanLink(link.split("#plan=")[1]));
+        expect(result.ok && result.plan.session.title).toBe("Tuesday Skills");
+        expect(open).not.toHaveBeenCalled();
+        expect(await screen.findByText(LINK_COPIED_NOTICE)).toBeInTheDocument();
+    });
 
     it("writes generator openleague-static into the downloaded file", async () => {
         renderWithPlanner(<ExportPlanMenu session={SESSION} />, { platform: STATIC_PLATFORM });

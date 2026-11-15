@@ -70,7 +70,7 @@ export function createHashPlatform(): PlannerPlatform & { navigate: Mock } {
             sessionNewWithDrill: (playId) => `#/library/${playId}/practice`,
         },
         planGenerator: "openleague-static",
-        planLink: null,
+        planLinks: [],
     };
 }
 

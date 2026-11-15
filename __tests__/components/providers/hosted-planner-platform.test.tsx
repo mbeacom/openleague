@@ -65,14 +65,14 @@ describe("hosted planner platform", () => {
             vi.stubEnv("NEXT_PUBLIC_STATIC_PLANNER_URL", "");
             expect(renderHook(() => useHostedPlannerPlatform()).result.current).toMatchObject({
                 planGenerator: "openleague-hosted",
-                planLink: null,
+                planLinks: [],
             });
             vi.stubEnv("NEXT_PUBLIC_STATIC_PLANNER_URL", " https://openleague.dev/planner/ ");
-            expect(renderHook(() => useHostedPlannerPlatform()).result.current.planLink).toEqual({
+            expect(renderHook(() => useHostedPlannerPlatform()).result.current.planLinks).toEqual([{
                 label: "Copy “Open in planner” link",
                 mode: "copy",
                 baseUrl: "https://openleague.dev/planner/",
-            });
+            }]);
         } finally {
             vi.unstubAllEnvs();
         }

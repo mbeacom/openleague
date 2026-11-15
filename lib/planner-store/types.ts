@@ -199,6 +199,6 @@ export interface PlannerPlatform {
     routes: PlannerRoutes;
     /** Written into exported plan documents. */
     planGenerator: PlanGenerator;
-    /** The Export menu's link item; null hides it. */
-    planLink: PlannerPlanLink | null;
+    /** The Export menu's link items, in menu order; empty hides them. */
+    planLinks: readonly PlannerPlanLink[];
 }
