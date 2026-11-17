@@ -6100,6 +6100,47 @@ exports[`starter drills > matches the golden schedules and step poses 1`] = `
       },
     },
   },
+  "starter-skate-net-push-relay": {
+    "durationMs": 6398,
+    "poses": [
+      {
+        "atMs": 0,
+        "players": {
+          "np-a1": {
+            "x": 90,
+            "y": 60,
+          },
+          "np-a2": {
+            "x": 90,
+            "y": 72,
+          },
+          "np-b1": {
+            "x": 110,
+            "y": 60,
+          },
+          "np-b2": {
+            "x": 110,
+            "y": 72,
+          },
+        },
+        "pucks": {},
+      },
+    ],
+    "strokes": {
+      "np-a1-route": {
+        "actorId": null,
+        "endMs": 6398,
+        "puckId": null,
+        "startMs": 0,
+      },
+      "np-b1-route": {
+        "actorId": null,
+        "endMs": 6398,
+        "puckId": null,
+        "startMs": 0,
+      },
+    },
+  },
   "starter-skate-nobles-2v2": {
     "durationMs": 5970,
     "poses": [
@@ -8210,6 +8251,101 @@ exports[`starter drills > matches the golden schedules and step poses 1`] = `
         "endMs": 8583,
         "puckId": null,
         "startMs": 0,
+      },
+    },
+  },
+  "starter-skate-transition-skate-angling": {
+    "durationMs": 8811,
+    "poses": [
+      {
+        "atMs": 0,
+        "players": {
+          "ta-a": {
+            "x": 66,
+            "y": 35,
+          },
+          "ta-d": {
+            "x": 50,
+            "y": 35,
+          },
+          "ta-g": {
+            "x": 17,
+            "y": 20.5,
+          },
+        },
+        "pucks": {},
+      },
+      {
+        "atMs": 2492,
+        "players": {
+          "ta-a": {
+            "x": 57,
+            "y": 22.3,
+          },
+          "ta-d": {
+            "x": 38,
+            "y": 18,
+          },
+          "ta-g": {
+            "x": 17,
+            "y": 20.5,
+          },
+        },
+        "pucks": {
+          "playback-puck-ta-a-route": {
+            "x": 57,
+            "y": 20.3,
+          },
+        },
+      },
+      {
+        "atMs": 8211,
+        "players": {
+          "ta-a": {
+            "x": 38,
+            "y": 8,
+          },
+          "ta-d": {
+            "x": 42,
+            "y": 9,
+          },
+          "ta-g": {
+            "x": 17,
+            "y": 20.5,
+          },
+        },
+        "pucks": {
+          "playback-puck-ta-a-route": {
+            "x": 36,
+            "y": 8.4,
+          },
+        },
+      },
+    ],
+    "strokes": {
+      "ta-a-route": {
+        "actorId": "ta-a",
+        "endMs": 7811,
+        "puckId": "playback-puck-ta-a-route",
+        "startMs": 0,
+      },
+      "ta-d-around": {
+        "actorId": "ta-d",
+        "endMs": 2092,
+        "puckId": null,
+        "startMs": 0,
+      },
+      "ta-d-gap": {
+        "actorId": "ta-d",
+        "endMs": 3393,
+        "puckId": null,
+        "startMs": 2492,
+      },
+      "ta-shot": {
+        "actorId": "ta-a",
+        "endMs": 8811,
+        "puckId": "playback-puck-ta-a-route",
+        "startMs": 8211,
       },
     },
   },
