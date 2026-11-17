@@ -2557,4 +2557,65 @@ export const STARTER_PLAYS: readonly StarterPlay[] = [
             area: { kind: "zone-left" },
         },
     },
+    // Transition Skate Angling credits the USA Hockey station practice plans;
+    // its description and diagram are written for this pack.
+    {
+        id: "starter-skate-transition-skate-angling",
+        name: "Transition Skate Angling",
+        description:
+            "A 1-on-1 in a corner with three tires. On the whistle an attacker with a puck and a defender go together. The attacker loops all the way around the lower tire, comes out on the net side, cuts between the two top tires and attacks the net. The defender skates forward around the single tire and turns backward, circling it once or more to set a gap. Teach: defenders protect the middle and angle the attacker to the boards; attackers keep their feet moving. Cones work in place of tires. 8 min.",
+        focus: "skaters",
+        goalies: "required",
+        ageGroups: ["u8", "u10"],
+        playData: {
+            version: PLAY_DATA_VERSION,
+            players: [
+                goalie("ta-g", 17, 20.5),
+                player("ta-a", "A", 66, 35),
+                player("ta-d", "D", 50, 35, "them"),
+            ],
+            drawings: [
+                carry("ta-a-route", [66, 30], [57, 27], [57, 17], [64, 16], [72, 14], [72, 5], [56, 4], [38, 8]),
+                shot("ta-shot", [36, 10], [24, 18]),
+                opponentRoute("ta-d-around", [49, 30], [51, 25], [49, 18], [43, 15], [38, 18]),
+                backskate("ta-d-gap", [38, 15], [42, 9]),
+            ],
+            equipment: [
+                goalLineNet("ta-net", 11, 20.5),
+                gear("tire", "ta-tire-single", 44, 22),
+                gear("tire", "ta-tire-top", 64, 10),
+                gear("tire", "ta-tire-low", 64, 22),
+                pucks("ta-pucks", 72, 40),
+            ],
+            annotations: [note("ta-note", "D turns backward", 4, 40, "#000000", 4)],
+            area: { kind: "zone-left-top" },
+        },
+    },
+    // A common relay game; description and diagram written for this pack.
+    {
+        id: "starter-skate-net-push-relay",
+        name: "Net Push Relay Race",
+        description:
+            "A team relay in two lines, each with its own net. On the whistle the first skater in each line pushes the net across the ice to the far boards and back, then hands it off to the next skater. The first team through its whole line wins. Teach: a low, wide stance with arms out straight, short hard pushes off the inside edges, and slowing the net down before the turn. Make even teams and keep score. A fun finish to practice. 5 min.",
+        focus: "skaters",
+        goalies: "none",
+        ageGroups: ["u8"],
+        playData: {
+            version: PLAY_DATA_VERSION,
+            players: [
+                player("np-a1", "A1", 90, 60),
+                player("np-a2", "A2", 90, 72),
+                player("np-b1", "B1", 110, 60, "them"),
+                player("np-b2", "B2", 110, 72, "them"),
+            ],
+            drawings: [
+                skate("np-a1-route", [86, 42], [86, 10], [90, 5], [94, 10], [94, 42]),
+                opponentRoute("np-b1-route", [106, 42], [106, 10], [110, 5], [114, 10], [114, 42]),
+                zoneLine("np-start-line", [80, 53], [120, 53]),
+            ],
+            equipment: [smallNet("np-net-a", 90, 48, 90), smallNet("np-net-b", 110, 48, 90)],
+            annotations: [note("np-note", "Hand off the net", 81, 83, "#000000", 4)],
+            area: { kind: "zone-neutral" },
+        },
+    },
 ];
