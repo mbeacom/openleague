@@ -193,7 +193,7 @@ interface DrawingElement {
 - **Preview.** A **Preview** button plays the current (unsaved) diagram in place, using the playback component (R10).
 - Every assignment is one history entry through the existing history manager. Tap targets use the board's touch hit radius (22 px minimum).
 
-**Status (2026-11-20).** Steps shipped without attachment or pace: `step` (R6) with lenient reading, the `DB_VERSION` bump to 9 and an ADR-0020 amendment; Steps mode as above, with **New step** moving to one past the highest step and **Same step** returning to the highest. Preview opens the playback board in a dialog (full screen on a phone) from a **Preview animation** button under the board, available in every mode. `fromId`/`toId`, `speed` and the pace control are still to come.
+**Status (2026-11-20).** Steps shipped without attachment or pace: `step` (R6) with lenient reading, the `DB_VERSION` bump to 9 and an ADR-0020 amendment; Steps mode as above, with **New step** moving to one past the highest step and **Same step** returning to the highest. Preview opens the playback board in a dialog (full screen on a phone) from a **Preview animation** button under the board, available in every mode. `fromId`/`toId`, `speed` and the pace control are still to come. Authored step numbers also show on the live still diagram, print, bench-sheet exports and the drill image, through an opt-in `stepBadges` option of the shared scene; stored thumbnails never carry them, and automatic numbers appear only in Steps mode (open question 3 stands).
 
 ### R9. Playback controls
 

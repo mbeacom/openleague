@@ -15,7 +15,7 @@ const SWATCH_PIXEL_RATIO = 2;
 export const canvasRenderers: BenchSheetRenderers = {
     diagram(playData, pixelRatio) {
         try {
-            return generateThumbnail(playData, { width: PRINT_DIAGRAM_SIZE.width, height: PRINT_DIAGRAM_SIZE.height, pixelRatio });
+            return generateThumbnail(playData, { width: PRINT_DIAGRAM_SIZE.width, height: PRINT_DIAGRAM_SIZE.height, pixelRatio, stepBadges: true });
         } catch (error) {
             console.warn("Bench sheet export: a diagram couldn't be drawn:", error);
             return null;

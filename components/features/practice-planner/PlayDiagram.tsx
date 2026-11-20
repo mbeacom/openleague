@@ -53,7 +53,7 @@ export function PlayDiagram({ playData, label, decorative = false, sx }: PlayDia
         // renderer's 1 px floors then land in CSS pixels.
         ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
         try {
-            drawThumbnailScene(ctx, playData, size.width, size.height, { cachedRink: false });
+            drawThumbnailScene(ctx, playData, size.width, size.height, { cachedRink: false, stepBadges: true });
         } catch (error) {
             console.warn(`Couldn't draw the diagram for "${label}":`, error);
         }

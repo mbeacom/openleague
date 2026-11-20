@@ -33,7 +33,7 @@ type Diagram = { src: string } | { failed: true };
 
 function renderDiagram(playData: PlayData, name: string, pixelRatio: number): Diagram {
     try {
-        return { src: generateThumbnail(playData, { ...PRINT_DIAGRAM_SIZE, pixelRatio }) };
+        return { src: generateThumbnail(playData, { ...PRINT_DIAGRAM_SIZE, pixelRatio, stepBadges: true }) };
     } catch (error) {
         console.warn(`Bench sheet: couldn't render the diagram for "${name}":`, error);
         return { failed: true };

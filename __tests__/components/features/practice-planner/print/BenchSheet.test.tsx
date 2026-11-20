@@ -174,7 +174,7 @@ describe("BenchSheet", () => {
         expect(within(lost).getByText("Diagram unavailable")).toBeInTheDocument();
         expect(screen.getAllByRole("img", { name: /^Diagram: / })).toHaveLength(4);
         expect(mockGenerate).toHaveBeenCalledTimes(4);
-        expect(mockGenerate).toHaveBeenCalledWith(expect.anything(), { width: 720, height: 306, pixelRatio: 3 });
+        expect(mockGenerate).toHaveBeenCalledWith(expect.anything(), { width: 720, height: 306, pixelRatio: 3, stepBadges: true });
     });
 
     it("prints the header and No drills planned for an empty session", () => {
@@ -195,7 +195,7 @@ describe("BenchSheet", () => {
         const plays = Array.from({ length: 25 }, (_, i) => sessionPlay(`Drill${i}`, i, false, 1));
         renderSheet({ ...SESSION, duration: 60, plays });
         expect(mockGenerate).toHaveBeenCalledTimes(25);
-        expect(mockGenerate).toHaveBeenCalledWith(expect.anything(), { width: 720, height: 306, pixelRatio: 2 });
+        expect(mockGenerate).toHaveBeenCalledWith(expect.anything(), { width: 720, height: 306, pixelRatio: 2, stepBadges: true });
     });
 
     it("holds Print until every diagram has loaded", () => {

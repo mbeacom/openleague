@@ -51,7 +51,7 @@ describe("PlayDiagram", () => {
         render(<PlayDiagram playData={createEmptyPlayData()} label="Low Cycle" />);
         act(() => resize!([{ contentRect: { width: w, height: h } }]));
         expect(setTransform).toHaveBeenLastCalledWith(dpr, 0, 0, dpr, 0, 0);
-        expect(vi.mocked(drawThumbnailScene).mock.lastCall?.slice(2)).toEqual([w, h, { cachedRink: false }]);
+        expect(vi.mocked(drawThumbnailScene).mock.lastCall?.slice(2)).toEqual([w, h, { cachedRink: false, stepBadges: true }]);
         getContext.mockRestore();
     });
 

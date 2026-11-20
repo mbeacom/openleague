@@ -110,7 +110,7 @@ export function DrillDetailView({ play, teamId, canEdit, usageCount, extras }: D
             // A downloaded file must not bake in the fallback font.
             await waitForDiagramFont();
             // The bench sheet's printed diagram, so the file matches the paper.
-            const uri = generateThumbnail(play.playData, PRINT_DIAGRAM_SIZE);
+            const uri = generateThumbnail(play.playData, { ...PRINT_DIAGRAM_SIZE, stepBadges: true });
             if (!isPngDataUri(uri)) throw new Error("The diagram didn't draw as a PNG");
             downloadBlob(new Blob([pngDataUriToBytes(uri) as BlobPart], { type: "image/png" }), drillDiagramFileName(play.name));
         } catch (err) {

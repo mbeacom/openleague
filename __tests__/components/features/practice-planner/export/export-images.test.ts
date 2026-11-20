@@ -23,7 +23,7 @@ describe("canvasRenderers.diagram", () => {
     it("draws at the bench sheet's 720×306 and the given pixel ratio", () => {
         const data = createEmptyPlayData();
         expect(canvasRenderers.diagram(data, 2)).toBe("data:image/png;base64,AAAA");
-        expect(mockGenerate).toHaveBeenCalledWith(data, { width: 720, height: 306, pixelRatio: 2 });
+        expect(mockGenerate).toHaveBeenCalledWith(data, { width: 720, height: 306, pixelRatio: 2, stepBadges: true });
     });
 
     it("returns null and warns when drawing throws", () => {

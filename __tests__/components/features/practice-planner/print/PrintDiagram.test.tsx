@@ -51,14 +51,14 @@ describe("PrintDiagram", () => {
         const img = screen.getByRole("img", { name: "Diagram: Breakout" });
         expect(img).toHaveAttribute("src", "data:image/png;base64,AA==");
         expect(img).toHaveAttribute("loading", "eager");
-        expect(mockGenerate).toHaveBeenCalledWith(data, { width: 720, height: 306, pixelRatio: 3 });
+        expect(mockGenerate).toHaveBeenCalledWith(data, { width: 720, height: 306, pixelRatio: 3, stepBadges: true });
     });
 
     it("renders at the pixel ratio it is given", async () => {
         const data = createEmptyPlayData();
         render(wrap(<PrintDiagram playData={data} name="Breakout" pixelRatio={1} />));
         await flushFont();
-        expect(mockGenerate).toHaveBeenCalledWith(data, { width: 720, height: 306, pixelRatio: 1 });
+        expect(mockGenerate).toHaveBeenCalledWith(data, { width: 720, height: 306, pixelRatio: 1, stepBadges: true });
     });
 
     it("reports ready once, when its image loads", async () => {
