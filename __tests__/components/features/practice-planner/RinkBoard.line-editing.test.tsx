@@ -600,3 +600,32 @@ describe("RinkBoard line editing: snapping on a phone-sized board", () => {
         expectPoint(end, 60, 40);
     });
 });
+
+describe("RinkBoard Steps mode (animated playback R8)", () => {
+    it("reports a tap on a moving stroke and edits nothing, with no selection", () => {
+        const onStrokeTap = vi.fn();
+        const ctx = setup({ playData: withLines(line(STRAIGHT)), stepsMode: true, onStrokeTap });
+        ctx.drag([60, 40], [60, 70]);
+        expect(onStrokeTap).toHaveBeenCalledWith("l");
+        expect(ctx.onPlayDataChange).not.toHaveBeenCalled();
+        expect(ctx.onSelectionChange).not.toHaveBeenCalledWith("l");
+    });
+
+    it("ignores plain lines and empty ice", () => {
+        const onStrokeTap = vi.fn();
+        const ctx = setup({ playData: withLines({ ...line(STRAIGHT), action: "line", end: "none" }), stepsMode: true, onStrokeTap });
+        ctx.click(60, 40);
+        ctx.click(150, 70);
+        expect(onStrokeTap).not.toHaveBeenCalled();
+    });
+
+    it("applies a whole-diagram edit as one undo entry", () => {
+        const ctx = setup({ playData: withLines(line(STRAIGHT)) });
+        act(() => ctx.ref.current!.applyChange((d) => ({ ...d, drawings: d.drawings.map((x) => ({ ...x, step: 1 })) })));
+        expect(ctx.last().drawings[0].step).toBe(1);
+        expect(ctx.onUndoRedoStateChange).toHaveBeenLastCalledWith(true, false);
+        const calls = ctx.onPlayDataChange.mock.calls.length;
+        act(() => ctx.ref.current!.applyChange((d) => d));
+        expect(ctx.onPlayDataChange.mock.calls.length).toBe(calls);
+    });
+});

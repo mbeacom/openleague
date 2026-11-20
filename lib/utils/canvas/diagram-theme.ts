@@ -48,6 +48,12 @@ export const DIAGRAM_THEME = {
     ringFill: "#FFFFFF",
     /** Behind station-map labels */
     stationLabelBacking: "rgba(255, 255, 255, 0.85)",
+    /** Step badges (animated playback R8): authored steps filled League Blue */
+    stepAuthored: { fill: BOARD_COLORS.leagueBlue, stroke: "#FFFFFF", text: "#FFFFFF" },
+    /** Automatic steps, shown only in Steps mode: outlined grey */
+    stepAutomatic: { fill: "#FFFFFF", stroke: "#757575", text: "#616161" },
+    /** A stroke with no step in a drill that has some (Steps mode only) */
+    stepUnset: { fill: "#FFFFFF", stroke: "#9E9E9E", text: "#9E9E9E" },
     /** Labels, notes and station-map text (spec §3: Cabinet Grotesk) */
     font: DIAGRAM_FONT_FAMILY,
 } as const;

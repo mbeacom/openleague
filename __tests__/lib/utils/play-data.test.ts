@@ -345,6 +345,39 @@ describe("the curve path (line editing R1)", () => {
     });
 });
 
+describe("playback steps (animated playback R6)", () => {
+    const withStep = (step: unknown) => ({
+        ...createEmptyPlayData(),
+        drawings: [
+            { id: "d", action: "skate", path: "straight", end: "arrow", points: [{ x: 10, y: 10 }, { x: 30, y: 30 }], color: "#212121", strokeWidth: 2, step },
+            { id: "e", action: "pass", path: "straight", end: "arrow", points: [{ x: 30, y: 30 }, { x: 50, y: 30 }], color: "#212121", strokeWidth: 2, step: 2 },
+        ],
+    });
+
+    it("accepts a whole step from 1 to the limit, and a stroke without one", () => {
+        expect(playDataSchema.safeParse(withStep(1)).success).toBe(true);
+        expect(playDataSchema.safeParse(withStep(VALIDATION_CONSTRAINTS.MAX_STROKE_STEP)).success).toBe(true);
+        expect(playDataSchema.safeParse(withStep(undefined)).success).toBe(true);
+        const parsed = parseStoredPlayData(withStep(3));
+        expect(parsed.ok && parsed.data.drawings.map((d) => d.step)).toEqual([3, 2]);
+    });
+
+    it.each([0, -1, 1.5, VALIDATION_CONSTRAINTS.MAX_STROKE_STEP + 1, "2", null])("refuses step %s on write", (step) => {
+        expect(playDataSchema.safeParse(withStep(step)).success).toBe(false);
+    });
+
+    it.each([0, 1.5, VALIDATION_CONSTRAINTS.MAX_STROKE_STEP + 1, "2", null])("drops step %s on read and keeps the drill", (step) => {
+        const error = vi.spyOn(console, "error").mockImplementation(() => {});
+        const parsed = parseStoredPlayData(withStep(step));
+        expect(parsed.ok).toBe(true);
+        if (!parsed.ok) return;
+        expect("step" in parsed.data.drawings[0]).toBe(false);
+        expect(parsed.data.drawings[1].step).toBe(2);
+        expect(error).toHaveBeenCalled();
+        error.mockRestore();
+    });
+});
+
 describe("equipment overrides (practice equipment R2)", () => {
     const withNeeds = (needs: unknown) => ({ ...createEmptyPlayData(), equipmentNeeds: needs });
 

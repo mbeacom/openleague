@@ -27,6 +27,17 @@ describe("element-ops", () => {
         expect(data.drawings[0].action).toBe("skate"); // not mutated
     });
 
+    it("sets a stroke's playback step and clears it back to automatic with null", () => {
+        const stepped = updateElement(data, "d", { step: 2 });
+        expect(stepped.drawings[0].step).toBe(2);
+        expect(updateElement(stepped, "d", { step: 2 })).toBe(stepped);
+        const cleared = updateElement(stepped, "d", { step: null });
+        expect("step" in cleared.drawings[0]).toBe(false);
+        expect(updateElement(data, "d", { step: null })).toBe(data);
+        // Only strokes have a step.
+        expect(updateElement(data, "p", { step: 2 })).toBe(data);
+    });
+
     it("returns the same reference when the patch changes nothing", () => {
         expect(updateElement(data, "p", { role: "X" })).toBe(data);
         expect(updateElement(data, "d", { action: "skate", color: "#000000" })).toBe(data);

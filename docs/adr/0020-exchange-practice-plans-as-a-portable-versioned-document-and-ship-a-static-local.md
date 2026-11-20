@@ -320,3 +320,19 @@ Inside each drill's `playData` (`PlayData.version` stays 2), the document gains 
 - A hosted tab opened before the deploy reads plays through the updated server and receives the links inside `playData` without showing them; a save from it sends them back, and the updated server validates them as any other write.
 
 Practice-level videos, the inline player and bench-sheet lines are later phases of the same spec. Spec: `docs/superpowers/specs/2026-10-11-practice-video-links-design.md`.
+
+### 2026-11-20: Playback steps (one additive stroke field, versions stay 1 and 2)
+
+Inside each drill's `playData` (`PlayData.version` stays 2), a stroke gains an optional `step`: the coach's playback step, a whole number from 1 to 100. `PLAN_VERSION` stays 1.
+
+**Rules:**
+- Strokes with the same step run together. Each step starts after every lower step has finished. A diagram with no steps plays in the automatic order; in one with steps, a stroke without one runs after the last step. Steps are shown compacted (1, 3 and 7 show as 1, 2 and 3).
+- `step` is advisory, like `area`: an invalid one (not a whole number from 1 to 100) is dropped from that stroke on read and logged, and never makes a diagram or a plan unreadable. Writes refuse an invalid step as invalid play data.
+- Writers emit `step` only on a stroke that has one.
+
+**Compatibility:**
+- A reader built before this amendment strips the key (its stroke schema is a plain object) and opens the file in the automatic order. A round trip through an older build drops the steps and nothing else.
+- The static planner's IndexedDB goes from version 8 to 9 with no data change, so a tab still running an older build reloads before it can save a drill without its steps.
+- A hosted tab opened before the deploy may save a drill without its steps until it reloads; accepted, as for earlier amendments.
+
+The attachment (`fromId`, `toId`) and pace (`speed`) fields from the same spec are not part of this amendment. Spec: `docs/superpowers/specs/2026-10-11-animated-drill-playback-design.md`.

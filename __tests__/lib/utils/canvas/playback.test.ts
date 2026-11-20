@@ -26,6 +26,8 @@ import {
     poseAt,
     posePlayData,
     poseStep,
+    strokeStepGroups,
+    displayStepNumbers,
 } from "@/lib/utils/canvas/playback";
 import { pointAtFraction, strokeCenterline } from "@/lib/utils/canvas/stroke-geometry";
 import { STARTER_PLAYS } from "@/lib/data/starter-plays";
@@ -180,6 +182,80 @@ describe("the automatic order (R3)", () => {
         // The skater is level with the pass's first point when it starts.
         const skater = poseAt(pb, pass.startMs).data.players[0].position;
         expect(skater.x).toBeCloseTo(44, 0);
+    });
+});
+
+describe("authored steps (R6)", () => {
+    const withStep = (d: DrawingElement, step?: number): DrawingElement => (step === undefined ? d : { ...d, step });
+    const two = (stepA?: number, stepB?: number) =>
+        diagram({
+            players: [player("a", 10, 10), player("b", 10, 60)],
+            drawings: [
+                withStep(stroke("ra", "skate", [[12, 10], [60, 10]]), stepA),
+                withStep(stroke("rb", "skate", [[12, 60], [60, 60]]), stepB),
+            ],
+        });
+
+    it("changes nothing when no stroke has a step", () => {
+        const pb = compilePlayback(two());
+        expect(at(pb, "ra").startMs).toBe(at(pb, "rb").startMs);
+        expect(displayStepNumbers(two().drawings).size).toBe(0);
+    });
+
+    it("plays everything in step 1 exactly like the automatic order", () => {
+        expect(compilePlayback(two(1, 1)).strokes).toEqual(compilePlayback(two()).strokes);
+    });
+
+    it("runs an unstepped stroke after the last authored step", () => {
+        const pb = compilePlayback(two(undefined, 2));
+        expect(at(pb, "rb").startMs).toBe(0);
+        expect(at(pb, "ra").startMs).toBe(at(pb, "rb").endMs + STEP_BEAT_MS);
+    });
+
+    it("can run a later-drawn stroke first", () => {
+        const pb = compilePlayback(two(2, 1));
+        expect(at(pb, "rb").startMs).toBe(0);
+        expect(at(pb, "ra").startMs).toBe(at(pb, "rb").endMs + STEP_BEAT_MS);
+        expect(describeStep(pb, 0)).toBe("b: Skate");
+    });
+
+    it("waits for the previous existing step across gaps, and compacts the numbers it shows", () => {
+        const data = diagram({
+            players: [player("a", 10, 10), player("b", 10, 40), player("c", 10, 70)],
+            drawings: [
+                { ...stroke("rc", "skate", [[12, 70], [60, 70]]), step: 7 },
+                { ...stroke("ra", "skate", [[12, 10], [60, 10]]), step: 1 },
+                stroke("zone", "line", [[0, 0], [5, 5]]),
+                { ...stroke("rb", "skate", [[12, 40], [60, 40]]), step: 3 },
+            ],
+        });
+        const pb = compilePlayback(data);
+        expect(at(pb, "ra").startMs).toBe(0);
+        expect(at(pb, "rb").startMs).toBe(at(pb, "ra").endMs + STEP_BEAT_MS);
+        expect(at(pb, "rc").startMs).toBe(at(pb, "rb").endMs + STEP_BEAT_MS);
+        expect([...displayStepNumbers(data.drawings)]).toEqual([["rc", 3], ["ra", 1], ["rb", 2]]);
+        expect([...strokeStepGroups(data.drawings)]).toEqual([["rc", 7], ["ra", 1], ["rb", 3]]);
+    });
+
+    it("keeps a skater's routes chained when steps reorder them", () => {
+        // a's second route is drawn first but set to step 2: a skates the first route, then the second.
+        const data = diagram({
+            players: [player("a", 10, 10)],
+            drawings: [
+                { ...stroke("second", "skate", [[60, 10], [60, 50]]), step: 2 },
+                { ...stroke("first", "skate", [[12, 10], [60, 10]]), step: 1 },
+            ],
+        });
+        const pb = compilePlayback(data);
+        expect(at(pb, "first").actorId).toBe("a");
+        expect(at(pb, "second").actorId).toBe("a");
+        expect(at(pb, "second").startMs).toBeGreaterThanOrEqual(at(pb, "first").endMs);
+        expect(round1(poseAt(pb, pb.durationMs).data.players[0].position)).toEqual(P(60, 50));
+    });
+
+    it("ignores a step that isn't a whole number from 1", () => {
+        const bad = { ...two(), drawings: two().drawings.map((d) => ({ ...d, step: 0.5 })) };
+        expect(compilePlayback(bad).strokes).toEqual(compilePlayback(two()).strokes);
     });
 });
 

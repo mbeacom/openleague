@@ -28,6 +28,7 @@ import {
     screenToRink,
 } from "@/lib/utils/canvas/rink-renderer";
 import { boardStrokeFloors, drawBoardFrame, drawLineHandles, drawSnapRing, drawStroke } from "@/lib/utils/canvas/drawing-utils";
+import { stepTapTarget } from "@/lib/utils/canvas/steps";
 import { backingPixelRatio, sizeBackingStore, watchPixelRatio } from "@/lib/utils/canvas/backing-store";
 import { createEmptyPlayData } from "@/lib/utils/play-data";
 import { areaMaskRect, areaRect, editViewport, withArea } from "@/lib/utils/ice-area";
@@ -90,6 +91,9 @@ export interface RinkBoardProps {
     areaTool?: boolean;
     /** Fires once each time the area tool finishes a rectangle */
     onAreaDrawn?: () => void;
+    /** Steps mode (animated playback R8): only order edits; badges show, a stroke tap calls `onStrokeTap` */
+    stepsMode?: boolean;
+    onStrokeTap?: (strokeId: string) => void;
 }
 
 /**
@@ -104,6 +108,8 @@ export interface RinkBoardHandle {
     updateElement: (id: string, patch: ElementPatch) => void;
     /** Sets the drill's ice area (undefined = full ice); recorded in undo history */
     setArea: (area: IceArea | undefined) => void;
+    /** Applies a whole-diagram edit as one undo entry (an edit returning its input records nothing) */
+    applyChange: (edit: (data: PlayData) => PlayData) => void;
 }
 
 /**
@@ -149,6 +155,8 @@ export const RinkBoard = forwardRef<RinkBoardHandle, RinkBoardProps>(function Ri
         onLimitReached,
         areaTool = false,
         onAreaDrawn,
+        stepsMode = false,
+        onStrokeTap,
     },
     ref
 ) {
@@ -372,6 +380,7 @@ export const RinkBoard = forwardRef<RinkBoardHandle, RinkBoardProps>(function Ri
             pan: viewPan,
             maskRect: areaMaskRect(areaDrag, playData.area),
             pixelRatio,
+            stepBadges: stepsMode ? "all" : undefined, // every moving stroke's number (R8)
         });
         // The selected line's handles, over the scene (line editing R3, R6)
         const selected = selectedElementId ? findElement(renderData, selectedElementId) : null;
@@ -404,6 +413,7 @@ export const RinkBoard = forwardRef<RinkBoardHandle, RinkBoardProps>(function Ri
         linePreview,
         snapRing,
         pixelRatio,
+        stepsMode,
     ]);
 
     /**
@@ -515,21 +525,21 @@ export const RinkBoard = forwardRef<RinkBoardHandle, RinkBoardProps>(function Ri
      * Expose imperative methods to parent components via ref
      * Allows toolbar to trigger undo/redo/clear actions on RinkBoard
      */
-    useImperativeHandle(ref, () => ({
-        undo: handleUndo,
-        redo: handleRedo,
-        clear: handleClear,
-        updateElement: (id: string, patch: ElementPatch) => {
-            const current = playDataRef.current;
-            const next = applyElementPatch(current, id, patch);
-            if (next !== current) updatePlayData(next);
-        },
-        setArea: (area: IceArea | undefined) => {
-            const current = playDataRef.current;
-            const next = withArea(current, area);
-            if (next !== current) updatePlayData(next);
-        },
-    }), [handleUndo, handleRedo, handleClear, updatePlayData]);
+    useImperativeHandle(ref, () => {
+        // One undo entry per edit; an edit that changes nothing records nothing.
+        const applyChange = (edit: (data: PlayData) => PlayData) => {
+            const next = edit(playDataRef.current);
+            if (next !== playDataRef.current) updatePlayData(next);
+        };
+        return {
+            undo: handleUndo,
+            redo: handleRedo,
+            clear: handleClear,
+            updateElement: (id: string, patch: ElementPatch) => applyChange((d) => applyElementPatch(d, id, patch)),
+            setArea: (area: IceArea | undefined) => applyChange((d) => withArea(d, area)),
+            applyChange,
+        };
+    }, [handleUndo, handleRedo, handleClear, updatePlayData]);
 
     /**
      * Report selection changes; leaving the select tool clears the selection
@@ -541,12 +551,12 @@ export const RinkBoard = forwardRef<RinkBoardHandle, RinkBoardProps>(function Ri
     }, [playData, selectedElementId]);
     useEffect(() => { onSelectionChange?.(selectedElementId); }, [selectedElementId, onSelectionChange]);
     useEffect(() => {
-        if (selectedTool !== "select" || areaTool) setSelectedElementId(null);
+        if (selectedTool !== "select" || areaTool || stepsMode) setSelectedElementId(null);
         setIsDrawing(false);
         setCurrentDrawingPoints([]);
         setAreaDrag(null);
         cancelLine();
-    }, [selectedTool, areaTool, cancelLine]);
+    }, [selectedTool, areaTool, stepsMode, cancelLine]);
 
     /** Hit radius in feet that stays MIN_HIT_RADIUS_PX on screen at any zoom */
     const minHitRadiusFt = useCallback(
@@ -592,6 +602,10 @@ export const RinkBoard = forwardRef<RinkBoardHandle, RinkBoardProps>(function Ri
                 return;
             }
 
+            // Steps mode edits only order: a tap on a moving stroke, nothing else (R8)
+            const tapped = stepsMode ? stepTapTarget(playData, hitPos, minHitRadiusFt()) : null;
+            if (tapped) onStrokeTap?.(tapped);
+            if (stepsMode) return;
             // Handle different tools
             switch (selectedTool) {
                 case "select":
@@ -703,6 +717,8 @@ export const RinkBoard = forwardRef<RinkBoardHandle, RinkBoardProps>(function Ri
             mode,
             transform,
             areaTool,
+            stepsMode,
+            onStrokeTap,
             selectedTool,
             selectedColor,
             playData,
@@ -1041,7 +1057,7 @@ export const RinkBoard = forwardRef<RinkBoardHandle, RinkBoardProps>(function Ri
                     display: "block",
                     width: canvasSize.width,
                     height: canvasSize.height,
-                    cursor: mode === "edit" ? "crosshair" : "default",
+                    cursor: mode === "edit" ? (stepsMode ? "pointer" : "crosshair") : "default",
                 }}
             />
         </div>

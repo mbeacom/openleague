@@ -27,13 +27,15 @@ export type SelectedElement =
 
 export type ElementPatch = Partial<Pick<PlayerIcon, "role" | "label" | "color">> &
     Partial<Pick<DrawingElement, "action" | "end" | "color" | "path" | "points">> &
+    /** A stroke's playback step; null returns it to the automatic order. */
+    { step?: number | null } &
     Partial<Pick<EquipmentItem, "kind" | "rotation">> &
     Partial<Pick<TextAnnotation, "text" | "color">>;
 
 const ALLOWED: Record<ElementKind, readonly (keyof ElementPatch)[]> = {
     player: ["role", "label", "color"],
     // path and points: the inspector's Straighten / Make straight (line editing R3)
-    drawing: ["action", "end", "color", "path", "points"],
+    drawing: ["action", "end", "color", "path", "points", "step"],
     equipment: ["kind", "rotation"],
     annotation: ["text", "color"],
 };
@@ -63,8 +65,14 @@ export function updateElement(data: PlayData, id: string, patch: ElementPatch): 
     // A no-op patch (e.g. re-clicking the current role) returns `data` itself,
     // so callers can skip recording an undo step.
     const current = found.element as unknown as Record<string, unknown>;
-    if (Object.keys(fields).every((key) => current[key] === fields[key])) return data;
-    const apply = <T extends { id: string }>(list: T[]) => list.map((e) => (e.id === id ? { ...e, ...fields } : e));
+    // null clears a field (a stroke's step back to automatic): absent and null are the same here.
+    if (Object.keys(fields).every((key) => (current[key] ?? null) === fields[key])) return data;
+    const merge = <T extends { id: string }>(e: T): T => {
+        const next: Record<string, unknown> = { ...e, ...fields };
+        for (const key of Object.keys(fields)) if (fields[key] === null) delete next[key];
+        return next as T;
+    };
+    const apply = <T extends { id: string }>(list: T[]) => list.map((e) => (e.id === id ? merge(e) : e));
     switch (found.kind) {
         case "player":
             return { ...data, players: apply(data.players) };

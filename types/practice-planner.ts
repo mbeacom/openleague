@@ -184,6 +184,13 @@ export interface DrawingElement {
     points: Position[];
     color: string;
     strokeWidth: number;
+    /**
+     * The coach's playback step, 1–100 (animated playback R6). Same number =
+     * runs together. In a drill where no stroke has one, playback uses the
+     * automatic order; in one where some do, a stroke without one runs after
+     * the last numbered step.
+     */
+    step?: number;
 }
 
 export type StrokeOptions = Pick<DrawingElement, "action" | "path" | "end">;
@@ -522,6 +529,8 @@ export interface ValidationError {
  * Requirements: 1.5
  */
 export const VALIDATION_CONSTRAINTS = {
+    /** Highest coach-set playback step on a stroke. */
+    MAX_STROKE_STEP: 100,
     MAX_ELEMENTS_PER_PLAY: 100,
     MAX_ANNOTATION_LENGTH: 500,
     MIN_DURATION: 1,

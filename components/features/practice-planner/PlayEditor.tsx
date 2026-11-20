@@ -40,6 +40,7 @@ import { RinkBoardErrorBoundary } from "./RinkBoardErrorBoundary";
 import { PlayLegend } from "./PlayLegend";
 import { PlaybackBoard } from "./PlaybackBoard";
 import { hasPlayback } from "@/lib/utils/canvas/playback";
+import { assignStep, clearSteps, hasAuthoredSteps, highestStep, numberInDrawingOrder } from "@/lib/utils/canvas/steps";
 import { DrawingToolbar } from "./DrawingToolbar";
 import { ElementInspector } from "./ElementInspector";
 import { CustomAreaFields, rectFromFields } from "./CustomAreaFields";
@@ -62,6 +63,7 @@ import {
     type RinkRect,
     type SavedPlay,
     type StrokeOptions,
+    VALIDATION_CONSTRAINTS,
 } from "@/types/practice-planner";
 import { areaRect, countElementsOutside, isFullIce } from "@/lib/utils/ice-area";
 import { ICE_AREA_GROUPS, ICE_AREA_LABELS } from "@/lib/utils/canvas/notation";
@@ -153,6 +155,9 @@ export function PlayEditor({
 
     // Ice area (2a): the custom-area tool stays on until one rectangle is drawn or it is cancelled
     const [areaTool, setAreaTool] = useState(false);
+    // Steps mode (animated playback R8): taps on strokes assign `tapStep`.
+    const [stepsMode, setStepsMode] = useState(false);
+    const [tapStep, setTapStep] = useState(1);
     const areaChoice: IceAreaChoice = playData.area?.kind ?? "full";
     const outsideCount = useMemo(
         () => (isFullIce(playData.area) ? 0 : countElementsOutside(playData, areaRect(playData.area))),
@@ -404,6 +409,15 @@ export function PlayEditor({
     }, []);
 
     const canPreview = hasPlayback(playData);
+    const authoredSteps = hasAuthoredSteps(playData);
+    const toggleStepsMode = (on: boolean) => {
+        if (on) {
+            setAreaTool(false);
+            setTapStep(Math.max(1, highestStep(playData)));
+        }
+        setStepsMode(on);
+    };
+    const handleStrokeTap = (strokeId: string) => rinkBoardRef.current?.applyChange((d) => assignStep(d, strokeId, tapStep));
 
     return (
         <Box
@@ -480,7 +494,7 @@ export function PlayEditor({
                             </Select>
                         </FormControl>
                         {areaChoice === "custom" && !areaTool && (
-                            <Button variant="text" onClick={() => setAreaTool(true)} sx={{ minHeight: 44 }}>
+                            <Button variant="text" onClick={() => { setStepsMode(false); setAreaTool(true); }} sx={{ minHeight: 44 }}>
                                 Draw area on rink
                             </Button>
                         )}
@@ -526,6 +540,8 @@ export function PlayEditor({
                     onStrokeOptionsChange={setStrokeOptions}
                     equipmentKind={equipmentKind}
                     onEquipmentKindChange={setEquipmentKind}
+                    stepsMode={stepsMode}
+                    onStepsModeChange={toggleStepsMode}
                 />
             </Paper>
 
@@ -544,6 +560,69 @@ export function PlayEditor({
                         }
                     >
                         Drag on the rink to draw the ice area.
+                    </Alert>
+                )}
+                {stepsMode && (
+                    <Alert
+                        severity="info"
+                        icon={false}
+                        role="status"
+                        sx={{ mb: 2, "& .MuiAlert-message": { width: "100%" } }}
+                    >
+                        <Stack spacing={1}>
+                            <Typography variant="body2" sx={{ fontWeight: 700 }}>
+                                Tapping a movement assigns step {tapStep}. Tap it again to remove its step.
+                            </Typography>
+                            <Typography variant="body2" color="text.secondary">
+                                {authoredSteps
+                                    ? "Steps play in order; lines marked – play after the last step."
+                                    : "No steps yet: the grey numbers show the automatic order."}
+                            </Typography>
+                            <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+                                <Button
+                                    size="small"
+                                    variant="contained"
+                                    onClick={() => setTapStep(Math.min(VALIDATION_CONSTRAINTS.MAX_STROKE_STEP, highestStep(playData) + 1))}
+                                    disabled={highestStep(playData) >= VALIDATION_CONSTRAINTS.MAX_STROKE_STEP || tapStep > highestStep(playData)}
+                                    sx={{ minHeight: 44 }}
+                                >
+                                    New step
+                                </Button>
+                                <Button
+                                    size="small"
+                                    variant="outlined"
+                                    onClick={() => setTapStep(Math.max(1, highestStep(playData)))}
+                                    disabled={tapStep === Math.max(1, highestStep(playData))}
+                                    sx={{ minHeight: 44 }}
+                                >
+                                    Same step
+                                </Button>
+                                <Button
+                                    size="small"
+                                    variant="text"
+                                    onClick={() => rinkBoardRef.current?.applyChange(numberInDrawingOrder)}
+                                    disabled={!canPreview}
+                                    sx={{ minHeight: 44 }}
+                                >
+                                    Number in drawing order
+                                </Button>
+                                <Button
+                                    size="small"
+                                    variant="text"
+                                    onClick={() => {
+                                        rinkBoardRef.current?.applyChange(clearSteps);
+                                        setTapStep(1);
+                                    }}
+                                    disabled={!authoredSteps}
+                                    sx={{ minHeight: 44 }}
+                                >
+                                    Use automatic order
+                                </Button>
+                                <Button size="small" variant="text" onClick={() => toggleStepsMode(false)} sx={{ minHeight: 44 }}>
+                                    Done
+                                </Button>
+                            </Stack>
+                        </Stack>
                     </Alert>
                 )}
                 {outsideCount > 0 && (
@@ -567,6 +646,8 @@ export function PlayEditor({
                         onLimitReached={setLimitNotice}
                         areaTool={areaTool}
                         onAreaDrawn={handleAreaDrawn}
+                        stepsMode={stepsMode && !areaTool}
+                        onStrokeTap={handleStrokeTap}
                         height={isMobile ? 400 : 600}
                     />
                 </RinkBoardErrorBoundary>

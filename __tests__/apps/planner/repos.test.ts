@@ -218,7 +218,7 @@ describe("IndexedDB schema versions (practice timing rows, practice staff)", () 
         });
     }
 
-    it("is version 8", () => expect(DB_VERSION).toBe(8));
+    it("is version 9", () => expect(DB_VERSION).toBe(9));
 
     it("opens a version 1 database at the current version with every store, index and record intact", async () => {
         const factory = new IDBFactory();
@@ -366,6 +366,23 @@ describe("IndexedDB schema versions (practice timing rows, practice staff)", () 
         expect(reload).toHaveBeenCalledTimes(1);
         expect(await repo.read((tx) => tx.getSession("s1"))).toEqual(v1Session);
         expect(await versionOf(factory, "v7-open-tab")).toBe(DB_VERSION);
+        repo.close();
+    });
+
+    it("makes a tab still open at version 8 (before playback steps) reload before this build writes, keeping its data", async () => {
+        const factory = new IDBFactory();
+        const v8 = await openAt(factory, "v8-open-tab", 8);
+        await seed(v8);
+        // A build without steps would parse a drill through its old schema and save it without them.
+        const reload = vi.fn();
+        v8.onversionchange = () => {
+            v8.close();
+            reload();
+        };
+        const repo = await openIdbRepo({ factory, name: "v8-open-tab" });
+        expect(reload).toHaveBeenCalledTimes(1);
+        expect(await repo.read((tx) => tx.getSession("s1"))).toEqual(v1Session);
+        expect(await versionOf(factory, "v8-open-tab")).toBe(DB_VERSION);
         repo.close();
     });
 });

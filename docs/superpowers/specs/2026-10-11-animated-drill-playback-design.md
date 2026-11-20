@@ -193,6 +193,8 @@ interface DrawingElement {
 - **Preview.** A **Preview** button plays the current (unsaved) diagram in place, using the playback component (R10).
 - Every assignment is one history entry through the existing history manager. Tap targets use the board's touch hit radius (22 px minimum).
 
+**Status (2026-11-20).** Steps shipped without attachment or pace: `step` (R6) with lenient reading, the `DB_VERSION` bump to 9 and an ADR-0020 amendment; Steps mode as above, with **New step** moving to one past the highest step and **Same step** returning to the highest. Preview opens the playback board in a dialog (full screen on a phone) from a **Preview animation** button under the board, available in every mode. `fromId`/`toId`, `speed` and the pace control are still to come.
+
 ### R9. Playback controls
 
 - **Layout (mobile first).** Under the board: row 1 is the scrubber, full width, with a tick per step; row 2 is **Step back**, **Play/Pause**, **Step forward**, then **Speed** (a 3-way toggle 0.5× / 1× / 2×) and **Loop**. At ≥ 600 px both rows merge into one. All targets are ≥ 44 × 44 px; the slider thumb has a 44 px hit area.

@@ -89,6 +89,8 @@ type Easing = "inOut" | "linear";
 
 interface CompiledStroke extends PlaybackStroke {
     id: string;
+    /** The coach-set step group (0 when the diagram sets none). */
+    group: number;
     action: AnimatedAction;
     easing: Easing;
     /** The drawn line (centerline), whose length the active stroke's trail is measured along. */
@@ -291,10 +293,39 @@ function motionFrom(from: Position | null, line: Position[]): ArcTable {
     return arcTable([from, ...line]);
 }
 
+/** True when a stroke carries a usable coach-set step. */
+const hasStep = (d: DrawingElement): d is DrawingElement & { step: number } =>
+    typeof d.step === "number" && Number.isInteger(d.step) && d.step >= 1;
+
 /**
- * Derives the animation for one diagram (R3–R5). Strokes are scheduled in
- * drawing order, and a stroke only ever waits for an earlier-drawn one, so
- * the schedule is acyclic and stable.
+ * Each animated stroke's step group (R6): its `step` when the diagram has
+ * any, with unstepped strokes after the last step; 0 for every stroke when
+ * none has a step, so the diagram plays in the automatic order unchanged.
+ */
+export function strokeStepGroups(drawings: DrawingElement[]): Map<string, number> {
+    const animated = drawings.filter(isAnimated);
+    const authored = animated.some(hasStep);
+    return new Map(animated.map((d) => [d.id, !authored ? 0 : hasStep(d) ? d.step : Number.POSITIVE_INFINITY]));
+}
+
+/**
+ * The step numbers a coach sees (R6): authored steps compacted to 1, 2, 3…
+ * in order (steps 1, 3 and 7 show as 1, 2 and 3), by stroke id. Unstepped
+ * strokes in an authored drill, and every stroke in a drill with no steps,
+ * are absent. Plain lines never have a number.
+ */
+export function displayStepNumbers(drawings: DrawingElement[]): Map<string, number> {
+    const stepped = drawings.filter((d): d is DrawingElement & { step: number } => isAnimated(d) && hasStep(d));
+    const ranks = new Map([...new Set(stepped.map((d) => d.step))].sort((a, b) => a - b).map((step, i) => [step, i + 1]));
+    return new Map(stepped.map((d) => [d.id, ranks.get(d.step) as number]));
+}
+
+/**
+ * Derives the animation for one diagram (R3–R5). Strokes are scheduled by
+ * step group (coach-set order), then in drawing order within a group; a
+ * stroke only ever waits for one scheduled before it, so the schedule is
+ * acyclic and stable. Every stroke of a later group waits for all earlier
+ * groups to finish, plus the beat.
  */
 export function compilePlayback(playData: PlayData, options: CompileOptions = {}): Playback {
     const speeds = { ...PLAYBACK_SPEEDS_FT_PER_S, ...options.speeds };
@@ -326,8 +357,14 @@ export function compilePlayback(playData: PlayData, options: CompileOptions = {}
         playerSegments.set(playerId, list);
     };
 
-    for (const drawing of playData.drawings) {
-        if (!isAnimated(drawing) || compiled.has(drawing.id)) continue;
+    const groups = strokeStepGroups(playData.drawings);
+    const scheduled = playData.drawings
+        .filter(isAnimated)
+        .map((drawing, index) => ({ drawing, index, group: groups.get(drawing.id) ?? 0 }))
+        .sort((a, b) => a.group - b.group || a.index - b.index);
+
+    for (const { drawing, group } of scheduled) {
+        if (compiled.has(drawing.id)) continue;
         const action = drawing.action;
         const line = strokeCenterline(drawing);
         const draw = arcTable(line);
@@ -336,6 +373,9 @@ export function compilePlayback(playData: PlayData, options: CompileOptions = {}
         const easing: Easing = isMovement(action) ? "inOut" : "linear";
         /** Earliest start: each dependency's time plus the beat. */
         const waits: number[] = [0];
+        // Coach-set order: wait for every earlier step to finish.
+        const earlier = order.filter((s) => s.group < group);
+        if (earlier.length) waits.push(Math.max(...earlier.map((s) => s.endMs)) + STEP_BEAT_MS);
         let actorId: string | null = null;
         let puck: PuckTrack | null = null;
         let motion: ArcTable = draw;
@@ -426,6 +466,7 @@ export function compilePlayback(playData: PlayData, options: CompileOptions = {}
         const startMs = Math.max(...waits);
         const stroke: CompiledStroke = {
             id: drawing.id,
+            group,
             action,
             easing,
             draw,
