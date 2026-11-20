@@ -12,6 +12,9 @@
 import React, { useState, useRef, useCallback, useEffect, useMemo } from "react";
 import {
     Box,
+    Dialog,
+    DialogContent,
+    DialogTitle,
     Paper,
     TextField,
     Typography,
@@ -31,10 +34,12 @@ import {
 } from "@mui/material";
 import { useTheme } from "@mui/material/styles";
 import useMediaQuery from "@mui/material/useMediaQuery";
-import { Save as SaveIcon } from "@mui/icons-material";
+import { PlayArrow as PlayIcon, Save as SaveIcon } from "@mui/icons-material";
 import { RinkBoard, RinkBoardHandle } from "./RinkBoard";
 import { RinkBoardErrorBoundary } from "./RinkBoardErrorBoundary";
 import { PlayLegend } from "./PlayLegend";
+import { PlaybackBoard } from "./PlaybackBoard";
+import { hasPlayback } from "@/lib/utils/canvas/playback";
 import { DrawingToolbar } from "./DrawingToolbar";
 import { ElementInspector } from "./ElementInspector";
 import { CustomAreaFields, rectFromFields } from "./CustomAreaFields";
@@ -112,6 +117,7 @@ export function PlayEditor({
     const rinkBoardRef = useRef<RinkBoardHandle>(null);
 
     // Play metadata state
+    const [previewOpen, setPreviewOpen] = useState(false);
     const [name, setName] = useState(initialData?.name || "");
     const [description, setDescription] = useState(initialData?.description || "");
     const [isTemplate, setIsTemplate] = useState(initialData?.isTemplate || false);
@@ -397,6 +403,8 @@ export function PlayEditor({
         };
     }, []);
 
+    const canPreview = hasPlayback(playData);
+
     return (
         <Box
             sx={{
@@ -562,10 +570,48 @@ export function PlayEditor({
                         height={isMobile ? 400 : 600}
                     />
                 </RinkBoardErrorBoundary>
-                <Box sx={{ mt: 2 }}>
-                    <PlayLegend playData={playData} />
-                </Box>
+                <Stack
+                    direction={{ xs: "column", sm: "row" }}
+                    spacing={2}
+                    alignItems={{ xs: "stretch", sm: "flex-start" }}
+                    justifyContent="space-between"
+                    sx={{ mt: 2 }}
+                >
+                    <Box sx={{ flex: 1, minWidth: 0 }}>
+                        <PlayLegend playData={playData} />
+                    </Box>
+                    {/* Watch the drill as drawn, before saving: the same playback the drill page shows. */}
+                    <Button
+                        variant="outlined"
+                        startIcon={<PlayIcon />}
+                        onClick={() => setPreviewOpen(true)}
+                        disabled={!canPreview}
+                        sx={{ minHeight: 44, flexShrink: 0 }}
+                    >
+                        Preview animation
+                    </Button>
+                </Stack>
             </Paper>
+
+            <Dialog
+                open={previewOpen && canPreview}
+                onClose={() => setPreviewOpen(false)}
+                fullWidth
+                maxWidth="lg"
+                fullScreen={isMobile}
+                aria-labelledby="play-preview-title"
+            >
+                <DialogTitle id="play-preview-title">Preview: {name.trim() || "Untitled drill"}</DialogTitle>
+                <DialogContent>
+                    <PlaybackBoard
+                        playData={playData}
+                        label={name.trim() || "Untitled drill"}
+                        startPlaying
+                        autoFocus
+                        onClose={() => setPreviewOpen(false)}
+                    />
+                </DialogContent>
+            </Dialog>
 
             {/* Element inspector sits BELOW the board so selecting never shifts the canvas */}
             {/* Keyed by element so a pending label draft can never carry over to another element */}
