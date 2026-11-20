@@ -7,7 +7,7 @@ import type { PlayData } from "@/types/practice-planner";
 import type { LibraryPlay, LibraryPlaySummary, PlannerStore } from "@/lib/planner-store";
 import { AGE_GROUP_LABELS, inAgeOrder, type AgeGroup } from "@/lib/utils/age-groups";
 import { FOCUS_LABELS, GOALIES_LABELS, drillTags } from "@/lib/utils/drill-tags";
-import { describeStep, getPlayback } from "@/lib/utils/canvas/playback";
+import { describeStroke, displayStepNumbers, getPlayback } from "@/lib/utils/canvas/playback";
 import { hasAuthoredSteps } from "@/lib/utils/canvas/steps";
 
 export const DRILL_BOOK_DEFAULT_TITLE = "Drill book";
@@ -26,14 +26,24 @@ export function drillTagLine(play: { focus?: unknown; goalies?: unknown; ageGrou
 }
 
 /**
- * The drill's sequence, one line per playback step ("1. A: Puck carry"),
- * printed beside the numbered diagram. Only for a drill whose coach set
- * the steps: an automatic order is never printed (animated playback R8).
+ * The drill's sequence, one line per authored step, numbered as its badges
+ * are ("1. A: Puck carry · B: Skate"), in the order the strokes play. Only
+ * for a drill whose coach set the steps: an automatic order is never printed
+ * (animated playback R8). Strokes left without a step play last, as "Then".
  */
 export function drillSequenceLines(playData: PlayData | null): string[] {
     if (!playData || !hasAuthoredSteps(playData)) return [];
     const playback = getPlayback(playData);
-    return playback.steps.map((_, i) => `${i + 1}. ${describeStep(playback, i)}`);
+    const shown = displayStepNumbers(playData.drawings);
+    const byStart = [...playback.strokes].sort(([, a], [, b]) => a.startMs - b.startMs).map(([id]) => id);
+    const groups = new Map<number, string[]>();
+    for (const id of byStart) {
+        const n = shown.get(id) ?? Number.POSITIVE_INFINITY;
+        groups.set(n, [...(groups.get(n) ?? []), describeStroke(playback, id)]);
+    }
+    return [...groups.keys()]
+        .sort((a, b) => a - b)
+        .map((n) => `${Number.isFinite(n) ? `${n}.` : "Then:"} ${(groups.get(n) as string[]).join(" · ")}`);
 }
 
 /** Every drill summary in the team's library, in library order (newest first), up to the book's cap. */

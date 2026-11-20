@@ -629,3 +629,16 @@ describe("RinkBoard Steps mode (animated playback R8)", () => {
         expect(ctx.onPlayDataChange.mock.calls.length).toBe(calls);
     });
 });
+
+describe("RinkBoard Steps mode with another tool selected", () => {
+    it.each(["player", "stroke", "equipment", "text", "eraser"] as const)("the %s tool places, draws and erases nothing", (tool) => {
+        const onStrokeTap = vi.fn();
+        const ctx = setup({ playData: withLines(line(STRAIGHT)), selectedTool: tool, stepsMode: true, onStrokeTap });
+        ctx.click(150, 70);
+        ctx.drag([150, 20], [180, 60]);
+        ctx.click(60, 40);
+        expect(ctx.onPlayDataChange).not.toHaveBeenCalled();
+        expect(onStrokeTap).toHaveBeenCalledTimes(1);
+        expect(onStrokeTap).toHaveBeenCalledWith("l");
+    });
+});

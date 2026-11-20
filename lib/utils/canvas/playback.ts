@@ -666,18 +666,19 @@ export function posePlayData(playData: PlayData, tMs: number): PlayData {
 // Captions (R9)
 // ============================================================================
 
+/** "LW: Puck carry" for one stroke, or just the action when it has no skater; "" for an unknown id. */
+export function describeStroke(playback: Playback, strokeId: string): string {
+    const stroke = playback.compiled.get(strokeId);
+    if (!stroke) return "";
+    const action = ACTION_LABELS[stroke.action];
+    const actor = stroke.actorId ? playback.source.players.find((p) => p.id === stroke.actorId) : undefined;
+    if (!actor) return action;
+    return `${actor.label.trim() || ROLE_LABELS[actor.role]}: ${action}`;
+}
+
 /** "LW: Puck carry · D1: Pass" for one step; "" for -1 or past the end. */
 export function describeStep(playback: Playback, stepIndex: number): string {
     const step = playback.steps[stepIndex];
     if (!step) return "";
-    const players = new Map(playback.source.players.map((p) => [p.id, p]));
-    return step.strokeIds
-        .map((id) => {
-            const stroke = playback.compiled.get(id) as CompiledStroke;
-            const actor = stroke.actorId ? players.get(stroke.actorId) : undefined;
-            const action = ACTION_LABELS[stroke.action];
-            if (!actor) return action;
-            return `${actor.label.trim() || ROLE_LABELS[actor.role]}: ${action}`;
-        })
-        .join(" · ");
+    return step.strokeIds.map((id) => describeStroke(playback, id)).join(" · ");
 }

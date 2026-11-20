@@ -121,13 +121,23 @@ export function DrillBook({ teamId }: { teamId: string }) {
         };
     }, [chosen, store, teamId]);
 
-    const [ready, setReady] = useState<ReadonlySet<string>>(() => new Set());
-    const markReady = useCallback((id: string) => setReady((prev) => (prev.has(id) ? prev : new Set(prev).add(id))), []);
+    // Sized by the drills chosen, not those loaded so far, so diagrams don't redraw as batches arrive.
+    // A change of size redraws every diagram, so readiness gathered at the old size no longer counts.
+    const pixelRatio = printPixelRatio(chosen.length);
+    const [ready, setReady] = useState<{ ratio: number; ids: ReadonlySet<string> }>(() => ({ ratio: pixelRatio, ids: new Set() }));
+    const markReady = useCallback(
+        (ratio: number, id: string) =>
+            setReady((prev) => {
+                if (prev.ratio !== ratio) return { ratio, ids: new Set([id]) };
+                return prev.ids.has(id) ? prev : { ratio, ids: new Set(prev.ids).add(id) };
+            }),
+        []
+    );
+    const readyIds = ready.ratio === pixelRatio ? ready.ids : null;
 
     const readable = chosen.filter((p) => plays.get(p.id));
-    const pixelRatio = printPixelRatio(readable.length);
     const allLoaded = chosen.every((p) => plays.has(p.id));
-    const allReady = chosen.length > 0 && allLoaded && readable.every((p) => ready.has(p.id));
+    const allReady = chosen.length > 0 && allLoaded && readable.every((p) => readyIds?.has(p.id) ?? false);
     const bookTitle = title.trim() || DRILL_BOOK_DEFAULT_TITLE;
 
     const toggle = (id: string) =>
@@ -238,7 +248,15 @@ export function DrillBook({ teamId }: { teamId: string }) {
                                 </Box>
                             );
                         }
-                        return <BookDrill key={summary.id} number={i + 1} play={play} pixelRatio={pixelRatio} onReady={() => markReady(summary.id)} />;
+                        return (
+                            <BookDrill
+                                key={`${pixelRatio}:${summary.id}`}
+                                number={i + 1}
+                                play={play}
+                                pixelRatio={pixelRatio}
+                                onReady={() => markReady(pixelRatio, summary.id)}
+                            />
+                        );
                     })}
                 </Box>
             )}

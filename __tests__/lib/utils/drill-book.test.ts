@@ -43,6 +43,20 @@ describe("drillSequenceLines", () => {
         expect(drillSequenceLines(data([2, 1]))).toEqual(["1. Defense: Skate", "2. LW: Puck carry"]);
     });
 
+    it("numbers by authored step, as the badges do, even when a step has several beats", () => {
+        // Step 1: LW passes to the D, who then skates (receive before go: a second beat). Step 2: LW skates.
+        const pd: PlayData = {
+            ...data([]),
+            drawings: [
+                { id: "pass", action: "pass", path: "straight", end: "arrow", points: [{ x: 22, y: 20 }, { x: 20, y: 57 }], color: "#212121", strokeWidth: 3, step: 1 },
+                { id: "go", action: "skate", path: "straight", end: "arrow", points: [{ x: 22, y: 60 }, { x: 70, y: 60 }], color: "#212121", strokeWidth: 3, step: 1 },
+                { id: "lw", action: "skate", path: "straight", end: "arrow", points: [{ x: 22, y: 20 }, { x: 70, y: 20 }], color: "#212121", strokeWidth: 3, step: 2 },
+                { id: "loose", action: "skate", path: "straight", end: "arrow", points: [{ x: 100, y: 40 }, { x: 140, y: 40 }], color: "#212121", strokeWidth: 3 },
+            ],
+        };
+        expect(drillSequenceLines(pd)).toEqual(["1. LW: Pass · Defense: Skate", "2. LW: Skate", "Then: Skate"]);
+    });
+
     it("prints nothing for a drill in the automatic order, or none at all", () => {
         expect(drillSequenceLines(data([undefined, undefined]))).toEqual([]);
         expect(drillSequenceLines(null)).toEqual([]);
