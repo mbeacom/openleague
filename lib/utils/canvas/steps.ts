@@ -5,11 +5,14 @@
 import { VALIDATION_CONSTRAINTS, type DrawingElement, type PlayData, type Position } from "@/types/practice-planner";
 import { RINK_HEIGHT_FT, RINK_WIDTH_FT } from "@/lib/utils/play-data";
 import { displayStepNumbers, getPlayback } from "./playback";
-import { strokeCenterline } from "./stroke-geometry";
+import { pathLength, pointAtFraction, strokeCenterline } from "./stroke-geometry";
+import { PLAYER_RADIUS_FT } from "./glyph-metrics";
 import { hitTest } from "./interaction-utils";
 
-/** How far a badge sits to the side of its stroke's first point, clear of the marker there. */
-export const STEP_BADGE_OFFSET_FT = 4.5;
+/** How far along its stroke a badge sits: past the marker the stroke leaves (PLAYER_RADIUS_FT), or halfway on a short stroke. */
+export const STEP_BADGE_ALONG_FT = PLAYER_RADIUS_FT + 3;
+/** How far to the side of the stroke a badge sits, clear of a wave or zigzag. */
+export const STEP_BADGE_OFFSET_FT = 3;
 
 const isAnimated = (d: DrawingElement) => d.action !== "line" && d.points.length > 0;
 
@@ -70,18 +73,21 @@ export interface StepBadge {
     kind: StepBadgeKind;
 }
 
-/** Beside the stroke's first point, on its left as it travels, kept on the ice. */
+/** Just past the marker the stroke leaves, on its left as it travels, kept on the ice. */
 function badgePosition(stroke: DrawingElement): Position {
     const line = strokeCenterline(stroke);
-    const a = line[0];
-    const b = line.find((p) => p.x !== a.x || p.y !== a.y) ?? { x: a.x + 1, y: a.y };
-    const len = Math.hypot(b.x - a.x, b.y - a.y) || 1;
-    const nx = (a.y - b.y) / len;
-    const ny = (b.x - a.x) / len;
+    const total = pathLength(line);
+    const f = total > 0 ? Math.min(0.5, STEP_BADGE_ALONG_FT / total) : 0;
+    const at = pointAtFraction(line, f);
+    const ahead = pointAtFraction(line, Math.min(1, f + 0.5 / Math.max(total, 1)));
+    const behind = pointAtFraction(line, Math.max(0, f - 0.5 / Math.max(total, 1)));
+    const dx = ahead.x - behind.x;
+    const dy = ahead.y - behind.y;
+    const len = Math.hypot(dx, dy) || 1;
     const r = STEP_BADGE_OFFSET_FT;
     return {
-        x: Math.min(RINK_WIDTH_FT - r / 2, Math.max(r / 2, a.x + nx * r)),
-        y: Math.min(RINK_HEIGHT_FT - r / 2, Math.max(r / 2, a.y + ny * r)),
+        x: Math.min(RINK_WIDTH_FT - r / 2, Math.max(r / 2, at.x - (dy / len) * r)),
+        y: Math.min(RINK_HEIGHT_FT - r / 2, Math.max(r / 2, at.y + (dx / len) * r)),
     };
 }
 

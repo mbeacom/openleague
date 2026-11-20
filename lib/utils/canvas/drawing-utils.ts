@@ -385,7 +385,7 @@ export function drawLineHandles(
 }
 
 /** A step badge's radius on screen at any zoom on the board (animated playback R8). */
-export const STEP_BADGE_RADIUS_PX = 10;
+export const STEP_BADGE_RADIUS_PX = 11;
 
 export const STEP_BADGE_COLORS = {
     authored: DIAGRAM_THEME.stepAuthored,

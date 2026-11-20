@@ -1,7 +1,7 @@
 /** Authored playback steps (animated playback R6, R8): Steps mode's edits and badge layout. */
 import { describe, expect, it } from "vitest";
 import { PLAY_DATA_VERSION, VALIDATION_CONSTRAINTS, type DrawingElement, type PlayData } from "@/types/practice-planner";
-import { STEP_BADGE_OFFSET_FT, assignStep, clearSteps, hasAuthoredSteps, highestStep, numberInDrawingOrder, stepBadges } from "@/lib/utils/canvas/steps";
+import { STEP_BADGE_ALONG_FT, STEP_BADGE_OFFSET_FT, assignStep, clearSteps, hasAuthoredSteps, highestStep, numberInDrawingOrder, stepBadges } from "@/lib/utils/canvas/steps";
 
 const stroke = (id: string, action: DrawingElement["action"], y: number, step?: number): DrawingElement => ({
     id,
@@ -86,11 +86,13 @@ describe("stepBadges", () => {
         expect(stepBadges(d, { includeAutomatic: true }).map((b) => b.label)).toEqual(["1", "2", "–"]);
     });
 
-    it("sits beside the stroke's first point, clear of the marker, and on the ice", () => {
+    it("sits just past the marker the stroke leaves, beside the line, and on the ice", () => {
         const [badge] = stepBadges(data(stroke("s", "skate", 20, 1)));
         // Travelling +x, the left side is +y in rink feet.
-        expect(badge.position.x).toBeCloseTo(20);
+        expect(badge.position.x).toBeCloseTo(20 + STEP_BADGE_ALONG_FT);
         expect(badge.position.y).toBeCloseTo(20 + STEP_BADGE_OFFSET_FT);
+        const [short] = stepBadges(data({ ...stroke("t", "skate", 20, 1), points: [{ x: 20, y: 20 }, { x: 24, y: 20 }] }));
+        expect(short.position.x).toBeCloseTo(22);
         const [edge] = stepBadges(data({ ...stroke("e", "skate", 84.5, 1), points: [{ x: 0, y: 84.5 }, { x: 0, y: 0 }] }));
         expect(edge.position.x).toBeGreaterThan(0);
         expect(edge.position.y).toBeLessThan(85);
