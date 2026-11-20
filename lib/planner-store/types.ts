@@ -177,6 +177,8 @@ export interface PlannerRoutes {
     library(): string;
     /** A library drill's read-only details page. */
     libraryPlay(playId: string): string;
+    /** The drill book: the library's drills as a printable booklet. */
+    libraryBook(): string;
     /** A new practice that starts with this library drill as its first row. */
     sessionNewWithDrill(playId: string): string;
 }

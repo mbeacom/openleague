@@ -87,8 +87,8 @@ interface PlaybackFrame {
 - **The frame is ordinary `PlayData`,** so `drawBoardScene` draws it unchanged:
   - players and pucks at their posed positions;
   - **completed** strokes as stored;
-  - the **active** stroke truncated to the part already travelled (as a `straight` path through the resampled centerline points, so smoothing isn't applied twice). Its arrow rides at the tip; a `stop` end appears only when the stroke completes;
-  - **upcoming** strokes "ghosted": their colour mixed 70% toward `DIAGRAM_THEME.ice` (`#F4F9FC`). Tinting is data, so the renderer needs no opacity option;
+  - **upcoming and active** strokes "ghosted" over their whole length, end cap included: their colour mixed 60% toward `DIAGRAM_THEME.ice` (`#F4F9FC`), so every route is on the ice before anyone skates it. Tinting is data, so the renderer needs no opacity option;
+  - beside the data, a **trail** per active stroke (`frame.trails`: the stored stroke and the fraction travelled). The board draws it solid over the ghost with `drawStrokeTrail`, which lays the action's pattern out over the whole line and cuts it at that fraction, so a wave or zigzag keeps its phase as the trail grows. The fraction is measured from where the mover is, less the lead-in from its marker to the line's first point, so the trail ends under the skater or puck. The trail has no end cap; the finished stroke shows its arrow or stop as stored;
   - a puck that the diagram doesn't contain (R4) as a synthetic `EquipmentItem` with id `playback-puck-<strokeId>`.
 - A frame is never saved. The playback component is read-only and never passes a frame to `onPlayDataChange`, a Server Action or the store. Synthetic ids carry the `playback-` prefix so a test can assert none reach a write path.
 
@@ -193,6 +193,8 @@ interface DrawingElement {
 - **Preview.** A **Preview** button plays the current (unsaved) diagram in place, using the playback component (R10).
 - Every assignment is one history entry through the existing history manager. Tap targets use the board's touch hit radius (22 px minimum).
 
+**Status (2026-11-20).** Steps shipped without attachment or pace: `step` (R6) with lenient reading, the `DB_VERSION` bump to 9 and an ADR-0020 amendment; Steps mode as above, with **New step** moving to one past the highest step and **Same step** returning to the highest. Preview opens the playback board in a dialog (full screen on a phone) from a **Preview animation** button under the board, available in every mode. `fromId`/`toId`, `speed` and the pace control are still to come. Authored step numbers also show on the live still diagram, print, bench-sheet exports and the drill image, through an opt-in `stepBadges` option of the shared scene; stored thumbnails never carry them, and automatic numbers appear only in Steps mode (open question 3 stands).
+
 ### R9. Playback controls
 
 - **Layout (mobile first).** Under the board: row 1 is the scrubber, full width, with a tick per step; row 2 is **Step back**, **Play/Pause**, **Step forward**, then **Speed** (a 3-way toggle 0.5× / 1× / 2×) and **Loop**. At ≥ 600 px both rows merge into one. All targets are ≥ 44 × 44 px; the slider thumb has a 44 px hit area.
@@ -275,7 +277,7 @@ Each PR ships on its own and leaves main releasable.
   - authored steps as barriers, including gaps (steps 1, 3, 7 each wait for the previous existing step), the R3 rules within a step, unstepped strokes after the last step, gaps compacted, dangling and self ids ignored;
   - size: the longest valid stroke (1,000 points, corner to corner) compiles with a table of at most `MAX_ARC_SAMPLES` samples and ends at its last point; an ordinary stroke keeps 0.5 ft spacing;
   - timing: speed table, 600 ms floor, 10 s cap, `slow`/`fast`, the 400 ms beat, the playback-speed multiplier leaves the schedule alone;
-  - frames: `t` clamped; the first frame equals the diagram with every non-`line` stroke ghosted; the last frame's strokes equal the stored strokes; `line` strokes never ghost; the truncated stroke's last point lies on the centerline; same input, same frame; no synthetic id survives `sanitizePlayDataForWrite`.
+  - frames: `t` clamped; the first frame equals the diagram with every non-`line` stroke ghosted; the last frame's strokes equal the stored strokes; `line` strokes never ghost; an active stroke is ghosted whole and its trail ends under the mover; a revealed pattern is a prefix of the full pattern; same input, same frame; no synthetic id survives `sanitizePlayDataForWrite`.
 - **Golden schedules.** For every starter play, a snapshot of each stroke's actor, puck, start and end (ms), and the poses at each step boundary rounded to 0.1 ft. Reviewed by eye once when phase 1 lands; afterwards a change to the rules shows as a snapshot diff.
 - **Schema (phase 2):** the fields round-trip; each invalid value is dropped with the rest of the diagram intact; an older-reader schema (today's `drawingSchema`) strips them; the plan document round-trips them; the link fallback drops only `fromId`/`toId`/`speed`.
 - **Snapping (phase 2):** `findSnapTarget` returns the hit element's id for player, equipment and line-end targets; `finishStroke` stores `fromId`/`toId`; an end dragged off a target clears its id; a whole-line move clears both.

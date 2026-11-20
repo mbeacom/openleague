@@ -157,25 +157,45 @@ function offsetAlong(samples: Position[], offset: (i: number) => number): Positi
     return samples.map((p, i) => ({ x: p.x + ns[i].x * offset(i), y: p.y + ns[i].y * offset(i) }));
 }
 
-export function buildStrokeGeometry(
+/** Arc length (along the base line) of each of `n` evenly spaced samples over `total`. */
+const evenArcs = (n: number, total: number) => Array.from({ length: n }, (_, i) => (n > 1 ? (i * total) / (n - 1) : 0));
+
+function cumulative(points: Position[]): number[] {
+    const cum = [0];
+    for (let i = 1; i < points.length; i++) cum.push(cum[i - 1] + Math.hypot(points[i].x - points[i - 1].x, points[i].y - points[i - 1].y));
+    return cum;
+}
+
+/** A stroke's pattern over its whole length, with each point's place along the line; reveal it with revealPattern. */
+export interface PatternedStroke {
+    base: Position[];
+    total: number;
+    polylines: Position[][];
+    /** For each polyline point, how far along the base line it sits. */
+    arcs: number[][];
+    lineWidth: number;
+}
+
+export function buildPattern(
     stroke: StrokeOptions & { points: Position[]; strokeWidth: number },
     pxPerFt: number,
-    /** Thinnest line drawn (the editing board passes a higher minimum) */
-    minLinePx: number = MIN_LINE_PX
-): StrokeGeometry {
+    minLinePx: number
+): PatternedStroke {
     const base = strokeCenterline(stroke);
     const total = pathLength(base);
     const pattern = ACTION_PATTERN[stroke.action];
     // Stored widths are px on the reference board (scale model); drawn in proportion here.
     // The plain line's lighter weight applies before the floor, so no stroke drops below it.
     const lineWidth = refPx(pattern === "thin" ? stroke.strokeWidth * 0.75 : stroke.strokeWidth, pxPerFt, minLinePx);
-    if (base.length < 2 || total === 0) return { polylines: [], lineWidth, end: null };
+    if (base.length < 2 || total === 0) return { base, total, polylines: [], arcs: [], lineWidth };
 
     let polylines: Position[][];
+    let arcs: number[][];
     switch (pattern) {
         case "solid":
         case "thin":
             polylines = [base];
+            arcs = [cumulative(base)];
             break;
         case "wave": {
             const amp = ft(1.0, pxPerFt);
@@ -183,6 +203,7 @@ export function buildStrokeGeometry(
             const samples = resampleByArcLength(base, wavelength / 12);
             const spacing = total / (samples.length - 1);
             polylines = [offsetAlong(samples, (i) => amp * Math.sin((2 * Math.PI * i * spacing) / wavelength))];
+            arcs = [evenArcs(samples.length, total)];
             break;
         }
         case "zigzag": {
@@ -190,6 +211,7 @@ export function buildStrokeGeometry(
             const half = ft(3, pxPerFt) / 2;
             const samples = resampleByArcLength(base, half);
             polylines = [offsetAlong(samples, (i) => (i === 0 || i === samples.length - 1 ? 0 : i % 2 ? amp : -amp))];
+            arcs = [evenArcs(samples.length, total)];
             break;
         }
         case "dashed": {
@@ -198,40 +220,130 @@ export function buildStrokeGeometry(
             const samples = resampleByArcLength(base, Math.min(dash, gap) / 2);
             const spacing = total / (samples.length - 1);
             polylines = [];
+            arcs = [];
             let current: Position[] = [];
+            let currentArcs: number[] = [];
+            const flush = () => {
+                if (current.length > 1) {
+                    polylines.push(current);
+                    arcs.push(currentArcs);
+                }
+                current = [];
+                currentArcs = [];
+            };
             samples.forEach((p, i) => {
                 const inDash = (i * spacing) % (dash + gap) <= dash;
-                if (inDash) current.push(p);
-                else if (current.length) {
-                    if (current.length > 1) polylines.push(current);
-                    current = [];
-                }
+                if (inDash) {
+                    current.push(p);
+                    currentArcs.push(i * spacing);
+                } else if (current.length) flush();
             });
-            if (current.length > 1) polylines.push(current);
+            flush();
             break;
         }
         case "double": {
             const rail = ft(0.7, pxPerFt);
             const samples = resampleByArcLength(base, ft(1, pxPerFt));
+            const a = evenArcs(samples.length, total);
             polylines = [offsetAlong(samples, () => rail), offsetAlong(samples, () => -rail)];
+            arcs = [a, a];
             break;
         }
         case "ticks": {
             const every = ft(4, pxPerFt);
             const half = ft(1.2, pxPerFt);
             const samples = resampleByArcLength(base, every);
+            const sampleArcs = evenArcs(samples.length, total);
             const ns = normals(samples);
             polylines = [base];
+            arcs = [cumulative(base)];
             for (let i = 1; i < samples.length - 1; i++) {
                 const p = samples[i];
                 polylines.push([
                     { x: p.x + ns[i].x * half, y: p.y + ns[i].y * half },
                     { x: p.x - ns[i].x * half, y: p.y - ns[i].y * half },
                 ]);
+                arcs.push([sampleArcs[i], sampleArcs[i]]);
             }
             break;
         }
     }
+    return { base, total, polylines, arcs, lineWidth };
+}
+
+/** The part of `line` whose base arc length is at most `limit`, ending exactly there; null when nothing is left to draw. */
+function cutAt(line: Position[], arcs: number[], limit: number): Position[] | null {
+    if (arcs[0] > limit) return null;
+    // A tick (both points at one arc length) is all or nothing.
+    if (arcs[arcs.length - 1] === arcs[0]) return line.map((p) => ({ ...p }));
+    const out: Position[] = [{ ...line[0] }];
+    for (let i = 1; i < line.length; i++) {
+        if (arcs[i] <= limit) {
+            out.push({ ...line[i] });
+            continue;
+        }
+        const span = arcs[i] - arcs[i - 1];
+        const w = span === 0 ? 0 : (limit - arcs[i - 1]) / span;
+        const a = line[i - 1];
+        const b = line[i];
+        if (w > 0) out.push({ x: a.x + (b.x - a.x) * w, y: a.y + (b.y - a.y) * w });
+        break;
+    }
+    return out.length > 1 ? out : null;
+}
+
+/**
+ * The pattern of a stroke laid out over its whole length, cut off `fraction`
+ * (0..1) of the way along: the part a skater or puck has travelled. Because
+ * the pattern is built on the full line, a wave or zigzag keeps its phase as
+ * the cut moves, so a growing trail doesn't shimmer. No end cap: that belongs
+ * to the finished stroke.
+ */
+export function buildRevealedStrokeGeometry(
+    stroke: StrokeOptions & { points: Position[]; strokeWidth: number },
+    pxPerFt: number,
+    fraction: number,
+    minLinePx: number = MIN_LINE_PX
+): StrokeGeometry {
+    return revealPattern(buildPattern(stroke, pxPerFt, minLinePx), fraction);
+}
+
+/** The first `fraction` (0..1) of a built pattern, by place along its line; no end cap. */
+export function revealPattern(pattern: PatternedStroke, fraction: number): StrokeGeometry {
+    const { total, polylines, arcs, lineWidth } = pattern;
+    const f = Number.isFinite(fraction) ? Math.min(1, Math.max(0, fraction)) : 0;
+    const limit = f * total;
+    const cut: Position[][] = [];
+    polylines.forEach((line, i) => {
+        const part = cutAt(line, arcs[i], limit);
+        if (part) cut.push(part);
+    });
+    return { polylines: f > 0 ? cut : [], lineWidth, end: null };
+}
+
+/** The point `fraction` (0..1) of the way along a polyline, by arc length. */
+export function pointAtFraction(points: Position[], fraction: number): Position {
+    if (points.length === 0) return { x: 0, y: 0 };
+    const cum = cumulative(points);
+    const target = Math.min(1, Math.max(0, fraction)) * cum[cum.length - 1];
+    for (let i = 1; i < points.length; i++) {
+        if (cum[i] >= target) {
+            const span = cum[i] - cum[i - 1];
+            const w = span === 0 ? 0 : (target - cum[i - 1]) / span;
+            return { x: points[i - 1].x + (points[i].x - points[i - 1].x) * w, y: points[i - 1].y + (points[i].y - points[i - 1].y) * w };
+        }
+    }
+    return { ...points[points.length - 1] };
+}
+
+export function buildStrokeGeometry(
+    stroke: StrokeOptions & { points: Position[]; strokeWidth: number },
+    pxPerFt: number,
+    /** Thinnest line drawn (the editing board passes a higher minimum) */
+    minLinePx: number = MIN_LINE_PX
+): StrokeGeometry {
+    const { base, total, polylines, lineWidth } = buildPattern(stroke, pxPerFt, minLinePx);
+    if (base.length < 2 || total === 0) return { polylines: [], lineWidth, end: null };
 
     let end: StrokeGeometry["end"] = null;
     if (stroke.end !== "none") {

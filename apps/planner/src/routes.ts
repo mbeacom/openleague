@@ -42,6 +42,7 @@ export const staticRoutes: StaticRoutes = {
     libraryEdit: (playId) => `#/library/${enc(playId)}/edit`,
     library: () => "#/library",
     libraryPlay: (playId) => `#/library/${enc(playId)}`,
+    libraryBook: () => "#/library/book",
     sessionNewWithDrill: (playId) => `#/library/${enc(playId)}/practice`,
     sessionNew: () => "#/sessions/new",
     importPlan: () => "#/import",
@@ -66,6 +67,7 @@ export type StaticRoute =
     | { name: "libraryNew" }
     | { name: "libraryEdit"; id: string }
     | { name: "libraryPlay"; id: string }
+    | { name: "libraryBook" }
     | { name: "sessionNewWithDrill"; drillId: string }
     | { name: "import" }
     | { name: "planLink"; value: string }
@@ -132,6 +134,8 @@ export function matchRoute(hash: string): StaticRoute {
     if (section === "library") {
         if (second === undefined) return { name: "library" };
         if (second === "new") return third === undefined ? { name: "libraryNew" } : NOT_FOUND;
+        // "book" is the drill book, never a drill id (ids are UUIDs).
+        if (second === "book") return third === undefined ? { name: "libraryBook" } : NOT_FOUND;
         const id = decodeId(second);
         if (!id) return NOT_FOUND;
         if (third === undefined) return { name: "libraryPlay", id };
@@ -179,6 +183,7 @@ export function navSection(route: StaticRoute): NavSection | null {
         case "libraryNew":
         case "libraryEdit":
         case "libraryPlay":
+        case "libraryBook":
             return "library";
         case "import":
         case "planLink":

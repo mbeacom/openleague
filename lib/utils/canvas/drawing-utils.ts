@@ -19,13 +19,14 @@ import {
 } from "@/types/practice-planner";
 import type { RinkRect, StrokeOptions } from "@/types/practice-planner";
 import { FULL_RINK, TransformContext, drawRink, rinkToCanvas } from "./rink-renderer";
-import { buildStrokeGeometry, strokeCenterline, type StrokeGeometry } from "./stroke-geometry";
+import { buildPattern, buildStrokeGeometry, revealPattern, strokeCenterline, type PatternedStroke, type StrokeGeometry } from "./stroke-geometry";
 import { drawPlayerGlyph, drawEquipmentGlyph } from "./glyphs";
 import { EQUIPMENT_RADIUS_FT, MIN_GLYPH_RADIUS_PX, PLAYER_RADIUS_FT, glyphRadiusPx } from "./glyph-metrics";
 import { MIN_LINE_PX, REFERENCE_PX_PER_FT, refPx } from "./scale";
 import type { LineHandle, SnapTarget } from "./line-editing";
 import { DIAGRAM_THEME } from "./diagram-theme";
 import { diagramFont } from "./diagram-fonts";
+import { stepBadges } from "./steps";
 
 /** The shortest arrowhead drawn, so a tiny diagram's arrows still read as arrows. */
 export const ARROW_MIN_PX = 4;
@@ -74,6 +75,34 @@ export function drawStroke(
     );
 
     paintStrokeGeometry(ctx, geometry, stroke.color, pxPerFt, floors.arrowPx);
+}
+
+/** Built trail patterns by stroke object, so a playing trail is only re-cut each frame (R11). */
+const trailPatterns = new WeakMap<object, { key: string; pattern: PatternedStroke }>();
+
+/**
+ * Draws the first `fraction` (0..1) of a stroke, with its pattern laid out
+ * over the whole line so a wave or zigzag holds still as the trail grows.
+ * No end cap. Used by drill playback for the part already travelled; the
+ * pattern is built once per stroke and board size and then only re-cut.
+ */
+export function drawStrokeTrail(
+    ctx: CanvasRenderingContext2D,
+    stroke: StrokeOptions & { points: Position[]; color: string; strokeWidth: number },
+    transform: TransformContext,
+    fraction: number,
+    floors: StrokeFloors = DIAGRAM_STROKE_FLOORS
+): void {
+    if (stroke.points.length < 2 || !(fraction > 0)) return;
+    const pxPerFt = Math.min(transform.scaleX, transform.scaleY);
+    const key = `${transform.scaleX},${transform.scaleY},${transform.offsetX},${transform.offsetY},${floors.linePx}`;
+    let cached = trailPatterns.get(stroke);
+    if (!cached || cached.key !== key) {
+        const points = stroke.points.map((p) => rinkToCanvas(p, transform));
+        cached = { key, pattern: buildPattern({ ...stroke, points }, pxPerFt, floors.linePx) };
+        trailPatterns.set(stroke, cached);
+    }
+    paintStrokeGeometry(ctx, revealPattern(cached.pattern, fraction), stroke.color, pxPerFt, floors.arrowPx);
 }
 
 /**
@@ -360,6 +389,47 @@ export function drawLineHandles(
     ctx.restore();
 }
 
+/** A step badge's radius on screen at any zoom on the board (animated playback R8). */
+export const STEP_BADGE_RADIUS_PX = 11;
+
+export const STEP_BADGE_COLORS = {
+    authored: DIAGRAM_THEME.stepAuthored,
+    automatic: DIAGRAM_THEME.stepAutomatic,
+    unset: DIAGRAM_THEME.stepUnset,
+} as const;
+
+/**
+ * Draws numbered step badges (animated playback R8): a disc with the number,
+ * `radiusPx` on screen whatever the board's `zoom`.
+ */
+export function drawStepBadges(
+    ctx: CanvasRenderingContext2D,
+    badges: ReadonlyArray<{ position: Position; label: string; kind: keyof typeof STEP_BADGE_COLORS }>,
+    transform: TransformContext,
+    { zoom = 1, radiusPx = STEP_BADGE_RADIUS_PX }: { zoom?: number; radiusPx?: number } = {}
+): void {
+    if (badges.length === 0) return;
+    const r = radiusPx / zoom;
+    ctx.save();
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    for (const badge of badges) {
+        const colors = STEP_BADGE_COLORS[badge.kind];
+        const c = rinkToCanvas(badge.position, transform);
+        ctx.beginPath();
+        ctx.arc(c.x, c.y, r, 0, Math.PI * 2);
+        ctx.fillStyle = colors.fill;
+        ctx.fill();
+        ctx.lineWidth = Math.max(1.5, r * 0.18);
+        ctx.strokeStyle = colors.stroke;
+        ctx.stroke();
+        ctx.fillStyle = colors.text;
+        ctx.font = diagramFont(800, r * (badge.label.length > 1 ? 1.0 : 1.25));
+        ctx.fillText(badge.label, c.x, c.y + r * 0.06);
+    }
+    ctx.restore();
+}
+
 /** The snap ring's smallest radius on screen, at any zoom: a line end's ring (line editing R4). */
 export const SNAP_RING_RADIUS_PX = 14;
 /** On screen, how far the ring sits outside a player's or an equipment item's glyph outline. */
@@ -475,6 +545,14 @@ export interface BoardSceneOptions {
     minGlyphRadiusPx?: number;
     /** Thinnest line and shortest arrowhead (default the 1 px / 4 px diagram floors; the board passes its own) */
     strokeFloors?: StrokeFloors;
+    /**
+     * Step badges over everything (animated playback R8): "authored" numbers
+     * only (still diagrams, print), or "all" with the automatic order and
+     * unset strokes (Steps mode). Default none, so thumbnails never show them.
+     */
+    stepBadges?: "authored" | "all";
+    /** A badge's radius in screen px (default STEP_BADGE_RADIUS_PX) */
+    stepBadgeRadiusPx?: number;
 }
 
 /**
@@ -499,6 +577,10 @@ export function drawBoardScene(
         options.strokeFloors ?? DIAGRAM_STROKE_FLOORS
     );
     if (options.maskRect) drawAreaMask(ctx, options.maskRect, transform, options.zoom ?? 1);
+    if (options.stepBadges) {
+        const badges = stepBadges(playData, { includeAutomatic: options.stepBadges === "all" });
+        drawStepBadges(ctx, badges, transform, { zoom: options.zoom ?? 1, radiusPx: options.stepBadgeRadiusPx });
+    }
 }
 
 export interface BoardFrameOptions extends BoardSceneOptions {

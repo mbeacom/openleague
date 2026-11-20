@@ -26,8 +26,10 @@ import {
     poseAt,
     posePlayData,
     poseStep,
+    strokeStepGroups,
+    displayStepNumbers,
 } from "@/lib/utils/canvas/playback";
-import { strokeCenterline } from "@/lib/utils/canvas/stroke-geometry";
+import { pointAtFraction, strokeCenterline } from "@/lib/utils/canvas/stroke-geometry";
 import { STARTER_PLAYS } from "@/lib/data/starter-plays";
 
 const P = (x: number, y: number): Position => ({ x, y });
@@ -183,6 +185,80 @@ describe("the automatic order (R3)", () => {
     });
 });
 
+describe("authored steps (R6)", () => {
+    const withStep = (d: DrawingElement, step?: number): DrawingElement => (step === undefined ? d : { ...d, step });
+    const two = (stepA?: number, stepB?: number) =>
+        diagram({
+            players: [player("a", 10, 10), player("b", 10, 60)],
+            drawings: [
+                withStep(stroke("ra", "skate", [[12, 10], [60, 10]]), stepA),
+                withStep(stroke("rb", "skate", [[12, 60], [60, 60]]), stepB),
+            ],
+        });
+
+    it("changes nothing when no stroke has a step", () => {
+        const pb = compilePlayback(two());
+        expect(at(pb, "ra").startMs).toBe(at(pb, "rb").startMs);
+        expect(displayStepNumbers(two().drawings).size).toBe(0);
+    });
+
+    it("plays everything in step 1 exactly like the automatic order", () => {
+        expect(compilePlayback(two(1, 1)).strokes).toEqual(compilePlayback(two()).strokes);
+    });
+
+    it("runs an unstepped stroke after the last authored step", () => {
+        const pb = compilePlayback(two(undefined, 2));
+        expect(at(pb, "rb").startMs).toBe(0);
+        expect(at(pb, "ra").startMs).toBe(at(pb, "rb").endMs + STEP_BEAT_MS);
+    });
+
+    it("can run a later-drawn stroke first", () => {
+        const pb = compilePlayback(two(2, 1));
+        expect(at(pb, "rb").startMs).toBe(0);
+        expect(at(pb, "ra").startMs).toBe(at(pb, "rb").endMs + STEP_BEAT_MS);
+        expect(describeStep(pb, 0)).toBe("b: Skate");
+    });
+
+    it("waits for the previous existing step across gaps, and compacts the numbers it shows", () => {
+        const data = diagram({
+            players: [player("a", 10, 10), player("b", 10, 40), player("c", 10, 70)],
+            drawings: [
+                { ...stroke("rc", "skate", [[12, 70], [60, 70]]), step: 7 },
+                { ...stroke("ra", "skate", [[12, 10], [60, 10]]), step: 1 },
+                stroke("zone", "line", [[0, 0], [5, 5]]),
+                { ...stroke("rb", "skate", [[12, 40], [60, 40]]), step: 3 },
+            ],
+        });
+        const pb = compilePlayback(data);
+        expect(at(pb, "ra").startMs).toBe(0);
+        expect(at(pb, "rb").startMs).toBe(at(pb, "ra").endMs + STEP_BEAT_MS);
+        expect(at(pb, "rc").startMs).toBe(at(pb, "rb").endMs + STEP_BEAT_MS);
+        expect([...displayStepNumbers(data.drawings)]).toEqual([["rc", 3], ["ra", 1], ["rb", 2]]);
+        expect([...strokeStepGroups(data.drawings)]).toEqual([["rc", 7], ["ra", 1], ["rb", 3]]);
+    });
+
+    it("keeps a skater's routes chained when steps reorder them", () => {
+        // a's second route is drawn first but set to step 2: a skates the first route, then the second.
+        const data = diagram({
+            players: [player("a", 10, 10)],
+            drawings: [
+                { ...stroke("second", "skate", [[60, 10], [60, 50]]), step: 2 },
+                { ...stroke("first", "skate", [[12, 10], [60, 10]]), step: 1 },
+            ],
+        });
+        const pb = compilePlayback(data);
+        expect(at(pb, "first").actorId).toBe("a");
+        expect(at(pb, "second").actorId).toBe("a");
+        expect(at(pb, "second").startMs).toBeGreaterThanOrEqual(at(pb, "first").endMs);
+        expect(round1(poseAt(pb, pb.durationMs).data.players[0].position)).toEqual(P(60, 50));
+    });
+
+    it("ignores a step that isn't a whole number from 1", () => {
+        const bad = { ...two(), drawings: two().drawings.map((d) => ({ ...d, step: 0.5 })) };
+        expect(compilePlayback(bad).strokes).toEqual(compilePlayback(two()).strokes);
+    });
+});
+
 describe("pucks (R4)", () => {
     it("picks up a puck the diagram contains", () => {
         const data = diagram({
@@ -335,24 +411,47 @@ describe("frames (R2)", () => {
         expect(poseAt(pb, Number.NaN)).toEqual(poseAt(pb, 0));
     });
 
-    it("truncates the active stroke along its centerline", () => {
+    it("ghosts the whole active stroke and trails it solid to the skater", () => {
         const go = at(pb, "go");
         const frame = poseAt(pb, (go.startMs + go.endMs) / 2);
         expect(frame.activeStrokeIds).toEqual(["go"]);
-        const active = frame.data.drawings[2];
-        expect(active.path).toBe("straight");
-        expect(active.end).toBe("arrow");
-        const tip = active.points[active.points.length - 1];
-        const centerline = strokeCenterline(data.drawings[2]);
-        const nearestFt = distToPolyline(tip, centerline);
-        expect(nearestFt).toBeLessThan(0.05);
+        // The route ahead stays on the ice: the stored stroke, ghosted, with its arrow.
+        expect(frame.data.drawings[2]).toEqual({ ...data.drawings[2], color: ghostColor("#212121") });
+        expect(frame.trails).toHaveLength(1);
+        const [trail] = frame.trails;
+        expect(trail.drawing).toBe(data.drawings[2]);
+        expect(trail.fraction).toBeGreaterThan(0);
+        expect(trail.fraction).toBeLessThan(1);
+        // The trail ends under the skater.
+        const tip = pointAtFraction(strokeCenterline(data.drawings[2]), trail.fraction);
+        const skater = frame.data.players.find((p) => p.id === "b") as PlayerIcon;
+        expect(Math.hypot(tip.x - skater.position.x, tip.y - skater.position.y)).toBeLessThan(0.6);
     });
 
-    it("shows a stop end only once the stroke completes", () => {
+    it("starts the trail only once the skater reaches the line", () => {
+        // The skater stands 3 ft short of the route, so the first part of the stroke is the lead-in.
+        const lead = diagram({ players: [player("a", 0, 40)], drawings: [stroke("s", "skate", [[3, 40], [63, 40]])] });
+        const leadPb = compilePlayback(lead);
+        const s = at(leadPb, "s");
+        const early = poseAt(leadPb, s.startMs + 40);
+        expect(early.trails[0].fraction).toBe(0);
+        const late = poseAt(leadPb, s.endMs - 1);
+        expect(late.trails[0].fraction).toBeGreaterThan(0.99);
+    });
+
+    it("has no trails before the first stroke, between steps or at the end", () => {
+        expect(poseAt(pb, 0).trails).toEqual([]);
+        expect(poseAt(pb, pb.durationMs).trails).toEqual([]);
+        expect(poseStep(pb, 0).trails).toEqual([]);
+    });
+
+    it("shows a stop end ghosted ahead, and solid once the stroke completes", () => {
         const stopData = diagram({ drawings: [{ ...stroke("s", "skate", [[0, 40], [60, 40]]), end: "stop" }] });
         const stopPb = compilePlayback(stopData);
-        expect(poseAt(stopPb, 1000).data.drawings[0].end).toBe("none");
-        expect(poseAt(stopPb, stopPb.durationMs).data.drawings[0].end).toBe("stop");
+        const mid = poseAt(stopPb, 1000);
+        expect(mid.data.drawings[0].end).toBe("stop");
+        expect(mid.data.drawings[0].color).toBe(ghostColor("#212121"));
+        expect(poseAt(stopPb, stopPb.durationMs).data.drawings[0]).toEqual(stopData.drawings[0]);
     });
 
     it("is deterministic", () => {
@@ -445,10 +544,10 @@ describe("edge cases", () => {
 });
 
 describe("colour", () => {
-    it("mixes 70% toward the ice", () => {
+    it("mixes 60% toward the ice", () => {
         expect(mixHex("#000000", "#FFFFFF", 0.7)).toBe("#B3B3B3");
         expect(ghostColor("#F4F9FC")).toBe("#F4F9FC");
-        expect(ghostColor("#212121")).toMatch(/^#[0-9A-F]{6}$/);
+        expect(ghostColor("#000000")).toBe(mixHex("#000000", "#F4F9FC", 0.6));
         expect(mixHex("red", "#FFFFFF", 0.7)).toBe("red");
     });
 });

@@ -37,6 +37,7 @@ import {
     Redo as RedoIcon,
     Clear as ClearIcon,
     Palette as PaletteIcon,
+    FormatListNumbered as StepsIcon,
 } from "@mui/icons-material";
 import {
     DrawingTool,
@@ -84,6 +85,9 @@ export interface DrawingToolbarProps {
     onStrokeOptionsChange: (options: StrokeOptions) => void;
     equipmentKind: EquipmentKind;
     onEquipmentKindChange: (kind: EquipmentKind) => void;
+    /** Steps mode (animated playback R8): shown only when the parent handles it */
+    stepsMode?: boolean;
+    onStepsModeChange?: (on: boolean) => void;
 }
 
 /**
@@ -164,6 +168,8 @@ export function DrawingToolbar({
     onStrokeOptionsChange,
     equipmentKind,
     onEquipmentKindChange,
+    stepsMode = false,
+    onStepsModeChange,
 }: DrawingToolbarProps) {
     const theme = useTheme();
     const isMobile = useMediaQuery(theme.breakpoints.down("md"));
@@ -299,6 +305,23 @@ export function DrawingToolbar({
                         </ToggleButton>
                     </Tooltip>
                 </ToggleButtonGroup>
+
+                {/* Steps mode: set the order the drill plays in (animated playback R8) */}
+                {onStepsModeChange && (
+                    <Tooltip title="Set the playback order">
+                        <ToggleButton
+                            value="steps"
+                            selected={stepsMode}
+                            onChange={() => onStepsModeChange(!stepsMode)}
+                            aria-label="steps mode"
+                            size={isMobile ? "small" : "medium"}
+                            sx={{ ...TOOL_TOGGLE_SX, gap: 0.75, px: 1.5 }}
+                        >
+                            <StepsIcon />
+                            Steps
+                        </ToggleButton>
+                    </Tooltip>
+                )}
 
                 {/* Color Picker */}
                 {/* Requirements: 5.2 - Color picker for drawing colors */}

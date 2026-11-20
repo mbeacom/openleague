@@ -12,6 +12,9 @@
 import React, { useState, useRef, useCallback, useEffect, useMemo } from "react";
 import {
     Box,
+    Dialog,
+    DialogContent,
+    DialogTitle,
     Paper,
     TextField,
     Typography,
@@ -31,10 +34,13 @@ import {
 } from "@mui/material";
 import { useTheme } from "@mui/material/styles";
 import useMediaQuery from "@mui/material/useMediaQuery";
-import { Save as SaveIcon } from "@mui/icons-material";
+import { PlayArrow as PlayIcon, Save as SaveIcon } from "@mui/icons-material";
 import { RinkBoard, RinkBoardHandle } from "./RinkBoard";
 import { RinkBoardErrorBoundary } from "./RinkBoardErrorBoundary";
 import { PlayLegend } from "./PlayLegend";
+import { PlaybackBoard } from "./PlaybackBoard";
+import { hasPlayback } from "@/lib/utils/canvas/playback";
+import { assignStep, clearSteps, hasAuthoredSteps, highestStep, numberInDrawingOrder } from "@/lib/utils/canvas/steps";
 import { DrawingToolbar } from "./DrawingToolbar";
 import { ElementInspector } from "./ElementInspector";
 import { CustomAreaFields, rectFromFields } from "./CustomAreaFields";
@@ -57,6 +63,7 @@ import {
     type RinkRect,
     type SavedPlay,
     type StrokeOptions,
+    VALIDATION_CONSTRAINTS,
 } from "@/types/practice-planner";
 import { areaRect, countElementsOutside, isFullIce } from "@/lib/utils/ice-area";
 import { ICE_AREA_GROUPS, ICE_AREA_LABELS } from "@/lib/utils/canvas/notation";
@@ -112,6 +119,7 @@ export function PlayEditor({
     const rinkBoardRef = useRef<RinkBoardHandle>(null);
 
     // Play metadata state
+    const [previewOpen, setPreviewOpen] = useState(false);
     const [name, setName] = useState(initialData?.name || "");
     const [description, setDescription] = useState(initialData?.description || "");
     const [isTemplate, setIsTemplate] = useState(initialData?.isTemplate || false);
@@ -147,6 +155,9 @@ export function PlayEditor({
 
     // Ice area (2a): the custom-area tool stays on until one rectangle is drawn or it is cancelled
     const [areaTool, setAreaTool] = useState(false);
+    // Steps mode (animated playback R8): taps on strokes assign `tapStep`.
+    const [stepsMode, setStepsMode] = useState(false);
+    const [tapStep, setTapStep] = useState(1);
     const areaChoice: IceAreaChoice = playData.area?.kind ?? "full";
     const outsideCount = useMemo(
         () => (isFullIce(playData.area) ? 0 : countElementsOutside(playData, areaRect(playData.area))),
@@ -397,6 +408,17 @@ export function PlayEditor({
         };
     }, []);
 
+    const canPreview = hasPlayback(playData);
+    const authoredSteps = hasAuthoredSteps(playData);
+    const toggleStepsMode = (on: boolean) => {
+        if (on) {
+            setAreaTool(false);
+            setTapStep(Math.max(1, highestStep(playData)));
+        }
+        setStepsMode(on);
+    };
+    const handleStrokeTap = (strokeId: string) => rinkBoardRef.current?.applyChange((d) => assignStep(d, strokeId, tapStep));
+
     return (
         <Box
             sx={{
@@ -472,7 +494,7 @@ export function PlayEditor({
                             </Select>
                         </FormControl>
                         {areaChoice === "custom" && !areaTool && (
-                            <Button variant="text" onClick={() => setAreaTool(true)} sx={{ minHeight: 44 }}>
+                            <Button variant="text" onClick={() => { setStepsMode(false); setAreaTool(true); }} sx={{ minHeight: 44 }}>
                                 Draw area on rink
                             </Button>
                         )}
@@ -518,6 +540,8 @@ export function PlayEditor({
                     onStrokeOptionsChange={setStrokeOptions}
                     equipmentKind={equipmentKind}
                     onEquipmentKindChange={setEquipmentKind}
+                    stepsMode={stepsMode}
+                    onStepsModeChange={toggleStepsMode}
                 />
             </Paper>
 
@@ -536,6 +560,69 @@ export function PlayEditor({
                         }
                     >
                         Drag on the rink to draw the ice area.
+                    </Alert>
+                )}
+                {stepsMode && (
+                    <Alert
+                        severity="info"
+                        icon={false}
+                        role="status"
+                        sx={{ mb: 2, "& .MuiAlert-message": { width: "100%" } }}
+                    >
+                        <Stack spacing={1}>
+                            <Typography variant="body2" sx={{ fontWeight: 700 }}>
+                                Tapping a movement assigns step {tapStep}. Tap it again to remove its step.
+                            </Typography>
+                            <Typography variant="body2" color="text.secondary">
+                                {authoredSteps
+                                    ? "Steps play in order; lines marked – play after the last step."
+                                    : "No steps yet: the grey numbers show the automatic order."}
+                            </Typography>
+                            <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+                                <Button
+                                    size="small"
+                                    variant="contained"
+                                    onClick={() => setTapStep(Math.min(VALIDATION_CONSTRAINTS.MAX_STROKE_STEP, highestStep(playData) + 1))}
+                                    disabled={highestStep(playData) >= VALIDATION_CONSTRAINTS.MAX_STROKE_STEP || tapStep > highestStep(playData)}
+                                    sx={{ minHeight: 44 }}
+                                >
+                                    New step
+                                </Button>
+                                <Button
+                                    size="small"
+                                    variant="outlined"
+                                    onClick={() => setTapStep(Math.max(1, highestStep(playData)))}
+                                    disabled={tapStep === Math.max(1, highestStep(playData))}
+                                    sx={{ minHeight: 44 }}
+                                >
+                                    Same step
+                                </Button>
+                                <Button
+                                    size="small"
+                                    variant="text"
+                                    onClick={() => rinkBoardRef.current?.applyChange(numberInDrawingOrder)}
+                                    disabled={!canPreview}
+                                    sx={{ minHeight: 44 }}
+                                >
+                                    Number in drawing order
+                                </Button>
+                                <Button
+                                    size="small"
+                                    variant="text"
+                                    onClick={() => {
+                                        rinkBoardRef.current?.applyChange(clearSteps);
+                                        setTapStep(1);
+                                    }}
+                                    disabled={!authoredSteps}
+                                    sx={{ minHeight: 44 }}
+                                >
+                                    Use automatic order
+                                </Button>
+                                <Button size="small" variant="text" onClick={() => toggleStepsMode(false)} sx={{ minHeight: 44 }}>
+                                    Done
+                                </Button>
+                            </Stack>
+                        </Stack>
                     </Alert>
                 )}
                 {outsideCount > 0 && (
@@ -559,13 +646,53 @@ export function PlayEditor({
                         onLimitReached={setLimitNotice}
                         areaTool={areaTool}
                         onAreaDrawn={handleAreaDrawn}
+                        stepsMode={stepsMode && !areaTool}
+                        onStrokeTap={handleStrokeTap}
                         height={isMobile ? 400 : 600}
                     />
                 </RinkBoardErrorBoundary>
-                <Box sx={{ mt: 2 }}>
-                    <PlayLegend playData={playData} />
-                </Box>
+                <Stack
+                    direction={{ xs: "column", sm: "row" }}
+                    spacing={2}
+                    alignItems={{ xs: "stretch", sm: "flex-start" }}
+                    justifyContent="space-between"
+                    sx={{ mt: 2 }}
+                >
+                    <Box sx={{ flex: 1, minWidth: 0 }}>
+                        <PlayLegend playData={playData} />
+                    </Box>
+                    {/* Watch the drill as drawn, before saving: the same playback the drill page shows. */}
+                    <Button
+                        variant="outlined"
+                        startIcon={<PlayIcon />}
+                        onClick={() => setPreviewOpen(true)}
+                        disabled={!canPreview}
+                        sx={{ minHeight: 44, flexShrink: 0 }}
+                    >
+                        Preview animation
+                    </Button>
+                </Stack>
             </Paper>
+
+            <Dialog
+                open={previewOpen && canPreview}
+                onClose={() => setPreviewOpen(false)}
+                fullWidth
+                maxWidth="lg"
+                fullScreen={isMobile}
+                aria-labelledby="play-preview-title"
+            >
+                <DialogTitle id="play-preview-title">Preview: {name.trim() || "Untitled drill"}</DialogTitle>
+                <DialogContent>
+                    <PlaybackBoard
+                        playData={playData}
+                        label={name.trim() || "Untitled drill"}
+                        startPlaying
+                        autoFocus
+                        onClose={() => setPreviewOpen(false)}
+                    />
+                </DialogContent>
+            </Dialog>
 
             {/* Element inspector sits BELOW the board so selecting never shifts the canvas */}
             {/* Keyed by element so a pending label draft can never carry over to another element */}

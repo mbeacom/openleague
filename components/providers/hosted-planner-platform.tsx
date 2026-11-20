@@ -22,6 +22,7 @@ export const hostedPlannerRoutes: PlannerRoutes = {
     libraryEdit: (playId) => `/practice-planner/library/${playId}/edit`,
     library: () => "/practice-planner/library",
     libraryPlay: (playId) => `/practice-planner/library/${encodeURIComponent(playId)}`,
+    libraryBook: () => "/practice-planner/library/book",
     sessionNewWithDrill: (playId) => `/practice-planner/new?drill=${encodeURIComponent(playId)}`,
 };
 

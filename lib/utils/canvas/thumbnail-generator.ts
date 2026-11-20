@@ -43,6 +43,11 @@ export interface ThumbnailOptions {
      * pixels, so they scale uniformly.
      */
     pixelRatio?: number;
+    /**
+     * Number the drill's authored playback steps (animated playback R8): for
+     * print, exports and the live diagram. Stored thumbnails leave it off.
+     */
+    stepBadges?: boolean;
 }
 
 /** The largest pixelRatio generateThumbnail accepts. */
@@ -75,7 +80,7 @@ export function drawThumbnailScene(
     playData: PlayData,
     width: number,
     height: number,
-    options: { backgroundColor?: string; cachedRink?: boolean } = {}
+    options: { backgroundColor?: string; cachedRink?: boolean; stepBadges?: boolean } = {}
 ): void {
     ctx.fillStyle = options.backgroundColor ?? "#FFFFFF";
     ctx.fillRect(0, 0, width, height);
@@ -84,7 +89,13 @@ export function drawThumbnailScene(
         maskRect: areaRect(playData.area),
         cachedRink: options.cachedRink ?? false,
         minGlyphRadiusPx: THUMBNAIL_MIN_GLYPH_RADIUS_PX,
+        ...(options.stepBadges ? { stepBadges: "authored" as const, stepBadgeRadiusPx: stillBadgeRadiusPx(width) } : {}),
     });
+}
+
+/** A step badge's radius on a still diagram `width` px wide: in proportion, never under 7 px. */
+export function stillBadgeRadiusPx(width: number): number {
+    return Math.max(7, width * 0.014);
 }
 
 /**
@@ -122,7 +133,7 @@ export function generateThumbnail(
 
     // The cached rink is a logical-size bitmap that would print blurry under
     // scale(), so a scaled thumbnail draws the rink as vectors.
-    drawThumbnailScene(ctx, playData, width, height, { backgroundColor, cachedRink: !scaled });
+    drawThumbnailScene(ctx, playData, width, height, { backgroundColor, cachedRink: !scaled, stepBadges: options.stepBadges });
 
     // Export as base64 PNG
     return canvas.toDataURL("image/png");

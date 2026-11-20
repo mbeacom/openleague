@@ -57,6 +57,9 @@ const playerSchema = z.object({
     color: colorSchema,
 });
 
+/** A stroke's playback step (animated playback R6). */
+const strokeStepSchema = z.number().int().min(1).max(C.MAX_STROKE_STEP);
+
 const drawingSchema = z.object({
     id: idSchema,
     action: z.enum(STROKE_ACTIONS),
@@ -65,6 +68,7 @@ const drawingSchema = z.object({
     points: z.array(positionSchema).min(2).max(C.MAX_STROKE_POINTS),
     color: colorSchema,
     strokeWidth: z.number().positive().max(MAX_STROKE_WIDTH),
+    step: strokeStepSchema.optional(),
 });
 
 const equipmentSchema = z.object({
@@ -237,6 +241,26 @@ function dropInvalidArea(raw: object): object {
 }
 
 /**
+ * A stroke's playback step is advisory (animated playback R6): an invalid one
+ * is dropped from that stroke and logged, never a reason to call the drill
+ * unreadable. Returns `raw` itself when there is nothing to change.
+ */
+function readableStrokeSteps(raw: object): object {
+    const drawings = (raw as { drawings?: unknown }).drawings;
+    if (!Array.isArray(drawings)) return raw;
+    let changed = false;
+    const kept = drawings.map((d: unknown) => {
+        if (typeof d !== "object" || d === null || !("step" in d)) return d;
+        const { step, ...rest } = d as { step: unknown } & Record<string, unknown>;
+        if (step === undefined || strokeStepSchema.safeParse(step).success) return d;
+        console.error("Dropping invalid playback step from a stroke:", step);
+        changed = true;
+        return rest;
+    });
+    return changed ? { ...raw, drawings: kept } : raw;
+}
+
+/**
  * Equipment overrides are advisory (practice equipment spec R2): unreadable
  * ones are dropped and logged, readable ones normalized, never a reason to
  * call the drill unreadable. Returns `raw` itself when there is nothing to change.
@@ -280,7 +304,7 @@ export function upgradePlayData(raw: unknown): PlayData {
         if ((raw as { version: unknown }).version !== PLAY_DATA_VERSION) {
             throw new PlayDataError(`Unsupported play data version: ${String((raw as { version: unknown }).version)}`);
         }
-        const readable = readableVideos(readableEquipmentNeeds(dropInvalidArea(raw)));
+        const readable = readableStrokeSteps(readableVideos(readableEquipmentNeeds(dropInvalidArea(raw))));
         const annotations = (readable as { annotations?: unknown }).annotations;
         return parseV2(Array.isArray(annotations) ? { ...readable, annotations: annotations.filter(isNotBlankAnnotation) } : readable);
     }

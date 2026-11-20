@@ -47,6 +47,7 @@ import {
     Delete as DeleteIcon,
     Edit as EditIcon,
     Add as AddIcon,
+    MenuBook as BookIcon,
 } from "@mui/icons-material";
 import { SavedPlay } from "@/types/practice-planner";
 import { usePlannerPlatform, usePlannerStore, type LibraryPlaySummary, type PlannerStore } from "@/lib/planner-store";
@@ -429,7 +430,7 @@ export function PlayLibrary({
     const theme = useTheme();
     const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
     const store = usePlannerStore();
-    const { navigate, routes } = usePlannerPlatform();
+    const { Link, navigate, routes } = usePlannerPlatform();
 
     // State
     const [plays, setPlays] = useState<SavedPlay[]>([]);
@@ -858,13 +859,23 @@ export function PlayLibrary({
                     Play Library
                 </Typography>
                 {mode === "manage" && (
-                    <Button
-                        variant="contained"
-                        startIcon={<AddIcon />}
-                        onClick={() => navigate(routes.libraryNew())}
-                    >
-                        New Play
-                    </Button>
+                    <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap justifyContent="flex-end">
+                        <Button
+                            component={Link}
+                            href={routes.libraryBook()}
+                            variant="outlined"
+                            startIcon={<BookIcon />}
+                        >
+                            Drill book
+                        </Button>
+                        <Button
+                            variant="contained"
+                            startIcon={<AddIcon />}
+                            onClick={() => navigate(routes.libraryNew())}
+                        >
+                            New Play
+                        </Button>
+                    </Stack>
                 )}
             </Stack>
             {mode === "manage" && (

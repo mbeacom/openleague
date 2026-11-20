@@ -48,7 +48,14 @@ import {
 } from "@/lib/utils/canvas/playback";
 import { THUMBNAIL_ASPECT, thumbnailPadding } from "@/lib/utils/canvas/thumbnail-generator";
 import { createTransformContext, drawRink } from "@/lib/utils/canvas/rink-renderer";
-import { drawAreaMask, drawElement, drawEquipmentItem, drawPlayerIcon, drawTextAnnotation } from "@/lib/utils/canvas/drawing-utils";
+import {
+    drawAreaMask,
+    drawElement,
+    drawEquipmentItem,
+    drawPlayerIcon,
+    drawStrokeTrail,
+    drawTextAnnotation,
+} from "@/lib/utils/canvas/drawing-utils";
 import { THUMBNAIL_MIN_GLYPH_RADIUS_PX } from "@/lib/utils/canvas/glyph-metrics";
 import { backingPixelRatio, sizeBackingStore, watchPixelRatio } from "@/lib/utils/canvas/backing-store";
 import { areaRect } from "@/lib/utils/ice-area";
@@ -82,9 +89,10 @@ interface Layer {
 }
 
 /**
- * Draws one frame: the cached static layer (rink plus every stroke that isn't
- * moving), then the moving strokes, equipment, players, notes and the area
- * mask, in drawAllElements' z-order. The same scene PlayDiagram draws.
+ * Draws one frame: the cached static layer (rink, completed strokes, and every
+ * stroke still to come ghosted over its whole length), then the trails of the
+ * moving strokes, equipment, players, notes and the area mask, in
+ * drawAllElements' z-order. The same scene PlayDiagram draws.
  */
 function drawFrame(
     canvas: HTMLCanvasElement,
@@ -98,8 +106,7 @@ function drawFrame(
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
     const transform = createTransformContext(width, height, thumbnailPadding(width));
-    const active = new Set(frame.activeStrokeIds);
-    const key = `${width}x${height}@${ratio}#${fontVersion}|${frame.completedStrokeIds.join(",")}|${frame.activeStrokeIds.join(",")}`;
+    const key = `${width}x${height}@${ratio}#${fontVersion}|${frame.completedStrokeIds.join(",")}`;
     if (!layer.canvas) layer.canvas = document.createElement("canvas");
     if (layer.key !== key) {
         const lc = layer.canvas;
@@ -110,18 +117,14 @@ function drawFrame(
         lctx.fillStyle = "#FFFFFF";
         lctx.fillRect(0, 0, width, height);
         drawRink(lctx, transform, { cache: false });
-        frame.data.drawings.forEach((d) => {
-            if (!active.has(d.id)) drawElement(lctx, d, transform);
-        });
+        frame.data.drawings.forEach((d) => drawElement(lctx, d, transform));
         layer.key = key;
     }
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     ctx.drawImage(layer.canvas, 0, 0);
     ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
-    frame.data.drawings.forEach((d) => {
-        if (active.has(d.id)) drawElement(ctx, d, transform);
-    });
+    frame.trails.forEach((trail) => drawStrokeTrail(ctx, trail.drawing, transform, trail.fraction));
     frame.data.equipment.forEach((e) => drawEquipmentItem(ctx, e, transform, false, 1, THUMBNAIL_MIN_GLYPH_RADIUS_PX));
     frame.data.players.forEach((p) => drawPlayerIcon(ctx, p, transform, false, 1, THUMBNAIL_MIN_GLYPH_RADIUS_PX));
     frame.data.annotations.forEach((a) => drawTextAnnotation(ctx, a, transform));
