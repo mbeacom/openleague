@@ -166,7 +166,8 @@ function cumulative(points: Position[]): number[] {
     return cum;
 }
 
-interface PatternedStroke {
+/** A stroke's pattern over its whole length, with each point's place along the line; reveal it with revealPattern. */
+export interface PatternedStroke {
     base: Position[];
     total: number;
     polylines: Position[][];
@@ -175,7 +176,7 @@ interface PatternedStroke {
     lineWidth: number;
 }
 
-function buildPattern(
+export function buildPattern(
     stroke: StrokeOptions & { points: Position[]; strokeWidth: number },
     pxPerFt: number,
     minLinePx: number
@@ -304,7 +305,12 @@ export function buildRevealedStrokeGeometry(
     fraction: number,
     minLinePx: number = MIN_LINE_PX
 ): StrokeGeometry {
-    const { total, polylines, arcs, lineWidth } = buildPattern(stroke, pxPerFt, minLinePx);
+    return revealPattern(buildPattern(stroke, pxPerFt, minLinePx), fraction);
+}
+
+/** The first `fraction` (0..1) of a built pattern, by place along its line; no end cap. */
+export function revealPattern(pattern: PatternedStroke, fraction: number): StrokeGeometry {
+    const { total, polylines, arcs, lineWidth } = pattern;
     const f = Number.isFinite(fraction) ? Math.min(1, Math.max(0, fraction)) : 0;
     const limit = f * total;
     const cut: Position[][] = [];

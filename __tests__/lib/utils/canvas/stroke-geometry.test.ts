@@ -258,3 +258,12 @@ describe("pointAtFraction", () => {
         expect(pointAtFraction([{ x: 3, y: 4 }], 0.5)).toEqual({ x: 3, y: 4 });
     });
 });
+
+describe("revealPattern", () => {
+    it("re-cuts one built pattern to the same result as building it each time", async () => {
+        const { buildPattern, revealPattern } = await import("@/lib/utils/canvas/stroke-geometry");
+        const stroke = { action: "carry" as const, path: "straight" as const, end: "arrow" as const, points: straight, strokeWidth: 2 };
+        const pattern = buildPattern(stroke, 4, 1);
+        for (const f of [0, 0.3, 0.77, 1]) expect(revealPattern(pattern, f)).toEqual(buildRevealedStrokeGeometry(stroke, 4, f, 1));
+    });
+});
