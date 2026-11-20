@@ -1,8 +1,10 @@
 import { describe, it, expect } from "vitest";
 import {
+    buildRevealedStrokeGeometry,
     buildStrokeGeometry,
     catmullRomPath,
     curvePoint,
+    pointAtFraction,
     resampleByArcLength,
     smoothPath,
     strokeCenterline,
@@ -195,5 +197,64 @@ describe("stroke sizes in proportion to the rink (scale model)", () => {
         const dashLength = Math.hypot(first[first.length - 1].x - first[0].x, first[first.length - 1].y - first[0].y);
         expect(dashLength).toBeLessThan(3.5);
         expect(g.polylines.length).toBeGreaterThan(80); // 400 px of 4 px cycles
+    });
+});
+
+describe("buildRevealedStrokeGeometry (playback trails)", () => {
+    const reveal = (action: StrokeAction, fraction: number, points = straight) =>
+        buildRevealedStrokeGeometry({ action, path: "straight", end: "arrow", points, strokeWidth: 2 }, 4, fraction);
+
+    it.each(STROKE_ACTIONS)("%s: the whole reveal is the full pattern, without the end cap", (action) => {
+        const full = geom(action);
+        const all = reveal(action, 1);
+        expect(all.polylines).toEqual(full.polylines);
+        expect(all.lineWidth).toBe(full.lineWidth);
+        expect(all.end).toBeNull();
+    });
+
+    it.each(STROKE_ACTIONS)("%s: nothing is revealed at 0", (action) => {
+        expect(reveal(action, 0).polylines).toEqual([]);
+        expect(reveal(action, Number.NaN).polylines).toEqual([]);
+    });
+
+    it.each(STROKE_ACTIONS)("%s: a partial reveal is a prefix of the full pattern, so it never shimmers", (action) => {
+        const full = geom(action).polylines;
+        for (const fraction of [0.21, 0.5, 0.83]) {
+            const part = reveal(action, fraction).polylines;
+            expect(part.length).toBeGreaterThan(0);
+            expect(part.length).toBeLessThanOrEqual(full.length);
+            part.forEach((line) => {
+                // Every point but a cut-off last one is a point of the full pattern.
+                const source = full.find((f) => f[0].x === line[0].x && f[0].y === line[0].y);
+                expect(source).toBeDefined();
+                line.slice(0, -1).forEach((p, i) => expect(p).toEqual(source?.[i]));
+            });
+        }
+    });
+
+    it("stops the trail at the fraction along the line", () => {
+        const half = reveal("skate", 0.5).polylines;
+        const end = half[0][half[0].length - 1];
+        expect(end.x).toBeCloseTo(50);
+        expect(end.y).toBeCloseTo(0);
+        const wave = reveal("carry", 0.5).polylines[0];
+        expect(Math.max(...wave.map((p) => p.x))).toBeLessThanOrEqual(50.5);
+    });
+
+    it("keeps a wave's phase as the trail grows", () => {
+        const a = reveal("carry", 0.4).polylines[0];
+        const b = reveal("carry", 0.6).polylines[0];
+        a.slice(0, -1).forEach((p, i) => expect(b[i]).toEqual(p));
+    });
+});
+
+describe("pointAtFraction", () => {
+    it("walks the polyline by arc length", () => {
+        const l = [{ x: 0, y: 0 }, { x: 10, y: 0 }, { x: 10, y: 30 }];
+        expect(pointAtFraction(l, 0)).toEqual({ x: 0, y: 0 });
+        expect(pointAtFraction(l, 0.5)).toEqual({ x: 10, y: 10 });
+        expect(pointAtFraction(l, 1)).toEqual({ x: 10, y: 30 });
+        expect(pointAtFraction(l, 2)).toEqual({ x: 10, y: 30 });
+        expect(pointAtFraction([{ x: 3, y: 4 }], 0.5)).toEqual({ x: 3, y: 4 });
     });
 });

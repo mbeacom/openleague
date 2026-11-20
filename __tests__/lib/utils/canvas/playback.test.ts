@@ -27,7 +27,7 @@ import {
     posePlayData,
     poseStep,
 } from "@/lib/utils/canvas/playback";
-import { strokeCenterline } from "@/lib/utils/canvas/stroke-geometry";
+import { pointAtFraction, strokeCenterline } from "@/lib/utils/canvas/stroke-geometry";
 import { STARTER_PLAYS } from "@/lib/data/starter-plays";
 
 const P = (x: number, y: number): Position => ({ x, y });
@@ -335,24 +335,47 @@ describe("frames (R2)", () => {
         expect(poseAt(pb, Number.NaN)).toEqual(poseAt(pb, 0));
     });
 
-    it("truncates the active stroke along its centerline", () => {
+    it("ghosts the whole active stroke and trails it solid to the skater", () => {
         const go = at(pb, "go");
         const frame = poseAt(pb, (go.startMs + go.endMs) / 2);
         expect(frame.activeStrokeIds).toEqual(["go"]);
-        const active = frame.data.drawings[2];
-        expect(active.path).toBe("straight");
-        expect(active.end).toBe("arrow");
-        const tip = active.points[active.points.length - 1];
-        const centerline = strokeCenterline(data.drawings[2]);
-        const nearestFt = distToPolyline(tip, centerline);
-        expect(nearestFt).toBeLessThan(0.05);
+        // The route ahead stays on the ice: the stored stroke, ghosted, with its arrow.
+        expect(frame.data.drawings[2]).toEqual({ ...data.drawings[2], color: ghostColor("#212121") });
+        expect(frame.trails).toHaveLength(1);
+        const [trail] = frame.trails;
+        expect(trail.drawing).toBe(data.drawings[2]);
+        expect(trail.fraction).toBeGreaterThan(0);
+        expect(trail.fraction).toBeLessThan(1);
+        // The trail ends under the skater.
+        const tip = pointAtFraction(strokeCenterline(data.drawings[2]), trail.fraction);
+        const skater = frame.data.players.find((p) => p.id === "b") as PlayerIcon;
+        expect(Math.hypot(tip.x - skater.position.x, tip.y - skater.position.y)).toBeLessThan(0.6);
     });
 
-    it("shows a stop end only once the stroke completes", () => {
+    it("starts the trail only once the skater reaches the line", () => {
+        // The skater stands 3 ft short of the route, so the first part of the stroke is the lead-in.
+        const lead = diagram({ players: [player("a", 0, 40)], drawings: [stroke("s", "skate", [[3, 40], [63, 40]])] });
+        const leadPb = compilePlayback(lead);
+        const s = at(leadPb, "s");
+        const early = poseAt(leadPb, s.startMs + 40);
+        expect(early.trails[0].fraction).toBe(0);
+        const late = poseAt(leadPb, s.endMs - 1);
+        expect(late.trails[0].fraction).toBeGreaterThan(0.99);
+    });
+
+    it("has no trails before the first stroke, between steps or at the end", () => {
+        expect(poseAt(pb, 0).trails).toEqual([]);
+        expect(poseAt(pb, pb.durationMs).trails).toEqual([]);
+        expect(poseStep(pb, 0).trails).toEqual([]);
+    });
+
+    it("shows a stop end ghosted ahead, and solid once the stroke completes", () => {
         const stopData = diagram({ drawings: [{ ...stroke("s", "skate", [[0, 40], [60, 40]]), end: "stop" }] });
         const stopPb = compilePlayback(stopData);
-        expect(poseAt(stopPb, 1000).data.drawings[0].end).toBe("none");
-        expect(poseAt(stopPb, stopPb.durationMs).data.drawings[0].end).toBe("stop");
+        const mid = poseAt(stopPb, 1000);
+        expect(mid.data.drawings[0].end).toBe("stop");
+        expect(mid.data.drawings[0].color).toBe(ghostColor("#212121"));
+        expect(poseAt(stopPb, stopPb.durationMs).data.drawings[0]).toEqual(stopData.drawings[0]);
     });
 
     it("is deterministic", () => {
@@ -445,10 +468,10 @@ describe("edge cases", () => {
 });
 
 describe("colour", () => {
-    it("mixes 70% toward the ice", () => {
+    it("mixes 60% toward the ice", () => {
         expect(mixHex("#000000", "#FFFFFF", 0.7)).toBe("#B3B3B3");
         expect(ghostColor("#F4F9FC")).toBe("#F4F9FC");
-        expect(ghostColor("#212121")).toMatch(/^#[0-9A-F]{6}$/);
+        expect(ghostColor("#000000")).toBe(mixHex("#000000", "#F4F9FC", 0.6));
         expect(mixHex("red", "#FFFFFF", 0.7)).toBe("red");
     });
 });

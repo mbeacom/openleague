@@ -55,7 +55,7 @@ export const SAMPLE_SPACING_FT = 0.5;
  */
 export const MAX_ARC_SAMPLES = 4000;
 /** Upcoming strokes are drawn with their colour mixed this far toward the ice. */
-export const GHOST_MIX = 0.7;
+export const GHOST_MIX = 0.6;
 /** Ids of pucks the diagram doesn't contain carry this prefix (`playback-puck-<strokeId>`). */
 export const PLAYBACK_ID_PREFIX = "playback-";
 
@@ -91,7 +91,7 @@ interface CompiledStroke extends PlaybackStroke {
     id: string;
     action: AnimatedAction;
     easing: Easing;
-    /** The drawn line (centerline), used to truncate the active stroke. */
+    /** The drawn line (centerline), whose length the active stroke's trail is measured along. */
     draw: ArcTable;
     /** What the actor (movement) or puck (pass, shot) follows: from its position at the start, then the centerline. */
     motion: ArcTable;
@@ -128,9 +128,22 @@ export interface Playback {
     readonly pucks: PuckTrack[];
 }
 
+/** The travelled part of an active stroke: the stored stroke, drawn solid up to `fraction` of its length. */
+export interface PlaybackTrail {
+    drawing: DrawingElement;
+    /** 0..1 along the stroke's centerline; the tip sits under whoever is moving. */
+    fraction: number;
+}
+
 export interface PlaybackFrame {
-    /** What drawBoardScene draws. */
+    /**
+     * What drawBoardScene draws: completed strokes as stored, and every stroke
+     * still to come (the active ones too) ghosted over its whole length, so the
+     * route ahead is always on the ice.
+     */
     data: PlayData;
+    /** Drawn over the ghosts, one per active stroke, in drawing order. */
+    trails: PlaybackTrail[];
     /** 0-based; -1 before the first stroke starts. */
     stepIndex: number;
     activeStrokeIds: string[];
@@ -188,18 +201,6 @@ function tangentAt(table: ArcTable, s: number): Position {
     const b = samples[i + 1];
     const len = dist(a, b) || 1;
     return { x: (b.x - a.x) / len, y: (b.y - a.y) / len };
-}
-
-/** The table's samples up to arc length `s`, ending exactly at the point there. */
-function truncate(table: ArcTable, s: number): Position[] {
-    if (table.samples.length === 1) return [{ ...table.samples[0] }, { ...table.samples[0] }];
-    const end = pointAt(table, s);
-    const i = sampleIndexAt(table, s);
-    const out = table.samples.slice(0, i + 1).map((p) => ({ ...p }));
-    const last = out[out.length - 1];
-    if (last.x !== end.x || last.y !== end.y) out.push(end);
-    if (out.length === 1) out.push({ ...end });
-    return out;
 }
 
 /** Arc length of the sample nearest `p`, and its distance. */
@@ -536,11 +537,24 @@ function poseAlong(start: Position, segments: MotionSegment[], playback: Playbac
     return at;
 }
 
+/**
+ * How far along its drawn line an active stroke has got, as a fraction: where
+ * the skater or puck is now, less the lead-in from its marker to the line's
+ * first point, so the trail ends under whoever is moving.
+ */
+function travelledFraction(stroke: CompiledStroke, progress: number): number {
+    if (stroke.draw.total === 0) return progress;
+    const leadIn = Math.max(0, stroke.motion.total - stroke.draw.total);
+    const s = progress * stroke.motion.total - leadIn;
+    return Math.min(1, Math.max(0, s / stroke.draw.total));
+}
+
 function composeFrame(playback: Playback, progress: Progress, stepIndex: number): PlaybackFrame {
     const source = playback.source;
     const activeStrokeIds: string[] = [];
     const completedStrokeIds: string[] = [];
 
+    const trails: PlaybackTrail[] = [];
     const drawings = source.drawings.map((d): DrawingElement => {
         const stroke = playback.compiled.get(d.id);
         if (!stroke) return d;
@@ -551,13 +565,8 @@ function composeFrame(playback: Playback, progress: Progress, stepIndex: number)
             return d;
         }
         activeStrokeIds.push(d.id);
-        // Already a centerline, so drawn as straight segments (smoothing isn't applied twice).
-        return {
-            ...d,
-            path: "straight",
-            points: truncate(stroke.draw, p * stroke.draw.total),
-            end: d.end === "arrow" ? "arrow" : "none",
-        };
+        trails.push({ drawing: d, fraction: travelledFraction(stroke, p) });
+        return { ...d, color: ghostColor(d.color) };
     });
 
     const players = source.players.map((player) => {
@@ -581,7 +590,7 @@ function composeFrame(playback: Playback, progress: Progress, stepIndex: number)
         equipment.push({ id: track.id, kind: "puck", position: posePuck(track, first.draw.samples[0]), rotation: 0 });
     }
 
-    return { data: { ...source, drawings, players, equipment }, stepIndex, activeStrokeIds, completedStrokeIds };
+    return { data: { ...source, drawings, players, equipment }, trails, stepIndex, activeStrokeIds, completedStrokeIds };
 }
 
 /** The frame at `tMs` (clamped to [0, durationMs]). Strokes are upcoming until their start, complete from their end. */

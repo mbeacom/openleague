@@ -19,7 +19,7 @@ import {
 } from "@/types/practice-planner";
 import type { RinkRect, StrokeOptions } from "@/types/practice-planner";
 import { FULL_RINK, TransformContext, drawRink, rinkToCanvas } from "./rink-renderer";
-import { buildStrokeGeometry, strokeCenterline, type StrokeGeometry } from "./stroke-geometry";
+import { buildRevealedStrokeGeometry, buildStrokeGeometry, strokeCenterline, type StrokeGeometry } from "./stroke-geometry";
 import { drawPlayerGlyph, drawEquipmentGlyph } from "./glyphs";
 import { EQUIPMENT_RADIUS_FT, MIN_GLYPH_RADIUS_PX, PLAYER_RADIUS_FT, glyphRadiusPx } from "./glyph-metrics";
 import { MIN_LINE_PX, REFERENCE_PX_PER_FT, refPx } from "./scale";
@@ -73,6 +73,29 @@ export function drawStroke(
         floors.linePx
     );
 
+    paintStrokeGeometry(ctx, geometry, stroke.color, pxPerFt, floors.arrowPx);
+}
+
+/**
+ * Draws the first `fraction` (0..1) of a stroke, with its pattern laid out
+ * over the whole line so a wave or zigzag holds still as the trail grows.
+ * No end cap. Used by drill playback for the part already travelled.
+ */
+export function drawStrokeTrail(
+    ctx: CanvasRenderingContext2D,
+    stroke: StrokeOptions & { points: Position[]; color: string; strokeWidth: number },
+    transform: TransformContext,
+    fraction: number,
+    floors: StrokeFloors = DIAGRAM_STROKE_FLOORS
+): void {
+    if (stroke.points.length < 2 || !(fraction > 0)) return;
+    const pxPerFt = Math.min(transform.scaleX, transform.scaleY);
+    const geometry = buildRevealedStrokeGeometry(
+        { ...stroke, points: stroke.points.map((p) => rinkToCanvas(p, transform)) },
+        pxPerFt,
+        fraction,
+        floors.linePx
+    );
     paintStrokeGeometry(ctx, geometry, stroke.color, pxPerFt, floors.arrowPx);
 }
 
