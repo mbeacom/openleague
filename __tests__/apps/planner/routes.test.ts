@@ -14,6 +14,7 @@ describe("matchRoute", () => {
         ["#/library", { name: "library" }],
         ["#/library/", { name: "library" }],
         ["#/library/new", { name: "libraryNew" }],
+        ["#/library/book", { name: "libraryBook" }],
         ["#/library/p1/edit", { name: "libraryEdit", id: "p1" }],
         ["#/import", { name: "import" }],
         ["#plan=abc_-1", { name: "planLink", value: "abc_-1" }],
@@ -82,6 +83,12 @@ describe("matchRoute", () => {
     it("puts drill details under Library and a practice started from a drill under Practices", () => {
         expect(navSection({ name: "libraryPlay", id: "p1" })).toBe("library");
         expect(navSection({ name: "sessionNewWithDrill", drillId: "p1" })).toBe("practices");
+    });
+
+    it("builds and matches the drill book, under Library, and nothing below it", () => {
+        expect(matchRoute(staticRoutes.libraryBook())).toEqual({ name: "libraryBook" });
+        expect(navSection({ name: "libraryBook" })).toBe("library");
+        expect(matchRoute("#/library/book/edit").name).not.toBe("libraryBook");
     });
 
     it("puts the notes draft under Import and AI settings under no section", () => {

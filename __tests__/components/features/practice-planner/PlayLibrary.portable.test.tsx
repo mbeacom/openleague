@@ -54,6 +54,7 @@ describe("PlayLibrary on a portable platform", () => {
         expect(platform.navigate).toHaveBeenCalledWith(`#/library/${PLAY_ID}/edit`);
         fireEvent.click(screen.getByRole("button", { name: "New Play" }));
         expect(platform.navigate).toHaveBeenCalledWith("#/library/new");
+        expect(screen.getByRole("link", { name: "Drill book" })).toHaveAttribute("href", "#/library/book");
     });
 
     it("draws thumbnails with the platform's Image", async () => {

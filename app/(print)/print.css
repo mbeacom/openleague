@@ -78,7 +78,9 @@
 
 @media print {
   html:has(.bench-sheet),
-  body:has(.bench-sheet) {
+  body:has(.bench-sheet),
+  html:has(.drill-book),
+  body:has(.drill-book) {
     background: #fff !important;
     color: #000 !important;
   }
@@ -115,8 +117,22 @@
     max-width: 100%;
   }
 
-  .bench-sheet {
+  .bench-sheet,
+  .drill-book {
     max-width: none !important;
     padding: 0 !important;
+  }
+
+  /* The drill book: the cover and contents on page 1, then one drill per page. */
+  .drill-book-page {
+    break-before: page;
+    page-break-before: always;
+    margin-top: 0 !important;
+  }
+
+  .drill-book-page img {
+    max-height: 120mm;
+    width: auto !important;
+    max-width: 100%;
   }
 }

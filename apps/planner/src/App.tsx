@@ -13,6 +13,7 @@ import type { LocalPlannerStore } from "./store/types";
 import { StaticThemeProvider } from "./theme";
 import { AppShell } from "./screens/AppShell";
 import { BenchSheetScreen } from "./screens/BenchSheetScreen";
+import { DrillBookScreen } from "./screens/DrillBookScreen";
 import { DrillDetailScreen } from "./screens/DrillDetailScreen";
 import { DrillEditorScreen } from "./screens/DrillEditorScreen";
 import { NewSessionFromDrillScreen } from "./screens/NewSessionFromDrillScreen";
@@ -159,6 +160,8 @@ export function PlannerApp({ store, durable, stale, storage }: PlannerAppProps) 
                     <StorageProvider service={service}>
                     {route.name === "sessionPrint" ? (
                         <BenchSheetScreen key={route.id} store={store} id={route.id} />
+                    ) : route.name === "libraryBook" ? (
+                        <DrillBookScreen />
                     ) : (
                         <AppShell
                             durable={durable}
