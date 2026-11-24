@@ -2618,4 +2618,34 @@ export const STARTER_PLAYS: readonly StarterPlay[] = [
             area: { kind: "zone-neutral" },
         },
     },
+    // A common Mite tag game; description and diagram written for this pack.
+    {
+        id: "starter-skate-toilet-tag",
+        name: "Toilet Tag",
+        description:
+            "Tag where teammates do the rescuing. One skater is it. A tagged skater drops to one knee and holds a hand straight up, and stays there until a teammate skates over and pulls the hand down like a toilet handle to free them. Switch who is it every round, and add a second tagger when the group is big. Teach: keep the feet moving, quick starts and stops, heads up to spot who needs a rescue, and get back up fast. A fun way to finish practice. 5 min.",
+        focus: "skaters",
+        goalies: "none",
+        ageGroups: ["u8"],
+        playData: {
+            version: PLAY_DATA_VERSION,
+            players: [
+                player("tt-it", "IT", 40, 44, "them"),
+                player("tt-s1", "S", 22, 24),
+                player("tt-s2", "S", 56, 20),
+                player("tt-down", "T", 26, 64),
+                player("tt-s3", "S", 54, 70),
+                player("tt-s4", "S", 62, 46),
+            ],
+            drawings: [
+                opponentRoute("tt-it-chase", [44, 40], [52, 30]),
+                skate("tt-s2-route", [58, 18], [64, 10]),
+                skate("tt-s3-rescue", [50, 70], [32, 66]),
+                skate("tt-s1-route", [20, 21], [12, 12]),
+            ],
+            equipment: [],
+            annotations: [note("tt-note", "Tagged? Knee down, hand up", 4, 6, "#000000", 4)],
+            area: { kind: "zone-left" },
+        },
+    },
 ];
