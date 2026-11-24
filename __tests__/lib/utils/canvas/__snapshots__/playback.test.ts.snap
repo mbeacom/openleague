@@ -8254,6 +8254,67 @@ exports[`starter drills > matches the golden schedules and step poses 1`] = `
       },
     },
   },
+  "starter-skate-toilet-tag": {
+    "durationMs": 1537,
+    "poses": [
+      {
+        "atMs": 0,
+        "players": {
+          "tt-down": {
+            "x": 26,
+            "y": 64,
+          },
+          "tt-it": {
+            "x": 40,
+            "y": 44,
+          },
+          "tt-s1": {
+            "x": 22,
+            "y": 24,
+          },
+          "tt-s2": {
+            "x": 56,
+            "y": 20,
+          },
+          "tt-s3": {
+            "x": 54,
+            "y": 70,
+          },
+          "tt-s4": {
+            "x": 62,
+            "y": 46,
+          },
+        },
+        "pucks": {},
+      },
+    ],
+    "strokes": {
+      "tt-it-chase": {
+        "actorId": "tt-it",
+        "endMs": 1067,
+        "puckId": null,
+        "startMs": 0,
+      },
+      "tt-s1-route": {
+        "actorId": "tt-s1",
+        "endMs": 1003,
+        "puckId": null,
+        "startMs": 0,
+      },
+      "tt-s2-route": {
+        "actorId": "tt-s2",
+        "endMs": 833,
+        "puckId": null,
+        "startMs": 0,
+      },
+      "tt-s3-rescue": {
+        "actorId": "tt-s3",
+        "endMs": 1537,
+        "puckId": null,
+        "startMs": 0,
+      },
+    },
+  },
   "starter-skate-transition-skate-angling": {
     "durationMs": 8811,
     "poses": [
